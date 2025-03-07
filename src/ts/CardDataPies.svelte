@@ -28,6 +28,7 @@
         lapses_burden,
         repetitions_burden,
         target_R_days,
+        difficulty_counts,
     } = catchErrors(() =>
         calculateCardDataPies(cardData ?? [], $include_suspended, true_zero_inclusive)
     ))
@@ -192,12 +193,28 @@
             given number of lapses. It gives you an idea of, on average, how many times a card is
             reviewed before a new lapse starts.
             <br />
-            You can select "Divide Average Repetition by Lapse" to see if it matches your Desired
-            Retention and how it evolves with the number of lapses
+            You can select "Divide Average Repetition by Lapse" to see if it matches your Desired Retention
+            and how it evolves with the number of lapses
         </p>
         <label>
             <input type="checkbox" bind:checked={divide_avg_repetitions_by_lapse} />
             Divide Average Repetitions by Lapse
         </label>
+    </GraphContainer>
+    <GraphContainer>
+        <h1>Difficulty</h1>
+        <BarScrollable
+            data={{
+                row_colours: ["red"],
+                row_labels: ["Count"],
+                data: difficulty_counts.map((v, i) => ({
+                    label: i.toString(),
+                    values: [v],
+                })),
+            }}
+            left_aligned
+            bins={100}
+        ></BarScrollable>
+        <p>This graph shows the difficulty of each card in more controlled way.</p>
     </GraphContainer>
 </GraphCategory>
