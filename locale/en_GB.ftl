@@ -79,8 +79,8 @@ intra-day-due-help =
     Useful if you use FSRS-5 with automatic learning steps or have long intra-day learning intervals.
 next-card-at = Next card is in{ $hours ->
         [0] {""}
-        [one] {" "}{ $hours } hour
-        *[many] {" "}{ $hours } hours
+        [one] { $hours } hour
+        *[many] { $hours } hours
     } { $minutes ->
         [0] {""}
         [one] { $minutes } minute
@@ -256,6 +256,9 @@ memorised-truncated-warning =
     This graph re-simulates your review history, leaving the beginning out can greatly
     affect the results.
 
+retrievability-and-stability = Retrievability & Stability
+cards-and-stability = stable cards
+
 # Between Minus Within? If I'm honest I have no idea what this stands for.
 b-w-matrix = B-W Matrix
 
@@ -361,6 +364,7 @@ leech-detector-help =
     The formula for calculating this may change in the future.
 
 # Graphs that are hidden by default, translate if you want to
+
 bad-graph = Bad Graph
 
 naive-sibling-similarity = Naive Sibling Similarity
