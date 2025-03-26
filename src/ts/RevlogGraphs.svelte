@@ -434,8 +434,51 @@
                     row_colours: [YOUNG_COLOUR, MATURE_COLOUR],
                     row_labels: [i18n("young"), i18n("mature")],
                     data: (average_type == Average.MEAN
-                        ? $memorised_stats.day_means
-                        : $memorised_stats.day_medians
+                        ? $memorised_stats.day_stability_means
+                        : $memorised_stats.day_stability_medians
+                    ).map((day, i) => {
+                        const young_ratio =
+                            _.sum($memorised_stats.stability_bins_days[i].slice(0, 21)) /
+                            _.sum($memorised_stats.stability_bins_days[i])
+                        return {
+                            values: [day * young_ratio, day * (1 - young_ratio)], //* young_ratio, day * (1 - young_ratio)],
+                            label: barLabel(i),
+                        }
+                    }),
+                    columnLabeler: barDateLabeler,
+                }}
+                average
+                trend
+                trend_info={{ pattern: i18n_pattern("stability-per-day") }}
+            />
+            <p>
+                {i18n("average-stability-over-time-help")}
+            </p>
+            <div>
+                <label>
+                    <input type="radio" value={Average.MEDIAN} bind:group={average_type} />
+                    {i18n("median")}
+                </label>
+                <label>
+                    <input type="radio" value={Average.MEAN} bind:group={average_type} />
+                    {i18n("mean")}
+                </label>
+            </div>
+        {:else}
+            <MemorisedCalculator />
+        {/if}
+    </GraphContainer>
+    <GraphContainer>
+        <h1>{i18n("average-difficulty-over-time")}</h1>
+        {#if $memorised_stats}
+            <BarScrollable
+                bind:binSize={interval_bin_size}
+                data={{
+                    row_colours: [YOUNG_COLOUR, MATURE_COLOUR],
+                    row_labels: [i18n("young"), i18n("mature")],
+                    data: (average_type == Average.MEAN
+                        ? $memorised_stats.day_difficulty_means
+                        : $memorised_stats.day_difficulty_medians
                     ).map((day, i) => {
                         const young_ratio =
                             _.sum($memorised_stats.stability_bins_days[i].slice(0, 21)) /

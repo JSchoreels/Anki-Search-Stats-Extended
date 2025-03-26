@@ -80,6 +80,7 @@ export function getMemorisedDays(
     }
 
     let last_stability: number[] = []
+    let last_difficulty: number[] = []
 
     const default_bin = { predicted: 0, real: 0, count: 0 }
     function incrementLoss(bin: LossBin | null, predicted: number, real: number) {
@@ -97,8 +98,10 @@ export function getMemorisedDays(
     let last_date = new Date()
 
     let bw_matrix_count: Record<number, LossBin[]> = {}
-    let day_medians: number[] = []
-    let day_means: number[] = []
+    let day_stability_medians: number[] = []
+    let day_stability_means: number[] = []
+    let day_difficulty_medians: number[] = []
+    let day_difficulty_means: number[] = []
     let last_day = dayFromMs(revlogs[0].id)
     let probabilities = _.mapValues(
         _.groupBy(revlogs, (r) => r.cid),
@@ -120,9 +123,11 @@ export function getMemorisedDays(
 
         for (let day = last_day; day < dayFromMs(revlog.id); day++) {
             const stabilities = Object.values(last_stability)
-            day_medians[day] = d3.quantile(stabilities, 0.5) ?? 0
-            day_means[day] = d3.mean(stabilities) ?? 0
-            console.log(day + ":" + day_medians[day])
+            const difficulties = Object.values(last_difficulty)
+            day_stability_medians[day] = d3.quantile(stabilities, 0.5) ?? 0
+            day_stability_means[day] = d3.mean(stabilities) ?? 0
+            day_difficulty_medians[day] = d3.quantile(difficulties, 0.5) ?? 0
+            day_difficulty_means[day] = d3.mean(difficulties) ?? 0
         }
         last_day = dayFromMs(revlog.id)
 
@@ -223,6 +228,7 @@ export function getMemorisedDays(
         card.stability = newState.stability
         card.difficulty = newState.difficulty
         last_stability[revlog.cid] = card.stability // To prevent "forget" affecting the forgetting curve
+        last_difficulty[revlog.cid] = card.difficulty
 
         fsrsCards[revlog.cid] = card
     }
@@ -278,8 +284,10 @@ export function getMemorisedDays(
         fatigueRMSE,
         bw_matrix: bw_matrix_count,
         stability_bins_days: stability_day_bins,
-        day_medians,
-        day_means,
+        day_stability_medians: day_stability_medians,
+        day_stability_means: day_stability_means,
+        day_difficulty_medians: day_difficulty_medians,
+        day_difficulty_means: day_difficulty_means,
         leech_probabilities,
         difficulty_days: difficulty_day_bins,
     }
