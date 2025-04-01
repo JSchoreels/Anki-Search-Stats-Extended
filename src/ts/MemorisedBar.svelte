@@ -14,7 +14,6 @@
     let retrievabilityDays: number[] | undefined = undefined
     let stable_retrievability_days: number[] | undefined = undefined
     let bw_matrix: Record<string, (number | undefined)[]> | undefined = undefined
-    let bw_matrix_counts: Record<string, LossBin[]> | undefined = undefined
 
     enum MemorisedType {
         RETRIEVABILITY,
@@ -51,7 +50,7 @@
     let svg: SVGElement | undefined = undefined
 
     function hoverTooltip(x: number, y: number) {
-        const data = bw_matrix_counts![x][y]
+        const data = $memorised_stats!.bw_matrix[x][y]
         const value = ((100 * (data.predicted - data.real)) / data.count).toFixed(1)
         return [
             `${i18n("predicted")}: ${data.predicted.toFixed(2)}`,
@@ -97,7 +96,7 @@
 
 {#if bw_matrix}
     <details>
-        <summary>B-W matrix</summary>
+        <summary>{i18n("b-w-matrix")}</summary>
         <GraphContainer>
             <svg bind:this={svg}></svg>
         </GraphContainer>
