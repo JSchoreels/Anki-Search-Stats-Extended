@@ -1,10 +1,12 @@
 <script lang="ts">
     import GraphContainer from "./GraphContainer.svelte"
     import IntervalGraph from "./IntervalGraph.svelte"
-    import { catchErrors, type CardData, type Revlog } from "./search"
+    import { browserSearchCids, catchErrors, type CardData, type Revlog } from "./search"
     import {
         binSize,
+        cids,
         config,
+        include_suspended,
         memorised_stats,
         pieLast,
         pieSteps,
@@ -60,7 +62,8 @@
         interval_ease,
         day_review_hours,
         day_filtered_review_hours,
-    } = catchErrors(() => calculateRevlogStats(revlogData, cardData)))
+        lapse_by_introduced_distribution,
+    } = catchErrors(() => calculateRevlogStats(revlogData, cardData, $include_suspended)))
 
     $: burden_change = DeltaIfy(burden)
     $: realScroll = -Math.abs($scroll)
@@ -253,6 +256,30 @@
 
     let retention_trend = (values: number[]) => (_.sum(values) == 0 ? 0 : 1 - values[3])
     let burden_trend: TrendLine
+
+    let granularity_power = 1
+    const domain: [number, number] = [0.05, 1]
+    $: granularity = 20 * Math.pow(2, granularity_power - 1)
+    $: leech_bins = d3
+        .bin<[string, number], number>()
+        .domain(domain)
+        .thresholds(granularity)
+        .value((a) => 1 - a[1])(Object.entries($memorised_stats?.leech_probabilities ?? []))
+    let leech_detection_bar: BarChart
+    $: leech_detection_bar = {
+        row_colours: ["red"],
+        row_labels: [i18n("cards")],
+        data: leech_bins.map((bin) => ({
+            label: `${((bin.x1 ?? 0) * 100)?.toPrecision(3)}%`,
+            values: [bin.length],
+            onClick: () => {
+                browserSearchCids(bin.map((e) => e[0]))
+            },
+        })),
+        tick_spacing: Math.floor(granularity / 5),
+        barWidth: ((domain[1] - domain[0]) * 100) / leech_bins.length,
+        columnLabeler: (v, w) => `${(parseFloat(v) - w!).toPrecision(3)}%-${v}`,
+    }
 </script>
 
 <GraphCategory>
@@ -452,6 +479,43 @@
                     {i18n("mean")}
                 </label>
             </div>
+        {:else}
+            <MemorisedCalculator />
+        {/if}
+    </GraphContainer>
+    <GraphContainer>
+        <h1>{i18n("lapse-by-days-ratio-distribution")}</h1>
+        {#if lapse_by_introduced_distribution}
+            <BarScrollable
+                left_aligned
+                bins={30}
+                data={{
+                    row_colours: ["red"],
+                    row_labels: [i18n("lapse-by-days")],
+                    data: lapse_by_introduced_distribution.map((v, i) => ({
+                        label: i.toString(),
+                        values: [v ?? 0],
+                    })),
+                }}
+            />
+        {:else}
+            <NoGraph />
+        {/if}
+    </GraphContainer>
+    <GraphContainer>
+        <h1>{i18n("leech-detector")}</h1>
+        {#if $memorised_stats}
+            <label>
+                {i18n("zoom")}
+                <input type="range" min={1} max={6} bind:value={granularity_power} />
+            </label>
+            <Bar data={leech_detection_bar}></Bar>
+            <p>
+                {i18n("leech-detector-help")}
+                <a href="https://forums.ankiweb.net/t/automated-leech-detection/56887">
+                    Forum discussion link
+                </a>
+            </p>
         {:else}
             <MemorisedCalculator />
         {/if}
