@@ -524,7 +524,7 @@
 <GraphCategory hidden_title="FSRS" config_name="fsrs">
     <GraphContainer>
         <h1>{i18n("memorised")}</h1>
-        <MemorisedBar />
+        <MemorisedBar {burden} />
         {#if truncated}
             <Warning>{i18n("memorised-truncated-warning")}</Warning>
         {/if}

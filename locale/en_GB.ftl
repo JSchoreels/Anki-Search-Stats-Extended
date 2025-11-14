@@ -298,6 +298,7 @@ actual = Actual
 
 cards = Cards
 notes = Notes
+cards-by-burden = Cards/Load
 average-retrievability = Average Per Card
 stability = Stability
 retrievability = Retrievability
