@@ -1,6 +1,18 @@
 import _ from "lodash"
+import {
+    type Card,
+    checkParameters,
+    createEmptyCard,
+    dateDiffInDays,
+    default_w,
+    type FSRS,
+    fsrs as Fsrs,
+    type FSRSState,
+    generatorParameters,
+} from "ts-fsrs"
 import type { BarChart, BarDatum } from "./bar"
 import { totalCalc } from "./barHelpers"
+import type { DeckConfig } from "./config"
 import { type ForgettingSample } from "./forgettingCurveData"
 import { i18n } from "./i18n"
 import type { CardData, Revlog } from "./search"
@@ -38,6 +50,102 @@ export function dayFromDateString(date: string) {
 
 export const today = dayFromMs(Date.now())
 export const no_rollover_today = Math.floor(Date.now() / day_ms)
+const stability_maturity_threshold = 21
+
+let deckFsrs: Record<number, FSRS> = {}
+
+function getFsrs(config: DeckConfig) {
+    const id = config.id
+    if (!deckFsrs[id]) {
+        const configParams = [
+            config.fsrsParams6,
+            config.fsrsParams5,
+            config.fsrsParams4,
+            config.fsrsWeights,
+        ]
+        const params = configParams.find((arr) => Array.isArray(arr) && arr.length > 0) ?? default_w
+
+        deckFsrs[id] = Fsrs(
+            generatorParameters({
+                w: checkParameters(params),
+                enable_fuzz: false,
+                enable_short_term: true,
+            })
+        )
+    }
+    return deckFsrs[id]
+}
+
+function stabilityAfterReviewsByRevlog(
+    revlogData: Revlog[],
+    id_card_data: Record<number, CardData>
+) {
+    const stabilityByRevlog = new Map<Revlog, number>()
+    const deckConfigs = SSEother.deck_configs
+    const deckConfigIds = SSEother.deck_config_ids
+    if (!deckConfigs || !deckConfigIds) {
+        return stabilityByRevlog
+    }
+
+    const fsrsCards: Record<number, Card> = {}
+
+    for (const revlog of [...revlogData].sort((a, b) => a.id - b.id)) {
+        const cardData = id_card_data[revlog.cid]
+        if (!cardData) {
+            continue
+        }
+        const deckConfigId = deckConfigIds[cardData.odid || cardData.did]
+        if (deckConfigId === undefined) {
+            continue
+        }
+        const config = deckConfigs[deckConfigId]
+        if (!config) {
+            continue
+        }
+
+        const fsrs = getFsrs(config)
+        const now = new Date(revlog.id)
+        const hasPreviousReview = !!fsrsCards[revlog.cid]
+        let card = fsrsCards[revlog.cid] ?? createEmptyCard(new Date(revlog.cid))
+
+        if (revlog.factor == 0 && revlog.type == 4 && hasPreviousReview) {
+            card = fsrs.forget(card, now).card
+            fsrsCards[revlog.cid] = card
+        }
+
+        if (revlog.ease == 0) {
+            continue
+        }
+        if (revlog.type == 3 && revlog.factor == 0) {
+            continue
+        }
+
+        let memoryState: FSRSState | null = null
+        let elapsed = 0
+        if (card.last_review) {
+            memoryState = card.stability
+                ? {
+                      difficulty: card.difficulty,
+                      stability: card.stability,
+                  }
+                : null
+            const oldDate = new Date(card.last_review.getTime() - rollover_ms)
+            oldDate.setHours(0, 0, 0, 0)
+            const newDate = new Date(now.getTime() - rollover_ms)
+            newDate.setHours(0, 0, 0, 0)
+            elapsed = dateDiffInDays(oldDate, newDate)
+        }
+
+        const newState = fsrs.next_state(memoryState, elapsed, revlog.ease)
+        card.last_review = now
+        card.stability = newState.stability
+        card.difficulty = newState.difficulty
+        fsrsCards[revlog.cid] = card
+        stabilityByRevlog.set(revlog, card.stability)
+    }
+
+    return stabilityByRevlog
+}
 
 interface SiblingReview {
     cid: number
@@ -78,6 +186,7 @@ export function calculateRevlogStats(
     end: number = today
 ) {
     let id_card_data = IDify(cardData)
+    const stability_after_review = stabilityAfterReviewsByRevlog(revlogData, id_card_data)
 
     function emptyArray<T>(init: T): T[] {
         const empty_array: T[] = []
@@ -101,6 +210,12 @@ export function calculateRevlogStats(
     let introduced_load_by_day: number[] = emptyArray(0)
     let reintroduced_day_count: number[] = emptyArray(0)
     let day_forgotten: number[] = emptyArray(0)
+    let active_cards_all_by_day: number[] = emptyArray(0)
+    let active_cards_young_by_day: number[] = emptyArray(0)
+    let active_cards_mature_by_day: number[] = emptyArray(0)
+    let suspended_active_cards_all_by_day: number[] = emptyArray(0)
+    let suspended_active_cards_young_by_day: number[] = emptyArray(0)
+    let suspended_active_cards_mature_by_day: number[] = emptyArray(0)
 
     let intervals: number[][] = []
 
@@ -140,6 +255,31 @@ export function calculateRevlogStats(
         // Doesn't check for negative ease (manual reschedule)
         ease_array[day] = ease_array[day] ? ease_array[day] : initialEase()
         ease_array[day][ease] += amount
+    }
+
+    function incrementActiveCards(
+        day: number,
+        ivl: number,
+        suspended: boolean,
+        stability: number | undefined
+    ) {
+        if (ivl <= 0) {
+            return
+        }
+        const allData = suspended ? suspended_active_cards_all_by_day : active_cards_all_by_day
+        const youngData = suspended
+            ? suspended_active_cards_young_by_day
+            : active_cards_young_by_day
+        const matureData = suspended
+            ? suspended_active_cards_mature_by_day
+            : active_cards_mature_by_day
+
+        allData[day] = (allData[day] ?? 0) + 1
+        if ((stability ?? ivl) >= stability_maturity_threshold) {
+            matureData[day] = (matureData[day] ?? 0) + 1
+        } else {
+            youngData[day] = (youngData[day] ?? 0) + 1
+        }
     }
 
     for (const revlog of revlogData) {
@@ -303,8 +443,12 @@ export function calculateRevlogStats(
         }
         ivl = ivl > 0 ? ivl : 0
 
+        const isCurrentSuspendedSegment = !next_review && card.queue == -1
+        const activeIvl = isCurrentSuspendedSegment ? (card.ivl > 0 ? card.ivl : 0) : ivl
+        const segmentStability = stability_after_review.get(revlog)
+
         // If the card is suspended
-        if (!next_review && card.queue == -1) {
+        if (isCurrentSuspendedSegment) {
             ivl = -1
         }
 
@@ -315,6 +459,12 @@ export function calculateRevlogStats(
             // -1 suspended
             // -2 learn (0 still contains learn as well)
             intervals[intervalDay][ivl] = (intervals[intervalDay][ivl] ?? 0) + 1
+            incrementActiveCards(
+                intervalDay,
+                activeIvl,
+                isCurrentSuspendedSegment,
+                segmentStability
+            )
 
             if (ivl == 0 && (revlog.type == 0 || (!next_review && card.type == 1))) {
                 intervals[intervalDay][-2] = (intervals[intervalDay][-2] ?? 0) + 1
@@ -363,6 +513,12 @@ export function calculateRevlogStats(
         introduced_day_count,
         introduced_load_by_day,
         reintroduced_day_count,
+        active_cards_all_by_day,
+        active_cards_young_by_day,
+        active_cards_mature_by_day,
+        suspended_active_cards_all_by_day,
+        suspended_active_cards_young_by_day,
+        suspended_active_cards_mature_by_day,
         burden,
         day_forgotten,
         remaining_forgotten,

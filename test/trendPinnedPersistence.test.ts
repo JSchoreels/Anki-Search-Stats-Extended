@@ -13,12 +13,13 @@ describe("trend pinned persistence", () => {
 
     test("loads pinned ranges and reports migrated ranges only when needed", () => {
         SSEconfig.pinnedTrends = {
-            key: [{ startX: "2025-01-01", endX: "2025-01-02" }],
+            key: [{ startX: "2025-01-01", endX: "2025-01-02", mode: "endpoints" }],
         }
         const loaded = loadPinnedTrendRanges("key", true)
         expect(loaded.initialPinnedRanges).toHaveLength(1)
         expect(Number.isFinite(loaded.initialPinnedRanges[0].startX)).toBe(true)
         expect(Number.isFinite(loaded.initialPinnedRanges[0].endX)).toBe(true)
+        expect(loaded.initialPinnedRanges[0].mode).toBe("endpoints")
         expect(loaded.migratedStoredRanges).toBeUndefined()
     })
 
@@ -29,16 +30,20 @@ describe("trend pinned persistence", () => {
         })
 
         await Promise.all([
-            queuePersistStoredPinnedRanges("first", [{ startX: 1, endX: 2 }], save as any),
+            queuePersistStoredPinnedRanges(
+                "first",
+                [{ startX: 1, endX: 2, mode: "endpoints" }],
+                save as any
+            ),
             queuePersistStoredPinnedRanges("second", [{ startX: 3, endX: 4 }], save as any),
         ])
 
         expect(calls).toEqual([
             {
-                first: [{ startX: 1, endX: 2 }],
+                first: [{ startX: 1, endX: 2, mode: "endpoints" }],
             },
             {
-                first: [{ startX: 1, endX: 2 }],
+                first: [{ startX: 1, endX: 2, mode: "endpoints" }],
                 second: [{ startX: 3, endX: 4 }],
             },
         ])

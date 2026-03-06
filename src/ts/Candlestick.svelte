@@ -7,8 +7,13 @@
         candlestickDisplayLabelFromIndex,
         trendMidpointXFromAxisDatum,
         trendRangeFromAxisDatum,
+        visibleTrendRangeFromAxisData,
     } from "./trendAxis"
-    import { loadPinnedTrendRanges, queuePersistPinnedRanges, queuePersistStoredPinnedRanges } from "./trendPinnedPersistence"
+    import {
+        loadPinnedTrendRanges,
+        queuePersistPinnedRanges,
+        queuePersistStoredPinnedRanges,
+    } from "./trendPinnedPersistence"
     import {
         createGraphTrendSessionState,
         type GraphTrendSessionState,
@@ -47,8 +52,17 @@
     function handleTogglePinTrend(id: number) {
         trendSession.controller?.togglePin(id)
     }
+    function handleToggleTrendMode(id: number) {
+        trendSession.controller?.toggleMode(id)
+    }
+    function handleUpdateTrendRange(id: number, range: import("./trend").TrendRange) {
+        trendSession.controller?.updateRange(id, range)
+    }
     export let removeTrend: (id: number) => void = handleRemoveTrend
     export let togglePinTrend: (id: number) => void = handleTogglePinTrend
+    export let toggleTrendMode: (id: number) => void = handleToggleTrendMode
+    export let updateTrendRange: (id: number, range: import("./trend").TrendRange) => void =
+        handleUpdateTrendRange
     export let trendPersistenceKey: string
     let lastTrendPersistenceKey = ""
     $: if (trendPersistenceKey !== lastTrendPersistenceKey) {
@@ -99,7 +113,10 @@
                     trendPersistenceKey,
                     true
                 )
-                if (migratedStoredRanges && !migrated_temporal_store_keys.has(trendPersistenceKey)) {
+                if (
+                    migratedStoredRanges &&
+                    !migrated_temporal_store_keys.has(trendPersistenceKey)
+                ) {
                     migrated_temporal_store_keys.add(trendPersistenceKey)
                     void queuePersistStoredPinnedRanges(trendPersistenceKey, migratedStoredRanges)
                 }
@@ -123,6 +140,7 @@
                 selectableTrendLine({
                     chart,
                     points: trend_points,
+                    visibleRange: visibleTrendRangeFromAxisData(chart.chart.data),
                     hoverAreas,
                     hoverToRange: (datum) => trendRangeFromAxisDatum(datum),
                     xToPixel: (xValue) => {
@@ -153,6 +171,8 @@
                         trendSession = { ...trendSession, controller }
                         removeTrend = handleRemoveTrend
                         togglePinTrend = handleTogglePinTrend
+                        toggleTrendMode = handleToggleTrendMode
+                        updateTrendRange = handleUpdateTrendRange
                     },
                     initialPinnedTrends: initialPinnedRanges,
                     initialTrends: trendSession.allTrends,
@@ -169,6 +189,8 @@
                 trendSession = createGraphTrendSessionState()
                 removeTrend = handleRemoveTrend
                 togglePinTrend = handleTogglePinTrend
+                toggleTrendMode = handleToggleTrendMode
+                updateTrendRange = handleUpdateTrendRange
             }
         }
     }

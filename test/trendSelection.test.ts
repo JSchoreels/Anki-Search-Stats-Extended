@@ -1,22 +1,30 @@
 import {
     FIXED_TREND_LINE_DASH,
     DEFAULT_TREND_COLOUR,
+    DEFAULT_TREND_MODE,
     PREVIEW_TREND_LINE_DASH,
+    createEndpointTrendFromData,
+    createTrendForMode,
     createTrendFromData,
+    closestHoverTarget,
+    compareTrendsByStart,
     defaultTrendRange,
     denormalizeTemporalRange,
     emptyTrendSelectionState,
     filteredTrendData,
+    isTrendStartVisible,
     isLikelyTimestampMs,
     nextTrendCancelTransition,
     normalizeTemporalRange,
     nextCustomTrendColour,
     nextTrendClickTransition,
     pinnedTrendsForKey,
+    replaceTrendById,
     removeTrendById,
     storedTemporalRange,
     trendColour,
     trendDataInRange,
+    toggleTrendMode,
     trendPatternBySlope,
     trendRangesEqual,
     upsertPinnedTrendsSnapshot,
@@ -104,6 +112,28 @@ describe("trend selection helpers", () => {
         ).toBeUndefined()
     })
 
+    test("can build an endpoint-only trend line from the selected range", () => {
+        const trend = createEndpointTrendFromData([
+            { x: 1, y: 2, rangeStart: 0, rangeEnd: 2 },
+            { x: 4, y: 8, rangeStart: 3, rangeEnd: 5 },
+        ])
+
+        expect(trend).toBeDefined()
+        expect(trend!.calcY(0)).toBeCloseTo(2, 5)
+        expect(trend!.calcY(5)).toBeCloseTo(8, 5)
+    })
+
+    test("creates trend models according to the requested mode", () => {
+        const data = [
+            { x: 0, y: 1 },
+            { x: 2, y: 5 },
+            { x: 4, y: 9 },
+        ]
+
+        expect(createTrendForMode(data, "fitted")!.slope).toBeCloseTo(2, 5)
+        expect(createTrendForMode(data, "endpoints")!.calcY(0)).toBeCloseTo(1, 5)
+    })
+
     test("click transition locks range on second click and resets anchor", () => {
         expect(nextTrendClickTransition(undefined, 4)).toEqual({ nextAnchorX: 4 })
         expect(nextTrendClickTransition(4, 9)).toEqual({
@@ -156,9 +186,31 @@ describe("trend selection helpers", () => {
         ).toBe(fallback)
     })
 
+    test("finds the closest hover target for drag edits", () => {
+        expect(
+            closestHoverTarget(
+                [
+                    { centerX: 10, range: { startX: 1, endX: 1 } },
+                    { centerX: 30, range: { startX: 2, endX: 2 } },
+                    { centerX: 50, range: { startX: 3, endX: 3 } },
+                ],
+                34
+            )
+        ).toEqual({
+            centerX: 30,
+            range: { startX: 2, endX: 2 },
+        })
+    })
+
     test("matches trend ranges regardless of click direction", () => {
         expect(trendRangesEqual({ startX: 10, endX: 2 }, { startX: 2, endX: 10 })).toBe(true)
         expect(trendRangesEqual({ startX: 10, endX: 2 }, { startX: 3, endX: 10 })).toBe(false)
+    })
+
+    test("checks whether a trend start point is inside the visible range", () => {
+        expect(isTrendStartVisible(10, { startX: 5, endX: 15 })).toBe(true)
+        expect(isTrendStartVisible(4, { startX: 5, endX: 15 })).toBe(false)
+        expect(isTrendStartVisible(16, { startX: 15, endX: 5 })).toBe(false)
     })
 
     test("detects timestamp values while keeping legacy day values", () => {
@@ -214,6 +266,14 @@ describe("trend selection helpers", () => {
         expect(state.previewTrend).toBeUndefined()
         expect(() => state.removeTrend(1)).not.toThrow()
         expect(() => state.togglePinTrend(1)).not.toThrow()
+        expect(() => state.toggleTrendMode(1)).not.toThrow()
+        expect(() => state.updateTrendRange(1, { startX: 1, endX: 2 })).not.toThrow()
+    })
+
+    test("uses fitted mode by default and toggles modes", () => {
+        expect(DEFAULT_TREND_MODE).toBe("fitted")
+        expect(toggleTrendMode(undefined)).toBe("endpoints")
+        expect(toggleTrendMode("endpoints")).toBe("fitted")
     })
 
     test("removes one trend by id", () => {
@@ -226,6 +286,7 @@ describe("trend selection helpers", () => {
                 endX: 1,
                 pinned: false,
                 kind: "custom",
+                mode: "fitted",
             },
             {
                 id: 2,
@@ -235,20 +296,50 @@ describe("trend selection helpers", () => {
                 endX: 2,
                 pinned: true,
                 kind: "custom",
+                mode: "endpoints",
             },
         ]
         expect(removeTrendById(trends as any, 1)).toEqual([trends[1]])
     })
 
+    test("replaces a trend in place without changing list order", () => {
+        const first = { id: 1, startX: 10, endX: 20, mode: "fitted" }
+        const second = { id: 2, startX: 30, endX: 40, mode: "fitted" }
+
+        expect(
+            replaceTrendById([first, second], {
+                ...first,
+                mode: "endpoints",
+            })
+        ).toEqual([
+            { id: 1, startX: 10, endX: 20, mode: "endpoints" },
+            second,
+        ])
+    })
+
+    test("sorts trends by their starting range", () => {
+        const trends = [
+            { id: 3, startX: 20, endX: 25 },
+            { id: 2, startX: 10, endX: 12 },
+            { id: 1, startX: 12, endX: 8 },
+        ]
+
+        expect([...trends].sort(compareTrendsByStart)).toEqual([
+            { id: 1, startX: 12, endX: 8 },
+            { id: 2, startX: 10, endX: 12 },
+            { id: 3, startX: 20, endX: 25 },
+        ])
+    })
+
     test("persists pinned trends under a store key", () => {
         SSEconfig.pinnedTrends = {}
         upsertPinnedTrends("chart:test", [
-            { startX: 3, endX: 5 },
+            { startX: 3, endX: 5, mode: "endpoints" },
             { startX: 10, endX: 11 },
         ])
 
         expect(pinnedTrendsForKey("chart:test")).toEqual([
-            { startX: 3, endX: 5 },
+            { startX: 3, endX: 5, mode: "endpoints" },
             { startX: 10, endX: 11 },
         ])
     })

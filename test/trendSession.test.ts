@@ -22,9 +22,12 @@ describe("trend session helpers", () => {
             {
                 startX: 1,
                 endX: 3,
+                storedStartX: "2025-01-01",
+                storedEndX: "today",
                 colour: "#111",
                 pinned: true,
                 kind: "custom" as const,
+                mode: "fitted" as const,
             },
             {
                 startX: 0,
@@ -32,6 +35,7 @@ describe("trend session helpers", () => {
                 colour: "#000",
                 pinned: false,
                 kind: "default" as const,
+                mode: "fitted" as const,
             },
         ]
         const visible = [
@@ -39,9 +43,12 @@ describe("trend session helpers", () => {
                 id: 10,
                 startX: 1,
                 endX: 3,
+                storedStartX: "2025-01-01",
+                storedEndX: "today",
                 colour: "#222",
                 pinned: false,
                 kind: "custom" as const,
+                mode: "endpoints" as const,
             },
             {
                 id: 11,
@@ -50,6 +57,7 @@ describe("trend session helpers", () => {
                 colour: "#333",
                 pinned: true,
                 kind: "custom" as const,
+                mode: "fitted" as const,
             },
             {
                 id: 12,
@@ -58,6 +66,7 @@ describe("trend session helpers", () => {
                 colour: "#000",
                 pinned: false,
                 kind: "default" as const,
+                mode: "fitted" as const,
             },
         ]
 
@@ -65,9 +74,12 @@ describe("trend session helpers", () => {
             {
                 startX: 1,
                 endX: 3,
+                storedStartX: "2025-01-01",
+                storedEndX: "today",
                 colour: "#222",
                 pinned: false,
                 kind: "custom",
+                mode: "endpoints",
             },
             {
                 startX: 5,
@@ -75,14 +87,29 @@ describe("trend session helpers", () => {
                 colour: "#333",
                 pinned: true,
                 kind: "custom",
+                mode: "fitted",
             },
         ])
     })
 
     test("removes selected trend from session state", () => {
         const all = [
-            { startX: 1, endX: 3, colour: "#111", pinned: true, kind: "custom" as const },
-            { startX: 5, endX: 8, colour: "#333", pinned: false, kind: "custom" as const },
+            {
+                startX: 1,
+                endX: 3,
+                colour: "#111",
+                pinned: true,
+                kind: "custom" as const,
+                mode: "fitted" as const,
+            },
+            {
+                startX: 5,
+                endX: 8,
+                colour: "#333",
+                pinned: false,
+                kind: "custom" as const,
+                mode: "endpoints" as const,
+            },
         ]
         const selected = { startX: 1, endX: 3, kind: "custom" as const }
         expect(removeTrendFromAll(all as any, selected as any)).toEqual([all[1]])
@@ -90,20 +117,44 @@ describe("trend session helpers", () => {
 
     test("computes hidden pinned ranges and merges deduped ranges", () => {
         const all = [
-            { startX: 1, endX: 3, colour: "#111", pinned: true, kind: "custom" as const },
-            { startX: 10, endX: 12, colour: "#333", pinned: true, kind: "custom" as const },
+            {
+                startX: 1,
+                endX: 3,
+                colour: "#111",
+                pinned: true,
+                kind: "custom" as const,
+                mode: "fitted" as const,
+            },
+            {
+                startX: 10,
+                endX: 12,
+                storedStartX: "2025-01-10",
+                storedEndX: "today",
+                colour: "#333",
+                pinned: true,
+                kind: "custom" as const,
+                mode: "endpoints" as const,
+            },
         ]
         const visible = [{ id: 1, startX: 1, endX: 3, kind: "custom" as const }]
         const hidden = hiddenPinnedRanges(all as any, visible as any)
 
-        expect(hidden).toEqual([{ startX: 10, endX: 12 }])
+        expect(hidden).toEqual([
+            {
+                startX: 10,
+                endX: 12,
+                storedStartX: "2025-01-10",
+                storedEndX: "today",
+                mode: "endpoints",
+            },
+        ])
         expect(
             mergeTrendRanges(hidden, [
-                { startX: 10, endX: 12 },
+                { startX: 10, endX: 12, mode: "fitted" },
                 { startX: 20, endX: 21 },
             ])
         ).toEqual([
-            { startX: 10, endX: 12 },
+            { startX: 10, endX: 12, mode: "fitted" },
             { startX: 20, endX: 21 },
         ])
     })

@@ -49,6 +49,9 @@
             info={{ pattern: i18n_pattern("burden-per-day") }}
             onRemoveTrend={burdenTrendSelection.removeTrend}
             onTogglePinTrend={burdenTrendSelection.togglePinTrend}
+            onToggleTrendMode={burdenTrendSelection.toggleTrendMode}
+            onUpdateTrendRange={burdenTrendSelection.updateTrendRange}
+            dateAxis
         />
         {#if truncated}
             <Warning>{i18n("generic-truncated-warning")}</Warning>
@@ -78,6 +81,9 @@
             info={{ pattern: i18n_pattern("introduced-load-per-day") }}
             onRemoveTrend={introducedTrendSelection.removeTrend}
             onTogglePinTrend={introducedTrendSelection.togglePinTrend}
+            onToggleTrendMode={introducedTrendSelection.toggleTrendMode}
+            onUpdateTrendRange={introducedTrendSelection.updateTrendRange}
+            dateAxis
         />
         {#if truncated}
             <Warning>

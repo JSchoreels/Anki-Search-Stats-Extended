@@ -1,4 +1,4 @@
-import { dayFromDateString, dayToDateString } from "./revlogGraphs"
+import { dayFromDateString, dayFromMs, dayToDateString } from "./revlogGraphs"
 import { type StoredTrendCoordinate, type StoredTrendRange, type TrendRange } from "./trend"
 
 export type ParsedStoredRange = {
@@ -25,16 +25,35 @@ function storedCoordinateToDay(value: StoredTrendCoordinate) {
     if (typeof value !== "string") {
         return
     }
-    return dayFromDateString(value)
+    const normalized = value.trim().toLowerCase()
+    if (normalized === "today") {
+        return dayFromMs(Date.now())
+    }
+    return dayFromDateString(value.trim())
+}
+
+function storedTemporalCoordinate(
+    day: number,
+    storedCoordinate: StoredTrendCoordinate | undefined
+): StoredTrendCoordinate {
+    if (typeof storedCoordinate === "string" && storedCoordinate.trim().toLowerCase() === "today") {
+        return "today"
+    }
+    return dayToDateString(day)
 }
 
 export function toStoredRange(range: TrendRange, temporalAxis: boolean): StoredTrendRange {
     if (!temporalAxis) {
-        return range
+        return {
+            startX: range.startX,
+            endX: range.endX,
+            mode: range.mode,
+        }
     }
     return {
-        startX: dayToDateString(range.startX),
-        endX: dayToDateString(range.endX),
+        startX: storedTemporalCoordinate(range.startX, range.storedStartX),
+        endX: storedTemporalCoordinate(range.endX, range.storedEndX),
+        mode: range.mode,
     }
 }
 
@@ -48,7 +67,13 @@ export function fromStoredRange(
     if (startX === undefined || endX === undefined) {
         return
     }
-    return { startX, endX }
+    return {
+        startX,
+        endX,
+        storedStartX: range.startX,
+        storedEndX: range.endX,
+        mode: range.mode,
+    }
 }
 
 export function parseStoredRanges(storedRanges: StoredTrendRange[], temporalAxis: boolean) {

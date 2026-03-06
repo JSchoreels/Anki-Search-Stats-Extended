@@ -25,6 +25,7 @@ export const TREND_PERSISTENCE_KEYS = {
         fsrsLossByFatigue: "bad:fsrs-loss-by-fatigue",
     },
     introduced: {
+        activeCards: "introduced:active-cards",
         introductoryRating: "introduced:introductory-rating",
     },
     misc: {

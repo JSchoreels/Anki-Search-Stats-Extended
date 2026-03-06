@@ -2,6 +2,7 @@ import {
     candlestickDisplayLabelFromIndex,
     trendMidpointXFromAxisDatum,
     trendRangeFromAxisDatum,
+    visibleTrendRangeFromAxisData,
 } from "../src/ts/trendAxis"
 
 describe("trend axis helpers", () => {
@@ -14,6 +15,17 @@ describe("trend axis helpers", () => {
     test("falls back to label value for point-like datums", () => {
         expect(trendRangeFromAxisDatum({ label: "42" })).toEqual({ startX: 42, endX: 42 })
         expect(trendMidpointXFromAxisDatum({ label: "42" })).toBe(42)
+    })
+
+    test("builds a clipping range from the visible axis data", () => {
+        expect(
+            visibleTrendRangeFromAxisData([
+                { label: "1", trendStart: 10, trendEnd: 14 },
+                { label: "2", trendStart: 15, trendEnd: 19 },
+                { label: "3", trendStart: 20, trendEnd: 24 },
+            ])
+        ).toEqual({ startX: 10, endX: 24 })
+        expect(visibleTrendRangeFromAxisData([])).toBeUndefined()
     })
 
     test("uses one-based candlestick display labels", () => {

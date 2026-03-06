@@ -1,9 +1,11 @@
 import type { CATEGORIES } from "./categories"
 
 export type StoredTrendCoordinate = number | string
+export type StoredTrendMode = "fitted" | "endpoints"
 export type StoredTrendRange = {
     startX: StoredTrendCoordinate
     endX: StoredTrendCoordinate
+    mode?: StoredTrendMode
 }
 
 export type SSEconfig = Partial<{

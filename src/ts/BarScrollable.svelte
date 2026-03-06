@@ -9,12 +9,17 @@
     } from "./bar"
     import Bar from "./Bar.svelte"
     import TrendValue from "./TrendValue.svelte"
+    import { selectableTrendLine, type TrendInfo } from "./trend"
     import {
-        selectableTrendLine,
-        type TrendInfo,
-    } from "./trend"
-    import { loadPinnedTrendRanges, queuePersistPinnedRanges, queuePersistStoredPinnedRanges } from "./trendPinnedPersistence"
-    import { trendMidpointXFromAxisDatum, trendRangeFromAxisDatum } from "./trendAxis"
+        loadPinnedTrendRanges,
+        queuePersistPinnedRanges,
+        queuePersistStoredPinnedRanges,
+    } from "./trendPinnedPersistence"
+    import {
+        trendMidpointXFromAxisDatum,
+        trendRangeFromAxisDatum,
+        visibleTrendRangeFromAxisData,
+    } from "./trendAxis"
     import {
         createGraphTrendSessionState,
         type GraphTrendSessionState,
@@ -70,6 +75,14 @@
         trendSession.controller?.togglePin(id)
     }
 
+    function toggleTrendMode(id: number) {
+        trendSession.controller?.toggleMode(id)
+    }
+
+    function updateTrendRange(id: number, range: import("./trend").TrendRange) {
+        trendSession.controller?.updateRange(id, range)
+    }
+
     let lastTrendPersistenceKey = ""
     $: if (trendPersistenceKey !== lastTrendPersistenceKey) {
         lastTrendPersistenceKey = trendPersistenceKey
@@ -117,6 +130,7 @@
             selectableTrendLine({
                 chart,
                 points: trend_data,
+                visibleRange: visibleTrendRangeFromAxisData(chart.chart.data),
                 hoverAreas,
                 hoverToRange: (datum) => trendRangeFromAxisDatum(datum),
                 xToPixel: (xValue) => {
@@ -222,6 +236,9 @@
         info={trend_info}
         onRemoveTrend={removeTrend}
         onTogglePinTrend={togglePinTrend}
+        onToggleTrendMode={toggleTrendMode}
+        onUpdateTrendRange={trend_date_axis ? updateTrendRange : undefined}
+        dateAxis={trend_date_axis}
     />
 {/if}
 

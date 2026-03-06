@@ -1,8 +1,8 @@
 import {
+    trendRangesEqual,
     type DrawnTrend,
     type InitialTrend,
     type TrendLine,
-    trendRangesEqual,
     type TrendRange,
     type TrendSelectionController,
 } from "./trend"
@@ -19,9 +19,12 @@ export function mergeVisibleCustomTrends(allTrends: InitialTrend[], visibleTrend
         const nextTrend: InitialTrend = {
             startX: trend.startX,
             endX: trend.endX,
+            storedStartX: trend.storedStartX,
+            storedEndX: trend.storedEndX,
             colour: trend.colour,
             pinned: trend.pinned,
             kind: trend.kind,
+            mode: trend.mode,
         }
         const existingIndex = merged.findIndex((previousTrend) => sameTrend(previousTrend, trend))
         if (existingIndex === -1) {
@@ -33,7 +36,10 @@ export function mergeVisibleCustomTrends(allTrends: InitialTrend[], visibleTrend
     return merged
 }
 
-export function removeTrendFromAll(allTrends: InitialTrend[], selectedTrend: DrawnTrend | undefined) {
+export function removeTrendFromAll(
+    allTrends: InitialTrend[],
+    selectedTrend: DrawnTrend | undefined
+) {
     if (!selectedTrend) {
         return allTrends
     }
@@ -50,14 +56,23 @@ export function hiddenPinnedRanges(allTrends: InitialTrend[], visibleTrends: Dra
                         visibleTrend.kind === trend.kind && trendRangesEqual(visibleTrend, trend)
                 )
         )
-        .map((trend) => ({ startX: trend.startX, endX: trend.endX }))
+        .map((trend) => ({
+            startX: trend.startX,
+            endX: trend.endX,
+            storedStartX: trend.storedStartX,
+            storedEndX: trend.storedEndX,
+            mode: trend.mode,
+        }))
 }
 
 export function mergeTrendRanges(base: TrendRange[], extra: TrendRange[]) {
     const merged = [...base]
     for (const range of extra) {
-        if (!merged.some((current) => trendRangesEqual(current, range))) {
+        const existingIndex = merged.findIndex((current) => trendRangesEqual(current, range))
+        if (existingIndex === -1) {
             merged.push(range)
+        } else {
+            merged[existingIndex] = range
         }
     }
     return merged

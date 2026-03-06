@@ -3,8 +3,8 @@ import * as d3 from "d3"
 import _ from "lodash"
 import createTrend from "trendline"
 import type { ExtraRenderInput } from "./bar"
-import type { StoredTrendCoordinate, StoredTrendRange } from "./config"
-export type { StoredTrendCoordinate, StoredTrendRange } from "./config"
+import type { StoredTrendCoordinate, StoredTrendMode, StoredTrendRange } from "./config"
+export type { StoredTrendCoordinate, StoredTrendMode, StoredTrendRange } from "./config"
 
 export type TrendInfo = Partial<{
     pattern: Pattern
@@ -16,6 +16,7 @@ export type TrendInfo = Partial<{
 
 export type TrendModel = ReturnType<typeof createTrend>
 export type TrendLine = TrendModel | undefined
+export type TrendMode = StoredTrendMode
 export type TrendDatum = {
     x: number
     y: number
@@ -29,16 +30,25 @@ export type DrawnTrend = {
     trend: TrendModel
     startX: number
     endX: number
+    storedStartX?: StoredTrendCoordinate
+    storedEndX?: StoredTrendCoordinate
     pinned: boolean
     kind: "default" | "custom"
+    mode: TrendMode
 }
 
 export type TrendRange = {
     startX: number
     endX: number
+    storedStartX?: StoredTrendCoordinate
+    storedEndX?: StoredTrendCoordinate
+    mode?: TrendMode
 }
 
-export type InitialTrend = Pick<DrawnTrend, "startX" | "endX" | "colour" | "pinned" | "kind">
+export type InitialTrend = Pick<
+    DrawnTrend,
+    "startX" | "endX" | "storedStartX" | "storedEndX" | "colour" | "pinned" | "kind" | "mode"
+>
 
 type TrendClickTransition = {
     nextAnchorX: number | undefined
@@ -66,9 +76,16 @@ type TrendSelectionOptions<T> = {
     drawDefaultTrend?: boolean
 }
 
+type HoverTarget = {
+    range: TrendRange
+    centerX: number
+}
+
 export type TrendSelectionController = {
     removeTrend: (id: number) => void
     togglePin: (id: number) => void
+    toggleMode: (id: number) => void
+    updateRange: (id: number, range: TrendRange) => void
     clear: () => void
 }
 
@@ -77,6 +94,8 @@ export type TrendSelectionState = {
     previewTrend: TrendLine
     removeTrend: (id: number) => void
     togglePinTrend: (id: number) => void
+    toggleTrendMode: (id: number) => void
+    updateTrendRange: (id: number, range: TrendRange) => void
 }
 
 export function emptyTrendSelectionState(): TrendSelectionState {
@@ -85,12 +104,15 @@ export function emptyTrendSelectionState(): TrendSelectionState {
         previewTrend: undefined,
         removeTrend: () => {},
         togglePinTrend: () => {},
+        toggleTrendMode: () => {},
+        updateTrendRange: () => {},
     }
 }
 
 const trendColours = ["#e63946", "#1d3557", "#2a9d8f", "#f4a261", "#6a4c93", "#457b9d"]
 const trendColoursNight = ["#ff9aa2", "#a9def9", "#b8f2e6", "#ffd6a5", "#d0bfff", "#bde0fe"]
 export const DEFAULT_TREND_COLOUR = "#000000"
+export const DEFAULT_TREND_MODE: TrendMode = "fitted"
 export const LIKELY_TIMESTAMP_MS_MIN = 10_000_000_000
 export const PREVIEW_TREND_LINE_DASH = "4 2"
 export const FIXED_TREND_LINE_DASH = "none"
@@ -127,6 +149,45 @@ export function createTrendFromData(data: TrendDatum[]) {
         return
     }
     return createTrend(valid, "x", "y")
+}
+
+function trendModelFromPoints(startX: number, startY: number, endX: number, endY: number) {
+    const deltaX = endX - startX
+    const slope = deltaX === 0 ? 0 : (endY - startY) / deltaX
+    const yStart = startY - slope * startX
+    return {
+        slope,
+        yStart,
+        calcY: (x: number) => yStart + slope * x,
+    } as TrendModel
+}
+
+export function createEndpointTrendFromData(data: TrendDatum[]) {
+    const valid = filteredTrendData(data).filter(hasFiniteRangeX)
+    const endPoints = trendEndPoints(valid)
+    if (!endPoints) {
+        return
+    }
+    return trendModelFromPoints(
+        datumRangeStart(endPoints.leftmost),
+        endPoints.leftmost.y,
+        datumRangeEnd(endPoints.rightmost),
+        endPoints.rightmost.y
+    )
+}
+
+export function trendModeWithDefault(mode: TrendMode | undefined): TrendMode {
+    return mode ?? DEFAULT_TREND_MODE
+}
+
+export function toggleTrendMode(mode: TrendMode | undefined): TrendMode {
+    return trendModeWithDefault(mode) === "fitted" ? "endpoints" : "fitted"
+}
+
+export function createTrendForMode(data: TrendDatum[], mode: TrendMode | undefined) {
+    return trendModeWithDefault(mode) === "endpoints"
+        ? createEndpointTrendFromData(data)
+        : createTrendFromData(data)
 }
 
 export function nextTrendClickTransition(
@@ -179,6 +240,12 @@ export function trendRangesEqual(a: TrendRange, b: TrendRange) {
     )
 }
 
+export function isTrendStartVisible(startX: number, visibleRange: TrendRange) {
+    const visibleMin = Math.min(visibleRange.startX, visibleRange.endX)
+    const visibleMax = Math.max(visibleRange.startX, visibleRange.endX)
+    return startX >= visibleMin && startX <= visibleMax
+}
+
 export function isLikelyTimestampMs(value: number) {
     return Number.isFinite(value) && Math.abs(value) >= LIKELY_TIMESTAMP_MS_MIN
 }
@@ -215,11 +282,31 @@ export function storedTemporalRange(
     return {
         startX: mapCoordinate(range.startX),
         endX: mapCoordinate(range.endX),
+        mode: range.mode,
     }
 }
 
 export function removeTrendById(trends: DrawnTrend[], id: number) {
     return trends.filter((trend) => trend.id !== id)
+}
+
+export function replaceTrendById<T extends { id: number }>(items: T[], replacement: T) {
+    return items.map((item) => (item.id === replacement.id ? replacement : item))
+}
+
+export function compareTrendsByStart(
+    a: Pick<DrawnTrend, "id" | "startX" | "endX">,
+    b: Pick<DrawnTrend, "id" | "startX" | "endX">
+) {
+    const startDiff = Math.min(a.startX, a.endX) - Math.min(b.startX, b.endX)
+    if (startDiff !== 0) {
+        return startDiff
+    }
+    const endDiff = Math.max(a.startX, a.endX) - Math.max(b.startX, b.endX)
+    if (endDiff !== 0) {
+        return endDiff
+    }
+    return a.id - b.id
 }
 
 function isStoredTrendCoordinate(value: unknown): value is StoredTrendCoordinate {
@@ -232,12 +319,20 @@ function isStoredTrendCoordinate(value: unknown): value is StoredTrendCoordinate
     return false
 }
 
+function isStoredTrendMode(value: unknown): value is StoredTrendMode {
+    return value === "fitted" || value === "endpoints"
+}
+
 function isTrendRange(value: unknown): value is StoredTrendRange {
     if (typeof value !== "object" || value === null) {
         return false
     }
     const candidate = value as Record<string, unknown>
-    return isStoredTrendCoordinate(candidate.startX) && isStoredTrendCoordinate(candidate.endX)
+    return (
+        isStoredTrendCoordinate(candidate.startX) &&
+        isStoredTrendCoordinate(candidate.endX) &&
+        (candidate.mode === undefined || isStoredTrendMode(candidate.mode))
+    )
 }
 
 export function pinnedTrendsForKey(storeKey: string) {
@@ -290,7 +385,7 @@ export function defaultTrendRange(data: TrendDatum[]) {
 }
 
 function drawTrendLine(
-    svg: d3.Selection<SVGGElement, unknown, null, undefined>,
+    svg: d3.Selection<SVGGElement, unknown, any, any>,
     y: d3.ScaleLinear<number, number, never>,
     trend: TrendModel,
     startX: number,
@@ -306,7 +401,7 @@ function drawTrendLine(
     const minY = Math.min(rangeStart, rangeEnd)
     const maxY = Math.max(rangeStart, rangeEnd)
     const clampY = (value: number) => Math.min(Math.max(y(value), minY), maxY)
-    const line = svg
+    return svg
         .append("line")
         .attr("class", className)
         .attr("x1", x1)
@@ -316,9 +411,32 @@ function drawTrendLine(
         .style("stroke", colour)
         .style("stroke-width", 1.5)
         .style("stroke-dasharray", lineDash)
-    if (trendId !== undefined) {
-        line.attr("data-trend-id", trendId)
-    }
+        .attr("data-trend-id", trendId ?? null)
+}
+
+function hoverTargets<T>(
+    hoverAreas: d3.Selection<SVGRectElement, T, SVGGElement, unknown>,
+    hoverToRange: (datum: T) => TrendRange
+) {
+    return hoverAreas
+        .nodes()
+        .map((node) => {
+            const datum = d3.select(node).datum() as T
+            const x = Number(node.getAttribute("x"))
+            const width = Number(node.getAttribute("width"))
+            if (!Number.isFinite(x) || !Number.isFinite(width)) {
+                return
+            }
+            return {
+                range: hoverToRange(datum),
+                centerX: x + width / 2,
+            }
+        })
+        .filter((target): target is HoverTarget => target !== undefined)
+}
+
+export function closestHoverTarget(targets: HoverTarget[], pixelX: number) {
+    return _.minBy(targets, (target) => Math.abs(target.centerX - pixelX))
 }
 
 export function selectableTrendLine<T>({
@@ -341,10 +459,14 @@ export function selectableTrendLine<T>({
 
     let removeTrend = (_id: number) => {}
     let togglePin = (_id: number) => {}
+    let toggleMode = (_id: number) => {}
+    let updateRange = (_id: number, _range: TrendRange) => {}
     let clear = () => {}
     const controller = {
         removeTrend: (id: number) => removeTrend(id),
         togglePin: (id: number) => togglePin(id),
+        toggleMode: (id: number) => toggleMode(id),
+        updateRange: (id: number, range: TrendRange) => updateRange(id, range),
         clear: () => clear(),
     }
     onControllerReady(controller)
@@ -357,6 +479,7 @@ export function selectableTrendLine<T>({
 
     points = filteredTrendData(points)
     const endPointCandidates = points.filter(hasFiniteRangeX)
+    const snappedHoverTargets = hoverTargets(hoverAreas, hoverToRange)
     let trends: DrawnTrend[] = []
     let nextId = 1
     let anchorX: number | undefined = undefined
@@ -373,7 +496,13 @@ export function selectableTrendLine<T>({
         onPinnedRangesChange(
             trends
                 .filter((trend) => trend.pinned)
-                .map((trend) => ({ startX: trend.startX, endX: trend.endX }))
+                .map((trend) => ({
+                    startX: trend.startX,
+                    endX: trend.endX,
+                    storedStartX: trend.storedStartX,
+                    storedEndX: trend.storedEndX,
+                    mode: trend.mode,
+                }))
         )
     }
 
@@ -382,9 +511,17 @@ export function selectableTrendLine<T>({
         onPreviewTrendChange(undefined)
     }
 
-    function applyTrendForRange(startX: number, endX: number) {
+    function removePersistentTrendGraphics(id: number) {
+        chart.svg.selectAll(`g.sse-trend-line-group[data-trend-id="${id}"]`).remove()
+    }
+
+    function hoveredRangeAtPixel(pixelX: number) {
+        return closestHoverTarget(snappedHoverTargets, pixelX)?.range
+    }
+
+    function applyTrendForRange(startX: number, endX: number, mode: TrendMode | undefined) {
         const rangePoints = trendDataInRange(points, startX, endX)
-        const trend = createTrendFromData(rangePoints)
+        const trend = createTrendForMode(rangePoints, mode)
         if (!trend) {
             return
         }
@@ -396,6 +533,9 @@ export function selectableTrendLine<T>({
             const rangeMax = Math.max(startX, endX)
             const visibleMin = Math.min(visibleRange.startX, visibleRange.endX)
             const visibleMax = Math.max(visibleRange.startX, visibleRange.endX)
+            if (!isTrendStartVisible(startX, visibleRange)) {
+                return
+            }
             const clippedMin = Math.max(rangeMin, visibleMin)
             const clippedMax = Math.min(rangeMax, visibleMax)
             if (clippedMin > clippedMax) {
@@ -419,25 +559,37 @@ export function selectableTrendLine<T>({
     }
 
     function drawPersistentTrend({
+        id = nextId++,
         startX,
         endX,
+        storedStartX = undefined,
+        storedEndX = undefined,
         colour,
         pinned = false,
         kind = "custom",
+        mode = DEFAULT_TREND_MODE,
     }: {
+        id?: number
         startX: number
         endX: number
+        storedStartX?: StoredTrendCoordinate
+        storedEndX?: StoredTrendCoordinate
         colour: string
         pinned?: boolean
         kind?: "default" | "custom"
+        mode?: TrendMode
     }) {
-        const trendData = applyTrendForRange(startX, endX)
+        const resolvedMode = trendModeWithDefault(mode)
+        const trendData = applyTrendForRange(startX, endX, resolvedMode)
         if (!trendData) {
             return
         }
-        const id = nextId++
+        const group = chart.svg
+            .append("g")
+            .attr("class", "sse-trend-line-group")
+            .attr("data-trend-id", id)
         drawTrendLine(
-            chart.svg,
+            group,
             chart.y,
             trendData.trend,
             trendData.drawStartX,
@@ -448,25 +600,69 @@ export function selectableTrendLine<T>({
             "sse-trend-line sse-trend-line-persistent",
             id
         )
-        trends = [
-            ...trends,
-            {
-                id,
-                colour,
-                trend: trendData.trend,
-                startX,
-                endX,
-                pinned,
-                kind,
-            },
-        ]
+        if (kind === "custom") {
+            const startY = chart.y(trendData.trend.calcY(trendData.drawStartX))
+            const endY = chart.y(trendData.trend.calcY(trendData.drawEndX))
+            const pointerX = (event: any) =>
+                d3.pointer(event?.sourceEvent ?? event, chart.svg.node())[0]
+            const updateEndpoint = (edge: "start" | "end") => (event: unknown) => {
+                const nextRange = hoveredRangeAtPixel(pointerX(event))
+                if (!nextRange) {
+                    return
+                }
+                updateRange(id, {
+                    startX: edge === "start" ? nextRange.startX : startX,
+                    endX: edge === "end" ? nextRange.endX : endX,
+                    mode: resolvedMode,
+                })
+            }
+
+            group
+                .append("circle")
+                .attr("class", "sse-trend-handle sse-trend-handle-start")
+                .attr("cx", trendData.x1)
+                .attr("cy", startY)
+                .attr("r", 4)
+                .style("fill", colour)
+                .style("stroke", "white")
+                .style("stroke-width", 1)
+                .style("cursor", "ew-resize")
+                .call(d3.drag<SVGCircleElement, unknown>().on("drag", updateEndpoint("start")))
+
+            group
+                .append("circle")
+                .attr("class", "sse-trend-handle sse-trend-handle-end")
+                .attr("cx", trendData.x2)
+                .attr("cy", endY)
+                .attr("r", 4)
+                .style("fill", colour)
+                .style("stroke", "white")
+                .style("stroke-width", 1)
+                .style("cursor", "ew-resize")
+                .call(d3.drag<SVGCircleElement, unknown>().on("drag", updateEndpoint("end")))
+        }
+        const nextTrend = {
+            id,
+            colour,
+            trend: trendData.trend,
+            startX,
+            endX,
+            storedStartX,
+            storedEndX,
+            pinned,
+            kind,
+            mode: resolvedMode,
+        }
+        trends = trends.some((trend) => trend.id === id)
+            ? replaceTrendById(trends, nextTrend)
+            : [...trends, nextTrend]
         emitTrends()
         emitPinnedRanges()
         clearPreview()
     }
 
     function drawPreviewTrend(startX: number, endX: number) {
-        const trendData = applyTrendForRange(startX, endX)
+        const trendData = applyTrendForRange(startX, endX, DEFAULT_TREND_MODE)
         if (!trendData) {
             clearPreview()
             return
@@ -491,7 +687,7 @@ export function selectableTrendLine<T>({
 
     removeTrend = (id: number) => {
         trends = removeTrendById(trends, id)
-        chart.svg.selectAll(`line.sse-trend-line-persistent[data-trend-id="${id}"]`).remove()
+        removePersistentTrendGraphics(id)
         emitTrends()
         emitPinnedRanges()
     }
@@ -504,9 +700,47 @@ export function selectableTrendLine<T>({
         emitPinnedRanges()
     }
 
+    toggleMode = (id: number) => {
+        const trendToRedraw = trends.find((trend) => trend.id === id)
+        if (!trendToRedraw) {
+            return
+        }
+        removePersistentTrendGraphics(id)
+        drawPersistentTrend({
+            id,
+            startX: trendToRedraw.startX,
+            endX: trendToRedraw.endX,
+            storedStartX: trendToRedraw.storedStartX,
+            storedEndX: trendToRedraw.storedEndX,
+            colour: trendToRedraw.colour,
+            pinned: trendToRedraw.pinned,
+            kind: trendToRedraw.kind,
+            mode: toggleTrendMode(trendToRedraw.mode),
+        })
+    }
+
+    updateRange = (id: number, range: TrendRange) => {
+        const trendToRedraw = trends.find((trend) => trend.id === id)
+        if (!trendToRedraw) {
+            return
+        }
+        removePersistentTrendGraphics(id)
+        drawPersistentTrend({
+            id,
+            startX: range.startX,
+            endX: range.endX,
+            storedStartX: range.storedStartX,
+            storedEndX: range.storedEndX,
+            colour: trendToRedraw.colour,
+            pinned: trendToRedraw.pinned,
+            kind: trendToRedraw.kind,
+            mode: range.mode ?? trendToRedraw.mode,
+        })
+    }
+
     clear = () => {
         trends = []
-        chart.svg.selectAll("line.sse-trend-line-persistent").remove()
+        chart.svg.selectAll("g.sse-trend-line-group").remove()
         clearPreview()
         emitTrends()
         emitPinnedRanges()
@@ -523,9 +757,12 @@ export function selectableTrendLine<T>({
         drawPersistentTrend({
             startX: initialTrend.startX,
             endX: initialTrend.endX,
+            storedStartX: initialTrend.storedStartX,
+            storedEndX: initialTrend.storedEndX,
             colour: initialTrend.colour,
             pinned: initialTrend.pinned,
             kind: initialTrend.kind,
+            mode: initialTrend.mode,
         })
     }
 
@@ -542,9 +779,12 @@ export function selectableTrendLine<T>({
         drawPersistentTrend({
             startX: pinnedTrend.startX,
             endX: pinnedTrend.endX,
+            storedStartX: pinnedTrend.storedStartX,
+            storedEndX: pinnedTrend.storedEndX,
             colour: nextCustomTrendColour(trends),
             pinned: true,
             kind: "custom",
+            mode: pinnedTrend.mode,
         })
     }
     if (initialPinnedSnapshot.length) {
@@ -559,6 +799,7 @@ export function selectableTrendLine<T>({
                 endX: defaultRange.endX,
                 colour: DEFAULT_TREND_COLOUR,
                 kind: "default",
+                mode: DEFAULT_TREND_MODE,
             })
         }
     }

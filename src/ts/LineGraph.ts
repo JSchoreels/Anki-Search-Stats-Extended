@@ -41,6 +41,21 @@ export function gridLines(
         .style("opacity", 0.05)
 }
 
+type LineChartPoint = { value: number; date: Date; day: number }
+
+export function visibleTrendRangeFromLinePoints(points: Pick<LineChartPoint, "day">[]) {
+    if (!points.length) {
+        return
+    }
+    const days = points.map((point) => point.day)
+    const minDay = d3.min(days)
+    const maxDay = d3.max(days)
+    if (minDay === undefined || maxDay === undefined) {
+        return
+    }
+    return { startX: minDay, endX: maxDay }
+}
+
 export function renderLineChart(
     svg: SVGElement,
     values: number[],
@@ -65,6 +80,8 @@ export function renderLineChart(
         onControllerReady({
             removeTrend: () => {},
             togglePin: () => {},
+            toggleMode: () => {},
+            updateRange: () => {},
             clear: () => {},
         })
         return
@@ -72,8 +89,6 @@ export function renderLineChart(
     // This is a hacky fix and I should probably fix the d3 calls below instead
     clearChart(svg)
     const { width, height } = defaultGraphBounds()
-
-    type Point = { value: number; date: Date; day: number }
 
     const first_non_zero_index = values.findIndex((v) => v)
     const start_index = first_non_zero_index === -1 ? 0 : first_non_zero_index
@@ -92,6 +107,8 @@ export function renderLineChart(
         onControllerReady({
             removeTrend: () => {},
             togglePin: () => {},
+            toggleMode: () => {},
+            updateRange: () => {},
             clear: () => {},
         })
         return
@@ -130,7 +147,7 @@ export function renderLineChart(
         .attr(
             "d",
             d3
-                .line<Point>()
+                .line<LineChartPoint>()
                 .x((d) => x(d.date))
                 .y((d) => y(d.value))
         )
@@ -138,7 +155,7 @@ export function renderLineChart(
     const bar_width = width / date_values.length + 1
     const hoverBars = axis
         .append("g")
-        .selectAll<SVGRectElement, Point>("rect")
+        .selectAll<SVGRectElement, LineChartPoint>("rect")
         .data(date_values.filter((a) => a))
         .join("rect")
         .attr("class", "hover-bar")
@@ -158,6 +175,7 @@ export function renderLineChart(
     selectableTrendLine({
         chart: { svg: axis, y },
         points: date_values.map((value) => ({ x: value.day, y: value.value })),
+        visibleRange: visibleTrendRangeFromLinePoints(date_values),
         hoverAreas: hoverBars,
         hoverToRange: (datum) => ({ startX: datum.day, endX: datum.day }),
         xToPixel: (day) => x(new Date(day * day_ms)),

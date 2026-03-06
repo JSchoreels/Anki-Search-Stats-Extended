@@ -1,6 +1,14 @@
 <script lang="ts">
     import { i18n, i18n_bundle } from "./i18n"
-    import { trendPatternBySlope, type DrawnTrend, type TrendLine, type TrendInfo } from "./trend"
+    import { dayFromDateString, dayFromMs, dayToDateString } from "./revlogGraphs"
+    import {
+        compareTrendsByStart,
+        trendPatternBySlope,
+        type DrawnTrend,
+        type TrendLine,
+        type TrendInfo,
+        type TrendRange,
+    } from "./trend"
 
     export let trend: TrendLine = undefined
     export let trends: DrawnTrend[] = []
@@ -9,8 +17,19 @@
     export let info: TrendInfo = {}
     export let onRemoveTrend: ((id: number) => void) | undefined = undefined
     export let onTogglePinTrend: ((id: number) => void) | undefined = undefined
+    export let onToggleTrendMode: ((id: number) => void) | undefined = undefined
+    export let onUpdateTrendRange: ((id: number, range: TrendRange) => void) | undefined = undefined
+    export let dateAxis = false
 
-    $: ({ pattern = "", positivePattern = undefined, negativePattern = undefined, percentage = false, absolute = false } = info)
+    let trendDateDrafts: Record<number, { start: string; end: string }> = {}
+
+    $: ({
+        pattern = "",
+        positivePattern = undefined,
+        negativePattern = undefined,
+        percentage = false,
+        absolute = false,
+    } = info)
 
     function valueFromTrend(trend: TrendLine) {
         if (trend === undefined) {
@@ -25,7 +44,7 @@
 
     $: preview_value = valueFromTrend(trend)
     $: preview_pattern = trendPatternBySlope(trend, { pattern, positivePattern, negativePattern })
-    $: trend_values = trends.map((line) => ({
+    $: trend_values = [...trends].sort(compareTrendsByStart).map((line) => ({
         ...line,
         value: valueFromTrend(line.trend),
         pattern: trendPatternBySlope(line.trend, { pattern, positivePattern, negativePattern }),
@@ -49,6 +68,77 @@
         })
         return `${perDayValue} | ${nValue}`
     }
+
+    function formatTrendDate(day: number, storedCoordinate: DrawnTrend["storedStartX"]) {
+        if (
+            typeof storedCoordinate === "string" &&
+            storedCoordinate.trim().toLowerCase() === "today"
+        ) {
+            return "today"
+        }
+        return dayToDateString(day)
+    }
+
+    function trendDateDraft(line: DrawnTrend, field: "start" | "end") {
+        const draft = trendDateDrafts[line.id]
+        if (draft) {
+            return draft[field]
+        }
+        return field === "start"
+            ? formatTrendDate(line.startX, line.storedStartX)
+            : formatTrendDate(line.endX, line.storedEndX)
+    }
+
+    function updateTrendDateDraft(lineId: number, field: "start" | "end", value: string) {
+        trendDateDrafts = {
+            ...trendDateDrafts,
+            [lineId]: {
+                start: trendDateDrafts[lineId]?.start ?? "",
+                end: trendDateDrafts[lineId]?.end ?? "",
+                [field]: value,
+            },
+        }
+    }
+
+    function parseTrendDateInput(value: string) {
+        const normalized = value.trim()
+        if (!normalized) {
+            return
+        }
+        if (normalized.toLowerCase() === "today") {
+            return { day: dayFromMs(Date.now()), storedCoordinate: "today" as const }
+        }
+        const day = dayFromDateString(normalized)
+        if (day === undefined) {
+            return
+        }
+        return { day, storedCoordinate: normalized }
+    }
+
+    function commitTrendDateDraft(line: DrawnTrend) {
+        const draft = trendDateDrafts[line.id]
+        if (!draft || !onUpdateTrendRange) {
+            return
+        }
+        const start = parseTrendDateInput(draft.start || trendDateDraft(line, "start"))
+        const end = parseTrendDateInput(draft.end || trendDateDraft(line, "end"))
+        if (!start || !end) {
+            const nextDrafts = { ...trendDateDrafts }
+            delete nextDrafts[line.id]
+            trendDateDrafts = nextDrafts
+            return
+        }
+        onUpdateTrendRange(line.id, {
+            startX: start.day,
+            endX: end.day,
+            storedStartX: start.storedCoordinate,
+            storedEndX: end.storedCoordinate,
+            mode: line.mode,
+        })
+        const nextDrafts = { ...trendDateDrafts }
+        delete nextDrafts[line.id]
+        trendDateDrafts = nextDrafts
+    }
 </script>
 
 {#if trend !== undefined || trend_values.length}
@@ -65,7 +155,52 @@
         {#each trend_values as line, i}
             <div class="trend-item">
                 <span class="swatch" style:background={line.colour}></span>
-                <span class="trend-text">{i18n("trend")} {i + 1}: {trendSummary(line.value, line.pattern)}</span>
+                <span class="trend-text">
+                    {i18n("trend")}
+                    {i + 1}: {trendSummary(line.value, line.pattern)}
+                </span>
+                {#if dateAxis && onUpdateTrendRange}
+                    <label class="trend-date">
+                        <input
+                            type="text"
+                            value={trendDateDraft(line, "start")}
+                            on:input={(event) =>
+                                updateTrendDateDraft(
+                                    line.id,
+                                    "start",
+                                    (event.currentTarget as HTMLInputElement).value
+                                )}
+                            on:change={() => commitTrendDateDraft(line)}
+                        />
+                        <span>to</span>
+                        <input
+                            type="text"
+                            value={trendDateDraft(line, "end")}
+                            on:input={(event) =>
+                                updateTrendDateDraft(
+                                    line.id,
+                                    "end",
+                                    (event.currentTarget as HTMLInputElement).value
+                                )}
+                            on:change={() => commitTrendDateDraft(line)}
+                        />
+                    </label>
+                {/if}
+                {#if onToggleTrendMode}
+                    <button
+                        type="button"
+                        class="toggle-trend-mode"
+                        aria-label={line.mode === "fitted"
+                            ? "switch trend to endpoint line"
+                            : "switch trend to fitted line"}
+                        title={line.mode === "fitted"
+                            ? "switch trend to endpoint line"
+                            : "switch trend to fitted line"}
+                        on:click={() => onToggleTrendMode?.(line.id)}
+                    >
+                        {line.mode === "fitted" ? "fit" : "ends"}
+                    </button>
+                {/if}
                 {#if onTogglePinTrend}
                     <button
                         type="button"
@@ -128,6 +263,19 @@
         overflow-wrap: anywhere;
     }
 
+    .trend-date {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35em;
+        color: var(--text-faint);
+        margin-left: 0.35em;
+    }
+
+    .trend-date input {
+        width: 7.5em;
+        min-width: 0;
+    }
+
     .remove-trend {
         margin-left: 0.1em;
         border: none;
@@ -143,8 +291,9 @@
         color: var(--text);
     }
 
+    .toggle-trend-mode,
     .pin-trend {
-        margin-left: auto;
+        margin-left: 0.35em;
         border: none;
         background: transparent;
         color: var(--text-faint);
@@ -152,13 +301,17 @@
         font-size: 0.95em;
         cursor: pointer;
         padding: 0 0.2em;
-        opacity: 0.45;
-        filter: grayscale(1);
     }
 
+    .toggle-trend-mode:hover,
     .pin-trend:hover {
         color: var(--text);
-        opacity: 0.75;
+    }
+
+    .pin-trend {
+        margin-left: auto;
+        opacity: 0.45;
+        filter: grayscale(1);
     }
 
     .pin-trend.active {

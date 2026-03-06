@@ -251,6 +251,12 @@ load-trend-help =
     This shows the change in load over time.
     For the trend candlestick bar, A green bar shows a decrease in load for that period of time (improvement) while a red bar shows an increase.
 
+active-cards-over-time = Active Cards Over Time
+active-cards-over-time-help =
+    Shows how many cards are active (young or mature) on each day.
+    Young and mature are split by stability threshold (21), not interval.
+    Use the filters to switch between young, mature, or all active cards, and optionally include suspended cards.
+
 x-change = Change: {$val}
 x-total = Total: {$val}
 
@@ -390,6 +396,13 @@ burden-per-day = {$value} burden per {$n ->
         *[many] {$n} days
     }
 introduced-load-per-day = {$value} introduced load per {$n ->
+        [one] day
+        *[many] {$n} days
+    }
+active-cards-per-day = {$value} active {$value ->
+        [one] card
+        *[many] cards
+    } per {$n ->
         [one] day
         *[many] {$n} days
     }

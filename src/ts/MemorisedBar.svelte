@@ -123,6 +123,9 @@
         n={$binSize}
         onRemoveTrend={trendSelection.removeTrend}
         onTogglePinTrend={trendSelection.togglePinTrend}
+        onToggleTrendMode={trendSelection.toggleTrendMode}
+        onUpdateTrendRange={trendSelection.updateTrendRange}
+        dateAxis
     />
     <div>
         <label>

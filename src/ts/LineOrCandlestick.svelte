@@ -10,7 +10,12 @@
     import { i18n } from "./i18n"
     import LineGraph from "./LineGraph.svelte"
     import { binSize, scroll, searchLimit } from "./stores"
-    import { emptyTrendSelectionState, type DrawnTrend, type TrendLine, type TrendSelectionState } from "./trend"
+    import {
+        emptyTrendSelectionState,
+        type DrawnTrend,
+        type TrendLine,
+        type TrendSelectionState,
+    } from "./trend"
 
     let type = "total"
     export let data: number[]
@@ -55,6 +60,8 @@
     let previewTrend: TrendLine = undefined
     let removeTrend: (id: number) => void = () => {}
     let togglePinTrend: (id: number) => void = () => {}
+    let toggleTrendMode: (id: number) => void = () => {}
+    let updateTrendRange: (id: number, range: import("./trend").TrendRange) => void = () => {}
     export let trendSelection: TrendSelectionState = emptyTrendSelectionState()
     export let trendPersistenceKey: string
 
@@ -63,6 +70,8 @@
         previewTrend,
         removeTrend,
         togglePinTrend,
+        toggleTrendMode,
+        updateTrendRange,
     }
 </script>
 
@@ -86,6 +95,8 @@
         bind:current_trend={previewTrend}
         bind:removeTrend
         bind:togglePinTrend
+        bind:toggleTrendMode
+        bind:updateTrendRange
     />
 {:else}
     <Candlestick
@@ -97,6 +108,8 @@
         bind:current_trend={previewTrend}
         bind:removeTrend
         bind:togglePinTrend
+        bind:toggleTrendMode
+        bind:updateTrendRange
         trendPersistenceKey={`${trendPersistenceKey}:candlestick`}
         bind:offset={$scroll}
     />

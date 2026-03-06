@@ -1,10 +1,11 @@
 <script lang="ts">
     import { renderLineChart } from "./LineGraph"
+    import { type DrawnTrend, type TrendLine } from "./trend"
     import {
-        type DrawnTrend,
-        type TrendLine,
-    } from "./trend"
-    import { loadPinnedTrendRanges, queuePersistPinnedRanges, queuePersistStoredPinnedRanges } from "./trendPinnedPersistence"
+        loadPinnedTrendRanges,
+        queuePersistPinnedRanges,
+        queuePersistStoredPinnedRanges,
+    } from "./trendPinnedPersistence"
 
     let svg: SVGElement | undefined
 
@@ -14,6 +15,11 @@
     export let current_trend: TrendLine = undefined
     export let removeTrend: (id: number) => void = () => {}
     export let togglePinTrend: (id: number) => void = () => {}
+    export let toggleTrendMode: (id: number) => void = () => {}
+    export let updateTrendRange: (
+        id: number,
+        range: import("./trend").TrendRange
+    ) => void = () => {}
     export let trendPersistenceKey: string
     let migrated_temporal_store_keys = new Set<string>()
 
@@ -37,6 +43,8 @@
             onControllerReady: (controller) => {
                 removeTrend = controller.removeTrend
                 togglePinTrend = controller.togglePin
+                toggleTrendMode = controller.toggleMode
+                updateTrendRange = controller.updateRange
             },
             initialPinnedTrends: initialPinnedRanges,
             onPinnedRangesChange: (ranges) => {

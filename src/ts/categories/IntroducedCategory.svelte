@@ -1,12 +1,15 @@
 <script lang="ts">
     import RevlogGraphContainer from "../RevlogGraphContainer.svelte"
     import BarScrollable from "../BarScrollable.svelte"
+    import LineOrCandlestick from "../LineOrCandlestick.svelte"
+    import TrendValue from "../TrendValue.svelte"
     import GraphCategory from "../GraphCategory.svelte"
     import Warning from "../Warning.svelte"
     import { i18n, i18n_pattern } from "../i18n"
     import { TREND_PERSISTENCE_KEYS } from "../trendPersistenceKeys"
     import { barDateLabeler, type BarChart } from "../bar"
     import { binSize, scroll, searchLimit, revlogStats } from "../stores"
+    import { emptyTrendSelectionState, type TrendSelectionState } from "../trend"
     import { today, easeBarChart } from "../revlogGraphs"
     import _ from "lodash"
 
@@ -51,11 +54,81 @@
     $: introduced_ease = include_reintroduced
         ? ($revlogStats?.day_initial_reintroduced_ease ?? [])
         : ($revlogStats?.day_initial_ease ?? [])
+    type ActiveCardFilter = "all" | "young" | "mature"
+    let active_card_filter: ActiveCardFilter = "all"
+    let include_suspended_active_cards = false
+    let activeCardsTrendSelection: TrendSelectionState = emptyTrendSelectionState()
+
+    $: active_cards_base_by_day =
+        active_card_filter === "young"
+            ? ($revlogStats?.active_cards_young_by_day ?? [])
+            : active_card_filter === "mature"
+              ? ($revlogStats?.active_cards_mature_by_day ?? [])
+              : ($revlogStats?.active_cards_all_by_day ?? [])
+
+    $: active_cards_suspended_by_day =
+        active_card_filter === "young"
+            ? ($revlogStats?.suspended_active_cards_young_by_day ?? [])
+            : active_card_filter === "mature"
+              ? ($revlogStats?.suspended_active_cards_mature_by_day ?? [])
+              : ($revlogStats?.suspended_active_cards_all_by_day ?? [])
+
+    $: active_cards_by_day = Array.from(
+        { length: Math.max(active_cards_base_by_day.length, active_cards_suspended_by_day.length) },
+        (_, day) =>
+            (active_cards_base_by_day[day] ?? 0) +
+            (include_suspended_active_cards ? (active_cards_suspended_by_day[day] ?? 0) : 0)
+    )
 
     let retention_trend = (values: number[]) => (_.sum(values) == 0 ? 0 : 1 - values[3])
 </script>
 
 <GraphCategory hidden_title={i18n("introduced")} config_name="introduced">
+    <RevlogGraphContainer>
+        <h1 slot="title">{i18n("active-cards-over-time")}</h1>
+        <LineOrCandlestick
+            slot="graph"
+            data={active_cards_by_day}
+            label={i18n("cards")}
+            bind:trendSelection={activeCardsTrendSelection}
+            trendPersistenceKey={TREND_PERSISTENCE_KEYS.introduced.activeCards}
+        />
+        <div>
+            <label>
+                <input type="radio" bind:group={active_card_filter} value="all" />
+                {i18n("all")}
+            </label>
+            <label>
+                <input type="radio" bind:group={active_card_filter} value="young" />
+                {i18n("young")}
+            </label>
+            <label>
+                <input type="radio" bind:group={active_card_filter} value="mature" />
+                {i18n("mature")}
+            </label>
+            <label>
+                <input type="checkbox" bind:checked={include_suspended_active_cards} />
+                {i18n("include-suspended")}
+            </label>
+        </div>
+        <p>{i18n("active-cards-over-time-help")}</p>
+        <TrendValue
+            trends={activeCardsTrendSelection.visibleTrends}
+            trend={activeCardsTrendSelection.previewTrend}
+            n={$binSize}
+            info={{ pattern: i18n_pattern("active-cards-per-day"), absolute: true }}
+            onRemoveTrend={activeCardsTrendSelection.removeTrend}
+            onTogglePinTrend={activeCardsTrendSelection.togglePinTrend}
+            onToggleTrendMode={activeCardsTrendSelection.toggleTrendMode}
+            onUpdateTrendRange={activeCardsTrendSelection.updateTrendRange}
+            dateAxis
+        />
+        {#if truncated}
+            <Warning>
+                {i18n("generic-truncated-warning")}
+            </Warning>
+        {/if}
+    </RevlogGraphContainer>
     <RevlogGraphContainer>
         <h1 slot="title">{i18n("introduced")}</h1>
         <BarScrollable
