@@ -1,7 +1,14 @@
+import type { CATEGORIES } from "./categories"
+
+export type StoredTrendCoordinate = number | string
+export type StoredTrendRange = {
+    startX: StoredTrendCoordinate
+    endX: StoredTrendCoordinate
+}
+
 export type SSEconfig = Partial<{
     loadDelayMs: number
     burdenNotLoad: boolean
-    confirmExpensiveStats: boolean
     barWidth: number
     barHeight: number
     piePercentages: boolean
@@ -9,6 +16,11 @@ export type SSEconfig = Partial<{
     trends: boolean
     graphMode: "Bar" | "Pie"
     categories: Record<string, boolean | "removed">
+    categoryOrder: (keyof typeof CATEGORIES)[]
+    autoRevlogStats: boolean
+    autoMemorisedStats: boolean
+    alwaysAllTime: boolean
+    pinnedTrends: Record<string, StoredTrendRange[]>
 }>
 
 export type DeckConfig = {
@@ -83,3 +95,19 @@ export interface SSEother {
     lang_ftl: string
     fallback_ftl: string
 }
+
+export const DEFAULT_ORDER = [
+    "due",
+    "misc",
+    "rating",
+    "load",
+    "timeMachine",
+    "fsrs",
+    "forgettingCurve",
+    "introduced",
+    "interval",
+    "repetition",
+    "time",
+    "lapse",
+    "bad",
+] as const

@@ -3,10 +3,11 @@
     import GraphContainer from "./GraphContainer.svelte"
     import LineOrCandlestick from "./LineOrCandlestick.svelte"
     import { binSize, memorised_stats } from "./stores"
-    import type { TrendInfo, TrendLine } from "./trend"
+    import { emptyTrendSelectionState, type TrendInfo, type TrendSelectionState } from "./trend"
     import TrendValue from "./TrendValue.svelte"
     import { matrix } from "./matrix"
     import { i18n, i18n_pattern } from "./i18n"
+    import { TREND_PERSISTENCE_KEYS } from "./trendPersistenceKeys"
     import MemorisedCalculator from "./MemorisedCalculator.svelte"
 
     export let burden: number[] = []
@@ -43,18 +44,15 @@
         })
     )
 
-    $: pattern =
-        (trend_data?.slope || 0) > 0
-            ? i18n_pattern("remembered-per-day")
-            : i18n_pattern("forgotten-per-day")
-
     let trend_info: TrendInfo
     $: trend_info = {
-        pattern,
+        pattern: i18n_pattern("remembered-per-day"),
+        positivePattern: i18n_pattern("remembered-per-day"),
+        negativePattern: i18n_pattern("forgotten-per-day"),
         absolute: true,
     }
 
-    let trend_data: TrendLine
+    let trendSelection: TrendSelectionState = emptyTrendSelectionState()
     let svg: SVGElement | undefined = undefined
 
     function hoverTooltip(x: number, y: number) {
@@ -86,26 +84,46 @@
         <LineOrCandlestick
             data={stable_retrievability_days}
             label={i18n("cards-and-stability")}
-            bind:trend_data
+            bind:trendSelection
+            trendPersistenceKey={TREND_PERSISTENCE_KEYS.memorised.stableRetrievability}
         />
     {:else if memorised_type == MemorisedType.NOTES}
         <LineOrCandlestick
             data={Array.from($memorised_stats.noteRetrievabilityDays || [])}
             label={i18n("notes")}
-            bind:trend_data
+            bind:trendSelection
+            trendPersistenceKey={TREND_PERSISTENCE_KEYS.memorised.notes}
         />
     {:else if memorised_type == MemorisedType.RETRIEVABILITY}
-        <LineOrCandlestick data={retrievabilityDays} label={i18n("cards")} bind:trend_data />
+        <LineOrCandlestick
+            data={retrievabilityDays}
+            label={i18n("cards")}
+            bind:trendSelection
+            trendPersistenceKey={TREND_PERSISTENCE_KEYS.memorised.cards}
+        />
     {:else if memorised_type == MemorisedType.CARDS_BY_BURDEN}
         <LineOrCandlestick
             data={cardsByBurdenByDays}
             label={i18n("cards-by-burden")}
-            bind:trend_data
+            bind:trendSelection
+            trendPersistenceKey={TREND_PERSISTENCE_KEYS.memorised.cardsByBurden}
         />
     {:else}
-        <LineOrCandlestick data={average_r} label={i18n("retrievability")} bind:trend_data />
+        <LineOrCandlestick
+            data={average_r}
+            label={i18n("retrievability")}
+            bind:trendSelection
+            trendPersistenceKey={TREND_PERSISTENCE_KEYS.memorised.retrievability}
+        />
     {/if}
-    <TrendValue info={trend_info} trend={trend_data} n={$binSize} />
+    <TrendValue
+        info={trend_info}
+        trend={trendSelection.previewTrend}
+        trends={trendSelection.visibleTrends}
+        n={$binSize}
+        onRemoveTrend={trendSelection.removeTrend}
+        onTogglePinTrend={trendSelection.togglePinTrend}
+    />
     <div>
         <label>
             <input type="radio" value={MemorisedType.RETRIEVABILITY} bind:group={memorised_type} />

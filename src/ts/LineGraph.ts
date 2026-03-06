@@ -1,16 +1,101 @@
 import * as d3 from "d3"
-import { defaultGraphBounds } from "./graph"
+import { clearChart, defaultGraphBounds } from "./graph"
 import { day_ms } from "./revlogGraphs"
 import { tooltip, tooltipShown } from "./stores"
 import { tooltipX } from "./tooltip"
+import {
+    selectableTrendLine,
+    type DrawnTrend,
+    type TrendLine,
+    type TrendRange,
+    type TrendSelectionController,
+} from "./trend"
 
-export function renderLineChart(svg: SVGElement, values: number[], label = "Value") {
+export function gridLines(
+    svg: d3.Selection<SVGGElement, unknown, null, undefined>,
+    xTicks: number[],
+    yTicks: number[]
+) {
     const { width, height } = defaultGraphBounds()
 
-    type Point = { value: number; date: Date }
-    const date_values = values
-        .map((v, i) => ({ value: v, date: new Date(i * day_ms) }))
-        .filter((a) => a.value)
+    svg.append("g")
+        .selectAll("line")
+        .data(xTicks)
+        .join("line")
+        .attr("x1", (d) => d)
+        .attr("x2", (d) => d)
+        .attr("y1", 0)
+        .attr("y2", height)
+        .style("stroke", "currentColor")
+        .style("opacity", 0.05)
+
+    svg.append("g")
+        .selectAll("line")
+        .data(yTicks)
+        .join("line")
+        .attr("x1", 0)
+        .attr("x2", width)
+        .attr("y1", (d) => d)
+        .attr("y2", (d) => d)
+        .attr("stroke", "currentColor")
+        .style("opacity", 0.05)
+}
+
+export function renderLineChart(
+    svg: SVGElement,
+    values: number[],
+    label = "Value",
+    {
+        onTrendsChange = () => {},
+        onPreviewTrendChange = () => {},
+        onControllerReady = () => {},
+        initialPinnedTrends = [],
+        onPinnedRangesChange = () => {},
+    }: {
+        onTrendsChange?: (trends: DrawnTrend[]) => void
+        onPreviewTrendChange?: (trend: TrendLine) => void
+        onControllerReady?: (controller: TrendSelectionController) => void
+        initialPinnedTrends?: TrendRange[]
+        onPinnedRangesChange?: (ranges: TrendRange[]) => void
+    } = {}
+) {
+    if (!svg) {
+        onTrendsChange([])
+        onPreviewTrendChange(undefined)
+        onControllerReady({
+            removeTrend: () => {},
+            togglePin: () => {},
+            clear: () => {},
+        })
+        return
+    }
+    // This is a hacky fix and I should probably fix the d3 calls below instead
+    clearChart(svg)
+    const { width, height } = defaultGraphBounds()
+
+    type Point = { value: number; date: Date; day: number }
+
+    const first_non_zero_index = values.findIndex((v) => v)
+    const start_index = first_non_zero_index === -1 ? 0 : first_non_zero_index
+
+    const date_values = Array.from(values)
+        .slice(start_index)
+        .map((v, i) => ({
+            value: v ?? 0,
+            date: new Date((start_index + i) * day_ms),
+            day: start_index + i,
+        }))
+
+    if (!date_values.length) {
+        onTrendsChange([])
+        onPreviewTrendChange(undefined)
+        onControllerReady({
+            removeTrend: () => {},
+            togglePin: () => {},
+            clear: () => {},
+        })
+        return
+    }
 
     const xMin = d3.min(date_values.map((d) => d.date))!
     const xMax = d3.max(date_values.map((d) => d.date))!
@@ -25,6 +110,8 @@ export function renderLineChart(svg: SVGElement, values: number[], label = "Valu
         .select(svg)
         .attr("viewBox", `-40 -10 ${width + 50} ${height + 50}`)
         .append("g")
+
+    gridLines(axis, x.ticks(7).map(x), y.ticks().map(y))
 
     axis.append("g").call(d3.axisLeft(y)).attr("opacity", 0.5)
 
@@ -49,8 +136,9 @@ export function renderLineChart(svg: SVGElement, values: number[], label = "Valu
         )
 
     const bar_width = width / date_values.length + 1
-    axis.append("g")
-        .selectAll("g")
+    const hoverBars = axis
+        .append("g")
+        .selectAll<SVGRectElement, Point>("rect")
         .data(date_values.filter((a) => a))
         .join("rect")
         .attr("class", "hover-bar")
@@ -66,6 +154,20 @@ export function renderLineChart(svg: SVGElement, values: number[], label = "Valu
                 text: [`${d.date.toLocaleDateString()}:`, `${label}: ${value_string}`],
             })
         })
+
+    selectableTrendLine({
+        chart: { svg: axis, y },
+        points: date_values.map((value) => ({ x: value.day, y: value.value })),
+        hoverAreas: hoverBars,
+        hoverToRange: (datum) => ({ startX: datum.day, endX: datum.day }),
+        xToPixel: (day) => x(new Date(day * day_ms)),
+        onTrendsChange,
+        onPreviewTrendChange,
+        onControllerReady,
+        initialPinnedTrends,
+        onPinnedRangesChange,
+        drawDefaultTrend: false,
+    })
 
     axis.on("mouseover", () => tooltipShown.set(true)).on("mouseleave", () =>
         tooltipShown.set(false)
