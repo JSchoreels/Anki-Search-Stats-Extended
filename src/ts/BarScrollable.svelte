@@ -45,6 +45,7 @@
     export let loss: boolean = false
     export let trendPersistenceKey = ""
     export let trend_date_axis = false
+    export let search: undefined | ((i: number, width: number) => void) = undefined
 
     $: min = left_aligned ? 0 : 1
     $: absOffset = Math.abs(offset)
@@ -189,6 +190,7 @@
             values: loss ? [0, 0] : data.row_labels.map((_) => 0),
             trendStart: clampIndex(absoluteDataIndex(i)),
             trendEnd: clampIndex(absoluteDataIndex(i + binSize - 1)),
+            onClick: search ? () => search(i + min, binSize) : undefined,
         }))
 
         for (const [i, bar] of separate_bars.entries()) {

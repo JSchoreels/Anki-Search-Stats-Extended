@@ -18,6 +18,7 @@ import type { Tooltip } from "./tooltip"
 export let include_suspended = writable(false)
 export let zero_inclusive = writable(false)
 export let custom_pie_mode = writable("Count")
+export let custom_bar_mode = writable<"count" | "time">("count")
 export let graph_mode = writable<"Bar" | "Pie">("Pie")
 
 // Config related stats
@@ -70,9 +71,6 @@ configSubscribe(alwaysAllTime, ($alwaysAllTime) => saveConfigValue("alwaysAllTim
 // Data related
 export let data = writable<null | GraphsResponse>(null)
 export let not_suspended_data = writable<null | GraphsResponse>(null)
-export let mature_data = writable<null | GraphsResponse>(null)
-export let learn_data = writable<null | GraphsResponse>(null)
-export let relearn_data = writable<null | GraphsResponse>(null)
 
 export let graphsRequest = writable<null | GraphsRequest>(null)
 export let searchString = derived(graphsRequest, ($graphsRequest) => $graphsRequest?.search ?? null)

@@ -1,18 +1,10 @@
+import { get } from "svelte/store"
 import { GraphsRequest, GraphsResponse } from "./proto/anki/stats_pb"
 import { search } from "./search"
-import {
-    cids,
-    data,
-    graphsRequest,
-    learn_data,
-    mature_data,
-    not_suspended_data,
-    relearn_data,
-} from "./stores"
+import { alwaysAllTime, cids, data, graphsRequest, not_suspended_data } from "./stores"
 
 export async function decodeResponse(resp: Response) {
-    const blob = await resp.blob()
-    const respBuf = await new Response(blob).arrayBuffer()
+    const respBuf = await resp.arrayBuffer()
     const bytes = new Uint8Array(respBuf)
     return GraphsResponse.fromBinary(bytes)!
 }
@@ -40,9 +32,12 @@ export function searchJoin(user: string | null, added: string | null): string {
     }
 }
 
-function bodySwap(req: string | Uint8Array, newSearch: string) {
+function bodySwap(req: string | Uint8Array, newSearch: string, newLimit?: number) {
     const request = decodeRequest(req)
     request.search = searchJoin(request?.search, newSearch)
+    if (newLimit !== undefined) {
+        request.days = newLimit
+    }
     return request.toBinary()
 }
 
@@ -51,22 +46,24 @@ async function fetchAndDecode(fetchPromise: Promise<Response>) {
     return await decodeResponse(resp)
 }
 
+let origBody: any = undefined
+let origReq: string = ""
+let origHeaders: any = { body: undefined }
+
+export function fetchSwappedSearch(criteria: string, limit?: number) {
+    const headers = { ...origHeaders, body: bodySwap(origBody, criteria, limit) }
+    return fetchAndDecode(realFetch(origReq, headers))
+}
+
 export function patchFetch() {
     //@ts-ignore
     fetch = (req: string, headers: Record<string, any>) => {
         if (req == "/_anki/graphs") {
             data.set(null)
-            mature_data.set(null)
-            learn_data.set(null)
-            relearn_data.set(null)
-            not_suspended_data.set(null)
 
-            const origBody = headers.body
-
-            function fetchSwappedSearch(criteria: string) {
-                headers.body = bodySwap(origBody, criteria)
-                return fetchAndDecode(realFetch(req, headers))
-            }
+            origReq = req
+            origBody = headers.body
+            origHeaders = headers
 
             const search_request = decodeRequest(origBody)
 
@@ -75,13 +72,9 @@ export function patchFetch() {
             const cidSearch = search(search_request?.search)
             cidSearch.then(cids.set)
 
-            fetchAndDecode(realFetch(req, headers)).then(data.set)
-            fetchSwappedSearch("prop:ivl>=21").then(mature_data.set)
-            fetchSwappedSearch("is:learn").then(learn_data.set)
-            fetchSwappedSearch("is:learn is:review").then(relearn_data.set)
-            fetchSwappedSearch("-is:suspended").then(not_suspended_data.set)
-
-            headers.body = origBody
+            const limit = get(alwaysAllTime) ? 0 : undefined
+            fetchSwappedSearch("", limit).then(data.set)
+            fetchSwappedSearch("-is:suspended", limit).then(not_suspended_data.set)
         }
         return realFetch(req, headers)
     }

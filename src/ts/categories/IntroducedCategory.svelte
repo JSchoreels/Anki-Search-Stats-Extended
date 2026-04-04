@@ -7,11 +7,12 @@
     import Warning from "../Warning.svelte"
     import { i18n, i18n_pattern } from "../i18n"
     import { TREND_PERSISTENCE_KEYS } from "../trendPersistenceKeys"
-    import { barDateLabeler, type BarChart } from "../bar"
+    import { barDateLabeler, type BarChart, type BarDatum } from "../bar"
     import { binSize, scroll, searchLimit, revlogStats } from "../stores"
     import { emptyTrendSelectionState, type TrendSelectionState } from "../trend"
     import { today, easeBarChart } from "../revlogGraphs"
     import _ from "lodash"
+    import { browserSearchCurrent } from "../search"
 
     const bins = 30
     $: limit = -1 - $searchLimit
@@ -31,7 +32,7 @@
                 return {
                     values: [introduced - reintroduced, reintroduced],
                     label: barLabel(i),
-                }
+                } satisfies BarDatum
             })
             .map((d, i) => d ?? { values: [0, 0], label: barLabel(i) }),
         tick_spacing: 5,
@@ -80,7 +81,8 @@
             (include_suspended_active_cards ? (active_cards_suspended_by_day[day] ?? 0) : 0)
     )
 
-    let retention_trend = (values: number[]) => (_.sum(values) == 0 ? 0 : 1 - values[3])
+    const introducedSearch = (i: number, width: number) =>
+        browserSearchCurrent(`introduced:${-i + 1} -introduced:${-(i + width) + 1}`)
 </script>
 
 <GraphCategory hidden_title={i18n("introduced")} config_name="introduced">
@@ -138,6 +140,7 @@
             bind:binSize={$binSize}
             bind:offset={$scroll}
             {limit}
+            search={introducedSearch}
         />
         <p>
             {i18n("introduced-help")}
@@ -183,6 +186,7 @@
             trend_by={(values: number[]) => (_.sum(values) == 0 ? 0 : 1 - values[3])}
             trend_info={{ pattern: i18n_pattern("retention-per-day"), percentage: true }}
             {limit}
+            search={introducedSearch}
         />
         <label>
             <input type="checkbox" bind:checked={include_reintroduced} />

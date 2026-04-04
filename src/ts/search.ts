@@ -1,5 +1,7 @@
+import { get } from "svelte/store"
 import { FSRS5_DEFAULT_DECAY } from "ts-fsrs"
-import { realFetch } from "./root"
+import { realFetch, searchJoin } from "./root"
+import { searchString } from "./stores"
 
 export function catchErrors<Return>(func: () => Return): Return {
     try {
@@ -58,6 +60,16 @@ export interface CardData {
     usn: number
     type: number
     // https://github.com/ankitects/anki/blob/main/pylib/anki/consts.py#L22-L29
+    /*
+    QUEUE_TYPE_MANUALLY_BURIED = CardQueue(-3)
+    QUEUE_TYPE_SIBLING_BURIED = CardQueue(-2)
+    QUEUE_TYPE_SUSPENDED = CardQueue(-1)
+    QUEUE_TYPE_NEW = CardQueue(0)
+    QUEUE_TYPE_LRN = CardQueue(1)
+    QUEUE_TYPE_REV = CardQueue(2)
+    QUEUE_TYPE_DAY_LEARN_RELEARN = CardQueue(3)
+    QUEUE_TYPE_PREVIEW = CardQueue(4)
+    */
     queue: number
     due: number
     ivl: number
@@ -80,7 +92,14 @@ export interface CardExtraData {
 }
 
 export function getExtraDataFromCard(card: CardData): CardExtraData {
-    return JSON.parse(card.data)
+    if (!card.data) {
+        return {}
+    }
+    try {
+        return JSON.parse(card.data)
+    } catch {
+        return {}
+    }
 }
 
 export function getCardDecay(card: CardData) {
@@ -119,7 +138,45 @@ export async function openLocaleFolder() {
 }
 
 export async function getCardData(cids: number[]) {
-    return (await endpoint("cardData", JSON.stringify(cids))) as CardData[]
+    const response = (await endpoint("cardData", JSON.stringify(cids))) as {
+        columns?: string[]
+        data?: any[][]
+    }
+
+    if (!response.columns || !response.data) {
+        alert(
+            "Search Stats Extended has been updated. Some graphs may not work until you restart Anki."
+        )
+        return []
+    }
+
+    const idx: Record<string, number> = {}
+    response.columns.forEach((col, i) => (idx[col] = i))
+    const cards = new Array<CardData>(response.data.length)
+    for (let i = 0; i < response.data.length; i++) {
+        const row = response.data[i]
+        cards[i] = {
+            id: row[idx.id],
+            nid: row[idx.nid],
+            did: row[idx.did],
+            ord: row[idx.ord],
+            mod: row[idx.mod],
+            usn: row[idx.usn],
+            type: row[idx.type],
+            queue: row[idx.queue],
+            due: row[idx.due],
+            ivl: row[idx.ivl],
+            factor: row[idx.factor],
+            reps: row[idx.reps],
+            lapses: row[idx.lapses],
+            left: row[idx.left],
+            odue: row[idx.odue],
+            odid: row[idx.odid],
+            flags: row[idx.flags],
+            data: row[idx.data],
+        }
+    }
+    return cards
 }
 
 export async function saveConfigValue(key: string, value: any) {
@@ -163,6 +220,10 @@ export async function getRevlogs(cids: number[], day_range: number) {
 
 export function browserSearch(search: string) {
     window.bridgeCommand(`browserSearch:${search}`)
+}
+
+export function browserSearchCurrent(search: string) {
+    browserSearch(searchJoin(get(searchString), search))
 }
 
 export function browserSearchCids(cids: (number | string)[]) {

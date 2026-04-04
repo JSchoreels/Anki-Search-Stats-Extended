@@ -7,15 +7,16 @@ import {
     default_w,
     type FSRS,
     fsrs as Fsrs,
+    FSRS5_DEFAULT_DECAY,
     type FSRSState,
     generatorParameters,
 } from "ts-fsrs"
 import type { BarChart, BarDatum } from "./bar"
 import { totalCalc } from "./barHelpers"
 import type { DeckConfig } from "./config"
-import { type ForgettingSample } from "./forgettingCurveData"
+import { averageDecay, type ForgettingSample } from "./forgettingCurveData"
 import { i18n } from "./i18n"
-import type { CardData, Revlog } from "./search"
+import { type CardData, getCardDecay, type Revlog } from "./search"
 
 const rollover = SSEother.rollover ?? 0
 export const rollover_ms = rollover * 60 * 60 * 1000
@@ -454,7 +455,7 @@ export function calculateRevlogStats(
 
         let to = next_review ? dayFromMs(next_review.id) : end + 1
 
-        for (const intervalDay of _.range(day, to)) {
+        for (let intervalDay = day; intervalDay < to; intervalDay++) {
             intervals[intervalDay] = intervals[intervalDay] ?? []
             // -1 suspended
             // -2 learn (0 still contains learn as well)
@@ -499,6 +500,15 @@ export function calculateRevlogStats(
     }
 
     const remaining_forgotten = forgotten.size
+    const forgettingCurveCardIds = new Set<number>(
+        [...forgetting_samples, ...forgetting_samples_short].map((sample) => sample.cid)
+    )
+    const decayValues = Array.from(forgettingCurveCardIds)
+        .map((cid) => id_card_data[cid])
+        .filter((card): card is CardData => card !== undefined)
+        .map((card) => getCardDecay(card))
+    const forgetting_curve_decay =
+        decayValues.length > 0 ? averageDecay(decayValues) : FSRS5_DEFAULT_DECAY
 
     return {
         day_initial_ease,
@@ -529,6 +539,7 @@ export function calculateRevlogStats(
         last_forget,
         forgetting_samples,
         forgetting_samples_short,
+        forgetting_curve_decay,
     }
 }
 

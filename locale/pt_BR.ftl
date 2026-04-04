@@ -7,7 +7,6 @@ load = Carga
 count = Contagem
 lapses = Lapsos
 repetitions = Repetições
-
 cards = Cartões
 card-load = Carga de Cartões
 intervals = Intervalos
@@ -103,6 +102,12 @@ learning = Aprendendo
 custom-pie = Gráfico de Pizza Personalizado
 custom-pie-help =
     Este gráfico de pizza mostrará a soma do valor solicitado para os cartões que correspondem à "Busca" para cada busca.
+
+custom-bar = Gráfico de Barras Personalizado
+custom-bar-help =
+    Este gráfico de barras mostrará a soma do valor solicitado para cartões que correspondem
+    "Pesquisar"
+    para cada pesquisa
 
 search = Busca
 colour = Cor
@@ -287,8 +292,8 @@ forgetting-curve-tooltip-interval = Intervalo: {$days} d
 forgetting-curve-tooltip-interval-minutes = Intervalo: {$minutes} min
 forgetting-curve-tooltip-recall = Recordação: {$value}%
 forgetting-curve-tooltip-count = Amostras: {$count}
-forgetting-curve-legend = {$rating}: Estabilidade de memória={$stability} ({$count})
-forgetting-curve-legend-short-term = {$rating}: Estabilidade de memória={$stability} minutos ({$count})
+forgetting-curve-legend = {$rating}: Estabilidade de memória={$stability}, decaimento={$decay} ({$count})
+forgetting-curve-legend-short-term = {$rating}: Estabilidade de memória={$stability} minutos, decaimento={$decay} ({$count})
 forgetting-curve-legend-count = n={$count}
 
 actual = Real
