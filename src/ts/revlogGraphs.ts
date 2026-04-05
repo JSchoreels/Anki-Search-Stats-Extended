@@ -180,6 +180,7 @@ export function calculateRevlogStats(
     cardData: CardData[],
     end: number = today
 ) {
+    console.time("revlog stats")
     let id_card_data = IDify(cardData)
     const stability_after_review = stabilityAfterReviewsByRevlog(revlogData, id_card_data)
 
@@ -503,6 +504,8 @@ export function calculateRevlogStats(
         .map((card) => getCardDecay(card))
     const forgetting_curve_decay =
         decayValues.length > 0 ? averageDecay(decayValues) : FSRS5_DEFAULT_DECAY
+
+    console.timeEnd("revlog stats")
 
     return {
         day_initial_ease,
