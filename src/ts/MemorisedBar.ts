@@ -5,7 +5,6 @@ import {
     checkParameters,
     createEmptyCard,
     dateDiffInDays,
-    default_w,
     type FSRS,
     fsrs as Fsrs,
     type FSRSState,
@@ -14,6 +13,7 @@ import {
 } from "ts-fsrs"
 import type { LossBar } from "./bar"
 import type { DeckConfig } from "./config"
+import { selectTsFsrsParams } from "./fsrsParams"
 import { type Buckets, dayFromMs, emptyBuckets, IDify, rollover_ms, today } from "./revlogGraphs"
 import type { CardData, Revlog } from "./search"
 
@@ -156,14 +156,7 @@ let deckFsrs: Record<number, FSRS> = {}
 export function getFsrs(config: DeckConfig) {
     const id = config.id
     if (!deckFsrs[id]) {
-        const configParams = [
-            config.fsrsParams6,
-            config.fsrsParams5,
-            config.fsrsParams4,
-            config.fsrsWeights,
-        ]
-
-        const params = configParams.find((arr) => Array.isArray(arr) && arr.length > 0) ?? default_w
+        const params = selectTsFsrsParams(config)
 
         deckFsrs[id] = Fsrs(
             generatorParameters({

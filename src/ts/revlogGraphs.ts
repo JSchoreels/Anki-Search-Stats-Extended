@@ -4,7 +4,6 @@ import {
     checkParameters,
     createEmptyCard,
     dateDiffInDays,
-    default_w,
     type FSRS,
     fsrs as Fsrs,
     FSRS5_DEFAULT_DECAY,
@@ -15,6 +14,7 @@ import type { BarChart, BarDatum } from "./bar"
 import { totalCalc } from "./barHelpers"
 import type { DeckConfig } from "./config"
 import { averageDecay, type ForgettingSample } from "./forgettingCurveData"
+import { selectTsFsrsParams } from "./fsrsParams"
 import { i18n } from "./i18n"
 import { type CardData, getCardDecay, type Revlog } from "./search"
 
@@ -58,13 +58,7 @@ let deckFsrs: Record<number, FSRS> = {}
 function getFsrs(config: DeckConfig) {
     const id = config.id
     if (!deckFsrs[id]) {
-        const configParams = [
-            config.fsrsParams6,
-            config.fsrsParams5,
-            config.fsrsParams4,
-            config.fsrsWeights,
-        ]
-        const params = configParams.find((arr) => Array.isArray(arr) && arr.length > 0) ?? default_w
+        const params = selectTsFsrsParams(config)
 
         deckFsrs[id] = Fsrs(
             generatorParameters({

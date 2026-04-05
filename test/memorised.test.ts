@@ -12,11 +12,18 @@ const weights2 = [
     1, 100, 100, 100, 7.1949, 0.5345, 1.4604, 0.0046, 1.54575, 0.1192, 1.01925,
     1.9395, 0.11, 0.29605, 2.2698, 0.2315, 2.9898 // on initial good: 100, no intra-day
 ]
+const weights7 = [
+    0.041, 2.4175, 4.1283, 11.9709, 5.6385, 0.4468, 3.262, 2.3054, 0.1688, 1.3325, 0.3524,
+    0.0049, 0.7503, 0.0896, 0.6625, 1.3, 0.882, 0.3072, 3.5875, 0.303, 0.0107, 0.2279,
+    2.6413, 0.5594, 1.3, 2.5, 1.0, 0.0723, 0.1634, 0.5, 0.9555, 0.2245, 0.6232, 0.1362,
+    0.3862,
+]
 
-const mappings = {1: 1, 2: 2}
+const mappings = {1: 1, 2: 2, 3: 3}
 const configs: Record<number, Partial<DeckConfig>> = {
     1: {id: 1, fsrsWeights: weights, fsrsParams5: weights},
-    2: {id: 2, fsrsWeights: weights2, fsrsParams5: weights2}
+    2: {id: 2, fsrsWeights: weights2, fsrsParams5: weights2},
+    3: {id: 3, fsrsParams7: weights7}
 }
 
 
@@ -115,4 +122,26 @@ test("Leech Detection", () =>{
     mappings, [], 1, 0).leech_probabilities
 
     expect(leech_probabilities[card.card().id]).toBeCloseTo(0.1)
+})
+
+test("FSRS7 params are accepted in memorised graph pipeline", () => {
+    const card = new RevlogBuilder()
+    const revlogs = [
+        card.review(-3000, 3),
+        card.review(-3000, 3),
+        card.review(5, 3),
+    ] as Revlog[]
+
+    const memorised = getMemorisedDays(
+        revlogs,
+        [{
+            ...card.card(),
+            did: 3
+        } as any],
+        configs,
+        mappings
+    ).retrievabilityDays
+
+    expect(memorised.length).not.toBe(0)
+    expect(memorised[0]).toBe(1)
 })
