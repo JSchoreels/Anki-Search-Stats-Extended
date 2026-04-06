@@ -1,4 +1,3 @@
-import * as d3 from "d3"
 import _ from "lodash"
 import {
     type Card,
@@ -170,23 +169,77 @@ export function getFsrs(config: DeckConfig) {
 }
 
 const STABILITY_WEIGHT_FACTOR = 8 / 365
+const TARGET_RETRIEVABILITY = 0.9
+const S90_DEDUP_STABILITY_STEP_LOW = 0.1
+const S90_DEDUP_STABILITY_STEP_HIGH = 0.5
+const S90_DEDUP_STABILITY_THRESHOLD = 10
 
 function stability_weight(s: number): number {
     return 1 - Math.exp(-STABILITY_WEIGHT_FACTOR * s)
+}
+
+export function s90DedupStepForStability(stability: number): number {
+    return stability > S90_DEDUP_STABILITY_THRESHOLD
+        ? S90_DEDUP_STABILITY_STEP_HIGH
+        : S90_DEDUP_STABILITY_STEP_LOW
+}
+
+function stabilityBucketForS90(stability: number): { step: number; bucket: number } {
+    const step = s90DedupStepForStability(stability)
+    return {
+        step,
+        bucket: Math.round(stability / step),
+    }
+}
+
+type S90BatchItem = {
+    config_id: number
+    stability: number
+}
+
+export type S90BatchResolver = (
+    items: S90BatchItem[],
+    targetRetrievability: number
+) => Promise<number[]>
+
+async function resolveS90BatchWithAnki(
+    items: S90BatchItem[],
+    targetRetrievability: number
+): Promise<number[]> {
+    if (!items.length) {
+        return []
+    }
+    const resp = await fetch("/_anki/fsrsS90Batch", {
+        method: "POST",
+        body: JSON.stringify({
+            items,
+            target_retrievability: targetRetrievability,
+        }),
+        headers: { "Content-Type": "application/binary" },
+    })
+    if (!resp.ok) {
+        throw new Error(`fsrsS90Batch failed: ${resp.status}`)
+    }
+    const body = await resp.text()
+    if (body === "") {
+        return []
+    }
+    return JSON.parse(body)
 }
 
 // Constants for B-W matrix
 const R_BIN_POWER = 1.4
 const LOG_R_BIN_POWER = Math.log(R_BIN_POWER)
 
-export function getMemorisedDays(
+export async function getMemorisedDays(
     revlogs: Revlog[],
     cards: CardData[],
     configs: typeof SSEother.deck_configs,
     config_mapping: typeof SSEother.deck_config_ids,
     last_forget: number[] = [],
     leech_elapsed_threshold = 2,
-    leech_min_reviews = 2
+    leech_min_reviews = 2,
+    resolveS90Batch: S90BatchResolver = resolveS90BatchWithAnki
 ) {
     console.log(`ts-fsrs ${FSRSVersion}`)
 
@@ -262,6 +315,79 @@ export function getMemorisedDays(
     }
 
     let last_stability: number[] = []
+    let s90_by_key = new Map<string, number>()
+    let s90_events_by_day = new Map<number, { card_id: number; key: string }[]>()
+    let s90_request_items: S90BatchItem[] = []
+    let s90_request_index_by_key = new Map<string, number>()
+    let s90_dedup_total = 0
+    let s90_deduped_total = 0
+    let s90_backend_calls = 0
+
+    function incrementCount(map: Map<string, number>, key: string, delta: number) {
+        const next = (map.get(key) ?? 0) + delta
+        if (next > 0) {
+            map.set(key, next)
+        } else {
+            map.delete(key)
+        }
+    }
+
+    function weightedValueAtRank(entries: { s90: number; count: number }[], rank: number): number {
+        let seen = 0
+        for (const entry of entries) {
+            seen += entry.count
+            if (rank < seen) {
+                return entry.s90
+            }
+        }
+        return entries.length > 0 ? entries[entries.length - 1].s90 : 0
+    }
+
+    function weightedMedian(entries: { s90: number; count: number }[], totalCount: number): number {
+        if (!entries.length || totalCount <= 0) {
+            return 0
+        }
+        const rank = (totalCount - 1) * 0.5
+        const lowRank = Math.floor(rank)
+        const highRank = Math.ceil(rank)
+        const lowValue = weightedValueAtRank(entries, lowRank)
+        if (lowRank === highRank) {
+            return lowValue
+        }
+        const highValue = weightedValueAtRank(entries, highRank)
+        const fraction = rank - lowRank
+        return lowValue + fraction * (highValue - lowValue)
+    }
+
+    function dayStatsFromS90Counts(counts: Map<string, number>, totalCount: number) {
+        if (totalCount <= 0) {
+            return {
+                mean: 0,
+                median: 0,
+                youngRatio: 0,
+            }
+        }
+        let weightedSum = 0
+        let youngCount = 0
+        const entries: { s90: number; count: number }[] = []
+        for (const [key, count] of counts) {
+            if (count <= 0) {
+                continue
+            }
+            const s90 = s90_by_key.get(key) ?? 0
+            entries.push({ s90, count })
+            weightedSum += s90 * count
+            if (s90 < 21) {
+                youngCount += count
+            }
+        }
+        entries.sort((a, b) => a.s90 - b.s90)
+        return {
+            mean: weightedSum / totalCount,
+            median: weightedMedian(entries, totalCount),
+            youngRatio: youngCount / totalCount,
+        }
+    }
 
     const default_bin = { predicted: 0, real: 0, count: 0 }
     function incrementLoss(bin: LossBin | null, predicted: number, real: number) {
@@ -281,7 +407,8 @@ export function getMemorisedDays(
     let bw_matrix_count: Record<number, LossBin[]> = {}
     let day_medians: number[] = []
     let day_means: number[] = []
-    let last_day = dayFromMs(revlogs[0].id)
+    let day_young_ratio_s90: number[] = []
+    let review_days: number[] = []
     const uniqueCids = new Set(revlogs.map((r) => r.cid))
     let probabilities: Record<number, number[]> = {}
     for (const cid of uniqueCids) probabilities[cid] = [1]
@@ -300,14 +427,9 @@ export function getMemorisedDays(
         let card = fsrsCards[revlog.cid] ?? createEmptyCard(new Date(revlog.cid))
         const revlogDay = dayFromMs(revlog.id)
 
-        if (last_day < revlogDay) {
-            const stabilities = Object.values(last_stability)
-            for (let day = last_day; day < revlogDay; day++) {
-                day_medians[day] = d3.quantile(stabilities, 0.5) ?? 0
-                day_means[day] = d3.mean(stabilities) ?? 0
-            }
+        if (review_days.length === 0 || review_days[review_days.length - 1] !== revlogDay) {
+            review_days.push(revlogDay)
         }
-        last_day = revlogDay
 
         // on forget
         if (revlog.factor == 0 && revlog.type == 4 && !new_card) {
@@ -420,8 +542,58 @@ export function getMemorisedDays(
         card.stability = newState.stability
         card.difficulty = newState.difficulty
         last_stability[revlog.cid] = card.stability // To prevent "forget" affecting the forgetting curve
+        const { step, bucket } = stabilityBucketForS90(card.stability)
+        const s90_key = `${config.id}:${step}:${bucket}`
+        s90_dedup_total += 1
+        if (!s90_request_index_by_key.has(s90_key)) {
+            s90_request_index_by_key.set(s90_key, s90_request_items.length)
+            s90_request_items.push({
+                config_id: config.id,
+                stability: card.stability,
+            })
+        }
+        const day_events = s90_events_by_day.get(revlogDay) ?? []
+        day_events.push({
+            card_id: revlog.cid,
+            key: s90_key,
+        })
+        s90_events_by_day.set(revlogDay, day_events)
 
         fsrsCards[revlog.cid] = card
+    }
+
+    s90_deduped_total = Math.max(0, s90_dedup_total - s90_request_items.length)
+    if (s90_request_items.length > 0) {
+        s90_backend_calls = 1
+        const intervals = await resolveS90Batch(s90_request_items, TARGET_RETRIEVABILITY)
+        for (const [key, requestIndex] of s90_request_index_by_key) {
+            const s90 = intervals[requestIndex]
+            if (s90 !== undefined) {
+                s90_by_key.set(key, s90)
+            }
+        }
+    }
+
+    const s90_key_by_card = new Map<number, string>()
+    const s90_count_by_key = new Map<string, number>()
+    for (let i = 0; i + 1 < review_days.length; i++) {
+        const day = review_days[i]
+        const events = s90_events_by_day.get(day) ?? []
+        for (const event of events) {
+            const previous_key = s90_key_by_card.get(event.card_id)
+            if (previous_key) {
+                incrementCount(s90_count_by_key, previous_key, -1)
+            }
+            s90_key_by_card.set(event.card_id, event.key)
+            incrementCount(s90_count_by_key, event.key, 1)
+        }
+        const stats = dayStatsFromS90Counts(s90_count_by_key, s90_key_by_card.size)
+        const nextDay = review_days[i + 1]
+        for (let fillDay = day; fillDay < nextDay; fillDay++) {
+            day_medians[fillDay] = stats.median
+            day_means[fillDay] = stats.mean
+            day_young_ratio_s90[fillDay] = stats.youngRatio
+        }
     }
 
     // console.log(log)
@@ -472,6 +644,12 @@ export function getMemorisedDays(
     const leech_probabilities = _.mapValues(probabilities, (p) =>
         p.length > leech_min_reviews ? _.sum(p) : 1
     )
+    const s90_dedup_percent = s90_dedup_total > 0 ? (s90_deduped_total / s90_dedup_total) * 100 : 0
+    console.log(
+        `S90 dedup summary: ${s90_deduped_total}/${s90_dedup_total} (${s90_dedup_percent.toFixed(
+            1
+        )}%), backend calls: ${s90_backend_calls}`
+    )
     console.timeEnd("Calculating memorised days")
     return {
         retrievabilityDays,
@@ -483,6 +661,7 @@ export function getMemorisedDays(
         stability_bins_days: stability_day_bins,
         day_medians,
         day_means,
+        day_young_ratio_s90,
         leech_probabilities,
         difficulty_days: difficulty_day_bins,
         calibration,

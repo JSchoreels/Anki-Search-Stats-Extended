@@ -140,9 +140,7 @@
                     ? $memorised_stats!.day_means
                     : $memorised_stats!.day_medians
                 ).map((day, i) => {
-                    const young = _.sum($memorised_stats!.stability_bins_days[i]?.slice(0, 21))
-                    const total = _.sum($memorised_stats!.stability_bins_days[i])
-                    const young_ratio = young / total
+                    const young_ratio = $memorised_stats!.day_young_ratio_s90?.[i] ?? 0
                     return {
                         values: [day * young_ratio, day * (1 - young_ratio)],
                         label: barLabel(i),

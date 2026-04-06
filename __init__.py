@@ -151,6 +151,20 @@ def revlogs() -> bytes:
 post_handlers["revlogs"] = revlogs
 
 
+def fsrs_s90_batch() -> bytes:
+    req = orjson.loads(request.data)
+    target_retrievability = float(req["target_retrievability"])
+    raw_items = req["items"]
+    items = [(int(item["config_id"]), float(item["stability"])) for item in raw_items]
+    intervals = mw.col.fsrs_interval_at_retrievability_by_config_batch(
+        items, target_retrievability
+    )
+    return Response(orjson.dumps(intervals))
+
+
+post_handlers["fsrsS90Batch"] = fsrs_s90_batch
+
+
 def write_config():
     req = orjson.loads(request.data)
     config = mw.addonManager.getConfig(__name__)

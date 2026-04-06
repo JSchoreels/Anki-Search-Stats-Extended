@@ -137,12 +137,16 @@ derived([revlogs, card_data], ([$revlogs, $card_data]) => {
     return catchErrors(() => calculateRevlogStats($revlogs, $card_data))
 }).subscribe(revlogStats.set)
 export let last_forget = derived([revlogStats], ([$revlogStats]) => $revlogStats?.last_forget)
-export let memorised_stats = writable<ReturnType<typeof getMemorisedDays> | null>()
+export let memorised_stats = writable<Awaited<ReturnType<typeof getMemorisedDays>> | null>()
 derived(
     [card_data, revlogs, showFsrsStats, last_forget],
-    ([$card_data, $revlogs, $showFsrsStats, $last_forget]) => {
+    (
+        [$card_data, $revlogs, $showFsrsStats, $last_forget],
+        set: (value: Awaited<ReturnType<typeof getMemorisedDays>> | null) => void
+    ) => {
+        set(null)
         if ($revlogs && $card_data && $showFsrsStats && $last_forget) {
-            return catchErrors(() =>
+            catchErrors(() =>
                 getMemorisedDays(
                     $revlogs,
                     $card_data,
@@ -150,9 +154,7 @@ derived(
                     SSEother.deck_config_ids,
                     $last_forget
                 )
-            )
-        } else {
-            return null
+            ).then(set)
         }
     }
 ).subscribe(memorised_stats.set)
