@@ -65,22 +65,12 @@
     // Compute stability separately (only when data changes, not when maxBins changes)
     $: {
         if (isShortTerm) {
-            seriesWithStability = computeStabilityForSeries(
-                series,
-                data,
-                effectiveDecayModel,
-                {
-                    minStability: 0.01,
-                    maxStability: 1440,
-                }
-            )
+            seriesWithStability = computeStabilityForSeries(series, data, effectiveDecayModel, {
+                minStability: 0.01,
+                maxStability: 1440,
+            })
         } else {
-            seriesWithStability = computeStabilityForSeries(
-                series,
-                data,
-                effectiveDecayModel,
-                {}
-            )
+            seriesWithStability = computeStabilityForSeries(series, data, effectiveDecayModel, {})
         }
     }
 

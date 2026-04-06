@@ -1,12 +1,16 @@
 import { DeltaIfy } from "../src/ts/Candlestick"
+import {
+    averageDecay,
+    buildForgettingCurve,
+    computeStabilityForSeries,
+} from "../src/ts/forgettingCurveData"
 import { calculateRevlogStats, day_ms, dayFromMs } from "../src/ts/revlogGraphs"
 import type { Revlog } from "../src/ts/search"
 import { RevlogBuilder } from "./revlogBuilder"
-import { averageDecay, buildForgettingCurve, computeStabilityForSeries } from "../src/ts/forgettingCurveData"
 
 const burden_revlog_builder1 = new RevlogBuilder()
 const burden_revlog_builder2 = new RevlogBuilder()
-const burden_revlogs : Revlog[] = [
+const burden_revlogs: Revlog[] = [
     burden_revlog_builder1.review(-5000, 3),
     burden_revlog_builder1.review(-6000, 3),
     burden_revlog_builder1.review(1, 3),
@@ -18,11 +22,11 @@ const burden_revlogs : Revlog[] = [
     burden_revlog_builder1.review(1, 3),
     burden_revlog_builder1.review(4, 3),
 
-    burden_revlog_builder2.wait(7*day_ms),
+    burden_revlog_builder2.wait(7 * day_ms),
     burden_revlog_builder2.review(1) as Revlog,
-    burden_revlog_builder2.wait(2*day_ms),
-    burden_revlog_builder2.review(-5000) as Revlog, 
-].filter(a=>a) as Revlog[]
+    burden_revlog_builder2.wait(2 * day_ms),
+    burden_revlog_builder2.review(-5000) as Revlog,
+].filter((a) => a) as Revlog[]
 
 //Card1: 1, 0.5, 0.5, 0, 0, 1, 0.25, 0.25, 0.25, 0.25 0.25
 //Card2: 0, 0,   0,   0, 0, 0, 0,    1,    1,    1    1(learning)
@@ -31,13 +35,16 @@ const burden_revlogs : Revlog[] = [
 // console.log(burden_revlogs.map(revlog=>({id: revlog.id / day_ms, ...revlog})))
 
 const end = 10
-const {burden, learn_steps_per_card} = calculateRevlogStats(burden_revlogs, [burden_revlog_builder1.card(), burden_revlog_builder2.card()] as any, end)
+const { burden, learn_steps_per_card } = calculateRevlogStats(
+    burden_revlogs,
+    [burden_revlog_builder1.card(), burden_revlog_builder2.card()] as any,
+    end
+)
 
 const fsrs7Params = [
-    0.041, 2.4175, 4.1283, 11.9709, 5.6385, 0.4468, 3.262, 2.3054, 0.1688, 1.3325, 0.3524,
-    0.0049, 0.7503, 0.0896, 0.6625, 1.3, 0.882, 0.3072, 3.5875, 0.303, 0.0107, 0.2279,
-    2.6413, 0.5594, 1.3, 2.5, 1.0, 0.0723, 0.1634, 0.5, 0.9555, 0.2245, 0.6232, 0.1362,
-    0.3862,
+    0.041, 2.4175, 4.1283, 11.9709, 5.6385, 0.4468, 3.262, 2.3054, 0.1688, 1.3325, 0.3524, 0.0049,
+    0.7503, 0.0896, 0.6625, 1.3, 0.882, 0.3072, 3.5875, 0.303, 0.0107, 0.2279, 2.6413, 0.5594, 1.3,
+    2.5, 1.0, 0.0723, 0.1634, 0.5, 0.9555, 0.2245, 0.6232, 0.1362, 0.3862,
 ]
 const fsrs7ParamsAlt = fsrs7Params.map((value, index) => {
     if (index === 27) {
@@ -49,16 +56,16 @@ const fsrs7ParamsAlt = fsrs7Params.map((value, index) => {
     return value
 })
 
-test("Burden", () =>{
+test("Burden", () => {
     // expect(burden.length).toEqual(end + 1)
     expect(burden).toMatchObject([1, 0.5, 0.5, 0, 0, 1, 0.25, 1.25, 1.25, 1.25, 1.25])
 })
 
-test("Burden delta", () =>{
+test("Burden delta", () => {
     expect(DeltaIfy(burden)).toMatchObject([1, -0.5, 0, -0.5, 0, 1, -0.75, 1, 0, 0, 0])
 })
 
-test("learn_step_count", ()=>{
+test("learn_step_count", () => {
     console.log(burden_revlogs)
     expect(learn_steps_per_card).toContain(2)
 })
@@ -197,8 +204,75 @@ test("First long-term forgetting curve uses selected deck preset across subdecks
             expect(stats.forgetting_curve_long_term_model.length).toBe(35)
             expect(stats.forgetting_curve_long_term_model[27]).toBeCloseTo(fsrs7Params[27], 6)
             expect(stats.forgetting_curve_long_term_model[28]).toBeCloseTo(fsrs7Params[28], 6)
-            expect(stats.forgetting_curve_long_term_model[27]).not.toBeCloseTo(fsrs7ParamsAlt[27], 6)
+            expect(stats.forgetting_curve_long_term_model[27]).not.toBeCloseTo(
+                fsrs7ParamsAlt[27],
+                6
+            )
         }
+    } finally {
+        global.SSEother = previousSSEother
+    }
+})
+
+test("First short-term forgetting curve uses FSRS7 decay parameters", () => {
+    const previousSSEother = global.SSEother
+    try {
+        global.SSEother = {
+            ...previousSSEother,
+            deck_configs: {
+                1: {
+                    id: 1,
+                    fsrsParams7: fsrs7Params,
+                    fsrsParams6: [],
+                    fsrsParams5: [],
+                    fsrsParams4: [],
+                    fsrsWeights: [],
+                },
+            },
+            deck_config_ids: {
+                1: 1,
+            },
+            rollover: 0,
+        }
+
+        const builder = new RevlogBuilder()
+        const revlogs = [
+            builder.review(-5000, 3, 1000),
+            builder.review(-6000, 2, 2000),
+            builder.wait(2 * day_ms),
+            builder.review(2, 3, 4000),
+        ].filter(Boolean) as Revlog[]
+
+        const stats = calculateRevlogStats(
+            revlogs,
+            [{ ...builder.card(), did: 1, data: "{}" }] as any,
+            builder.last_review + 5
+        )
+
+        expect(Array.isArray(stats.forgetting_curve_long_term_model)).toBe(true)
+        if (Array.isArray(stats.forgetting_curve_long_term_model)) {
+            expect(stats.forgetting_curve_long_term_model.length).toBe(35)
+            expect(stats.forgetting_curve_long_term_model[27]).toBeCloseTo(fsrs7Params[27], 6)
+            expect(stats.forgetting_curve_long_term_model[28]).toBeCloseTo(fsrs7Params[28], 6)
+        }
+
+        const shortSeriesRaw = buildForgettingCurve(stats.forgetting_samples_short, {
+            deltaLimitByRating: () => 720,
+            disableOutlierFiltering: true,
+        })
+        const shortSeriesWithStability = computeStabilityForSeries(
+            shortSeriesRaw,
+            stats.forgetting_samples_short,
+            stats.forgetting_curve_long_term_model,
+            {
+                minStability: 0.01,
+                maxStability: 1440,
+            }
+        )
+        const series = shortSeriesWithStability.find((entry) => entry.rating === 3)
+
+        expect(stats.forgetting_samples_short.length).toBeGreaterThan(0)
+        expect(series?.stability).not.toBeNull()
     } finally {
         global.SSEother = previousSSEother
     }

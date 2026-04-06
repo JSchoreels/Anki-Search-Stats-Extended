@@ -127,12 +127,7 @@ function selectedDeckForgettingCurveModel(): ForgettingCurveDecayModel | null {
     const deckConfigs = SSEother.deck_configs
     const deckConfigIds = SSEother.deck_config_ids
 
-    if (
-        selectedDeckId === undefined ||
-        selectedDeckId === null ||
-        !deckConfigs ||
-        !deckConfigIds
-    ) {
+    if (selectedDeckId === undefined || selectedDeckId === null || !deckConfigs || !deckConfigIds) {
         return null
     }
 
@@ -184,7 +179,9 @@ function longTermForgettingCurveModelForCards(
         paramsByLength.set(params.length, group)
     }
 
-    const dominantParams = Array.from(paramsByLength.values()).sort((a, b) => b.length - a.length)[0]
+    const dominantParams = Array.from(paramsByLength.values()).sort(
+        (a, b) => b.length - a.length
+    )[0]
     const averaged = dominantParams ? averageParams(dominantParams) : null
     if (averaged) {
         return averaged
@@ -267,7 +264,10 @@ function stabilityAfterReviewsByRevlog(
             if (revlog.time > 0 && card.stability > 0) {
                 const seconds = revlog.time / 1000
                 const retrievability = fsrs.forgetting_curve(elapsed, card.stability)
-                const retrievabilityBucket = Math.max(0, Math.min(99, Math.floor(retrievability * 100)))
+                const retrievabilityBucket = Math.max(
+                    0,
+                    Math.min(99, Math.floor(retrievability * 100))
+                )
                 const stabilityBucket = Math.max(0, Math.round(card.stability))
 
                 timeByRetrievabilitySamples[retrievabilityBucket] ??= []

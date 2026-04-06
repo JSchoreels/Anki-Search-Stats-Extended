@@ -69,6 +69,7 @@ export type DeckConfig = {
     fsrsParams5: Array<number>
     fsrsParams6: Array<number>
     fsrsParams7: Array<number>
+    fsrsVersion?: number
     // For older anki versions
     fsrsWeights: Array<number>
     desiredRetention: number

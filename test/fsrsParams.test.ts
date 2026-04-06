@@ -1,9 +1,10 @@
 import { default_w } from "ts-fsrs"
 import { selectTsFsrsParams } from "../src/ts/fsrsParams"
 
-function deckConfigWithParams(params: Partial<Record<string, number[]>>) {
+function deckConfigWithParams(params: Record<string, any>) {
     return {
         id: 1,
+        fsrsVersion: 0,
         fsrsParams7: [],
         fsrsParams6: [],
         fsrsParams5: [],
@@ -37,6 +38,33 @@ test("falls back to fsrsParams6 when fsrsParams7 contains non-finite values", ()
     )
 
     expect(selected).toStrictEqual(params6)
+})
+
+test("respects selected FSRS version when selected params are usable", () => {
+    const params6 = Array.from({ length: 21 }, (_, i) => 10 + i)
+    const params7 = Array.from({ length: 35 }, (_, i) => 100 + i)
+    const selected = selectTsFsrsParams(
+        deckConfigWithParams({
+            fsrsVersion: 1,
+            fsrsParams7: params7,
+            fsrsParams6: params6,
+        })
+    )
+
+    expect(selected).toStrictEqual(params6)
+})
+
+test("falls back when selected FSRS version params are unusable", () => {
+    const params7 = Array.from({ length: 35 }, (_, i) => 100 + i)
+    const selected = selectTsFsrsParams(
+        deckConfigWithParams({
+            fsrsVersion: 1,
+            fsrsParams7: params7,
+            fsrsParams6: [1, 2, 3],
+        })
+    )
+
+    expect(selected).toStrictEqual(params7)
 })
 
 test("falls back to default params when no compatible params are present", () => {
