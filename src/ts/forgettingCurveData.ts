@@ -1,6 +1,8 @@
 import { mean } from "d3-array"
 import { default_w, forgetting_curve, FSRS5_DEFAULT_DECAY, S_MIN } from "ts-fsrs"
 
+export type ForgettingCurveDecayModel = number | readonly number[]
+
 export type ForgettingSample = {
     cid: number
     firstRating: number
@@ -49,6 +51,17 @@ export interface ForgettingCurveOptions {
         maxBins: number
         minSamplesPerBin: number
     }
+}
+
+function forgettingCurveWithModel(
+    model: ForgettingCurveDecayModel,
+    elapsedDays: number,
+    stability: number
+) {
+    if (typeof model !== "number") {
+        return forgetting_curve(model, elapsedDays, stability)
+    }
+    return forgetting_curve(model, elapsedDays, stability)
 }
 
 function filterOutliers(
@@ -302,7 +315,7 @@ export function averageDecay(decayValues: number[]): number {
 export function fitStability(
     samples: ForgettingSample[],
     initial: number,
-    decay: number = FSRS5_DEFAULT_DECAY,
+    decay: ForgettingCurveDecayModel = FSRS5_DEFAULT_DECAY,
     minStability: number = S_MIN,
     maxStability: number = MAX_STABILITY
 ): number | null {
@@ -313,7 +326,9 @@ export function fitStability(
     const loss = (stability: number) => {
         let total = 0
         for (const sample of samples) {
-            const prediction = clampProbability(forgetting_curve(decay, sample.delta, stability))
+            const prediction = clampProbability(
+                forgettingCurveWithModel(decay, sample.delta, stability)
+            )
             const recall = sample.recall
             total += -(recall * Math.log(prediction) + (1 - recall) * Math.log(1 - prediction))
         }
@@ -360,14 +375,14 @@ export function fitStability(
 export function computeRmse(
     samples: ForgettingSample[],
     stability: number,
-    decay: number = FSRS5_DEFAULT_DECAY
+    decay: ForgettingCurveDecayModel = FSRS5_DEFAULT_DECAY
 ): number | null {
     if (!samples.length) {
         return null
     }
 
     const squaredError = samples.reduce((p, sample) => {
-        const prediction = forgetting_curve(decay, sample.delta, stability)
+        const prediction = forgettingCurveWithModel(decay, sample.delta, stability)
         return p + (sample.recall - prediction) ** 2
     }, 0)
 
@@ -377,7 +392,7 @@ export function computeRmse(
 export function computeStabilityForSeries(
     series: ForgettingCurveSeries[],
     samples: ForgettingSample[],
-    decay: number = FSRS5_DEFAULT_DECAY,
+    decay: ForgettingCurveDecayModel = FSRS5_DEFAULT_DECAY,
     options: ForgettingCurveOptions = {}
 ): ForgettingCurveSeries[] {
     return series.map((entry) => {

@@ -33,6 +33,22 @@ const burden_revlogs : Revlog[] = [
 const end = 10
 const {burden, learn_steps_per_card} = calculateRevlogStats(burden_revlogs, [burden_revlog_builder1.card(), burden_revlog_builder2.card()] as any, end)
 
+const fsrs7Params = [
+    0.041, 2.4175, 4.1283, 11.9709, 5.6385, 0.4468, 3.262, 2.3054, 0.1688, 1.3325, 0.3524,
+    0.0049, 0.7503, 0.0896, 0.6625, 1.3, 0.882, 0.3072, 3.5875, 0.303, 0.0107, 0.2279,
+    2.6413, 0.5594, 1.3, 2.5, 1.0, 0.0723, 0.1634, 0.5, 0.9555, 0.2245, 0.6232, 0.1362,
+    0.3862,
+]
+const fsrs7ParamsAlt = fsrs7Params.map((value, index) => {
+    if (index === 27) {
+        return 0.2
+    }
+    if (index === 28) {
+        return 0.3
+    }
+    return value
+})
+
 test("Burden", () =>{
     // expect(burden.length).toEqual(end + 1)
     expect(burden).toMatchObject([1, 0.5, 0.5, 0, 0, 1, 0.25, 1.25, 1.25, 1.25, 1.25])
@@ -74,6 +90,118 @@ test("Forgetting curve aggregates recall data", () => {
     expect(series?.points.length).toBeGreaterThan(0)
     expect(series?.stability).not.toBeNull()
     expect(stats.forgetting_curve_decay).toBeCloseTo(averageDecay([0.35]), 6)
+})
+
+test("First long-term forgetting curve uses FSRS7 decay parameters", () => {
+    const previousSSEother = global.SSEother
+    try {
+        global.SSEother = {
+            ...previousSSEother,
+            deck_configs: {
+                1: {
+                    id: 1,
+                    fsrsParams7: fsrs7Params,
+                    fsrsParams6: [],
+                    fsrsParams5: [],
+                    fsrsParams4: [],
+                    fsrsWeights: [],
+                },
+            },
+            deck_config_ids: {
+                1: 1,
+            },
+            rollover: 0,
+        }
+
+        const builder = new RevlogBuilder()
+        const revlogs = [
+            builder.review(0, 3),
+            builder.review(1, 3),
+            builder.wait(2 * day_ms),
+            builder.review(2, 3),
+        ].filter(Boolean) as Revlog[]
+
+        const stats = calculateRevlogStats(
+            revlogs,
+            [{ ...builder.card(), did: 1, data: "{}" }] as any,
+            builder.last_review + 5
+        )
+
+        expect(Array.isArray(stats.forgetting_curve_long_term_model)).toBe(true)
+        if (Array.isArray(stats.forgetting_curve_long_term_model)) {
+            expect(stats.forgetting_curve_long_term_model.length).toBe(35)
+            expect(stats.forgetting_curve_long_term_model[27]).toBeCloseTo(fsrs7Params[27], 6)
+            expect(stats.forgetting_curve_long_term_model[28]).toBeCloseTo(fsrs7Params[28], 6)
+        }
+
+        const series_raw = buildForgettingCurve(stats.forgetting_samples)
+        const series_with_stability = computeStabilityForSeries(
+            series_raw,
+            stats.forgetting_samples,
+            stats.forgetting_curve_long_term_model
+        )
+        const series = series_with_stability.find((entry) => entry.rating === 3)
+        expect(series?.stability).not.toBeNull()
+    } finally {
+        global.SSEother = previousSSEother
+    }
+})
+
+test("First long-term forgetting curve uses selected deck preset across subdecks", () => {
+    const previousSSEother = global.SSEother
+    try {
+        global.SSEother = {
+            ...previousSSEother,
+            deck_configs: {
+                1: {
+                    id: 1,
+                    fsrsParams7: fsrs7Params,
+                    fsrsParams6: [],
+                    fsrsParams5: [],
+                    fsrsParams4: [],
+                    fsrsWeights: [],
+                },
+                2: {
+                    id: 2,
+                    fsrsParams7: fsrs7ParamsAlt,
+                    fsrsParams6: [],
+                    fsrsParams5: [],
+                    fsrsParams4: [],
+                    fsrsWeights: [],
+                },
+            },
+            deck_config_ids: {
+                1: 1,
+                2: 2,
+            },
+            selected_deck_id: 1,
+            rollover: 0,
+        }
+
+        const builder = new RevlogBuilder()
+        const revlogs = [
+            builder.review(0, 3),
+            builder.review(1, 3),
+            builder.wait(2 * day_ms),
+            builder.review(2, 3),
+        ].filter(Boolean) as Revlog[]
+
+        const stats = calculateRevlogStats(
+            revlogs,
+            [{ ...builder.card(), did: 2, data: "{}" }] as any,
+            builder.last_review + 5
+        )
+
+        expect(Array.isArray(stats.forgetting_curve_long_term_model)).toBe(true)
+        if (Array.isArray(stats.forgetting_curve_long_term_model)) {
+            expect(stats.forgetting_curve_long_term_model.length).toBe(35)
+            expect(stats.forgetting_curve_long_term_model[27]).toBeCloseTo(fsrs7Params[27], 6)
+            expect(stats.forgetting_curve_long_term_model[28]).toBeCloseTo(fsrs7Params[28], 6)
+            expect(stats.forgetting_curve_long_term_model[27]).not.toBeCloseTo(fsrs7ParamsAlt[27], 6)
+        }
+    } finally {
+        global.SSEother = previousSSEother
+    }
 })
 
 test("Active cards are split by young/mature and suspended", () => {

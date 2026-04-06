@@ -13,7 +13,11 @@ import {
 import type { BarChart, BarDatum } from "./bar"
 import { totalCalc } from "./barHelpers"
 import type { DeckConfig } from "./config"
-import { averageDecay, type ForgettingSample } from "./forgettingCurveData"
+import {
+    averageDecay,
+    type ForgettingCurveDecayModel,
+    type ForgettingSample,
+} from "./forgettingCurveData"
 import { selectTsFsrsParams } from "./fsrsParams"
 import { i18n } from "./i18n"
 import { type CardData, getCardDecay, type Revlog } from "./search"
@@ -69,6 +73,97 @@ function getFsrs(config: DeckConfig) {
         )
     }
     return deckFsrs[id]
+}
+
+function averageParams(paramSets: number[][]): number[] | null {
+    if (!paramSets.length) {
+        return null
+    }
+
+    const length = paramSets[0].length
+    if (paramSets.some((params) => params.length !== length)) {
+        return null
+    }
+
+    const sums = new Array<number>(length).fill(0)
+    for (const params of paramSets) {
+        for (let i = 0; i < length; i++) {
+            sums[i] += params[i]
+        }
+    }
+
+    return sums.map((sum) => sum / paramSets.length)
+}
+
+function selectedDeckForgettingCurveModel(): ForgettingCurveDecayModel | null {
+    const selectedDeckId = SSEother.selected_deck_id
+    const deckConfigs = SSEother.deck_configs
+    const deckConfigIds = SSEother.deck_config_ids
+
+    if (
+        selectedDeckId === undefined ||
+        selectedDeckId === null ||
+        !deckConfigs ||
+        !deckConfigIds
+    ) {
+        return null
+    }
+
+    const deckConfigId = deckConfigIds[selectedDeckId]
+    if (deckConfigId === undefined) {
+        return null
+    }
+    const config = deckConfigs[deckConfigId]
+    if (!config) {
+        return null
+    }
+
+    return selectTsFsrsParams(config)
+}
+
+function longTermForgettingCurveModelForCards(
+    cids: Set<number>,
+    id_card_data: Record<number, CardData>
+): ForgettingCurveDecayModel {
+    const deckConfigs = SSEother.deck_configs
+    const deckConfigIds = SSEother.deck_config_ids
+    const paramsByLength = new Map<number, number[][]>()
+    const decayValues: number[] = []
+
+    for (const cid of cids) {
+        const card = id_card_data[cid]
+        if (!card) {
+            continue
+        }
+
+        decayValues.push(getCardDecay(card))
+
+        if (!deckConfigs || !deckConfigIds) {
+            continue
+        }
+
+        const deckConfigId = deckConfigIds[card.odid || card.did]
+        if (deckConfigId === undefined) {
+            continue
+        }
+        const config = deckConfigs[deckConfigId]
+        if (!config) {
+            continue
+        }
+
+        const params = selectTsFsrsParams(config)
+        const group = paramsByLength.get(params.length) ?? []
+        group.push(params)
+        paramsByLength.set(params.length, group)
+    }
+
+    const dominantParams = Array.from(paramsByLength.values()).sort((a, b) => b.length - a.length)[0]
+    const averaged = dominantParams ? averageParams(dominantParams) : null
+    if (averaged) {
+        return averaged
+    }
+
+    return decayValues.length > 0 ? averageDecay(decayValues) : FSRS5_DEFAULT_DECAY
 }
 
 function stabilityAfterReviewsByRevlog(
@@ -495,6 +590,13 @@ export function calculateRevlogStats(
     }
 
     const remaining_forgotten = forgotten.size
+    const longTermForgettingCurveCardIds = new Set<number>(
+        forgetting_samples.map((sample) => sample.cid)
+    )
+    const forgetting_curve_long_term_model =
+        selectedDeckForgettingCurveModel() ??
+        longTermForgettingCurveModelForCards(longTermForgettingCurveCardIds, id_card_data)
+
     const forgettingCurveCardIds = new Set<number>(
         [...forgetting_samples, ...forgetting_samples_short].map((sample) => sample.cid)
     )
@@ -537,6 +639,7 @@ export function calculateRevlogStats(
         forgetting_samples,
         forgetting_samples_short,
         forgetting_curve_decay,
+        forgetting_curve_long_term_model,
     }
 }
 

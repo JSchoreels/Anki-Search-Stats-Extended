@@ -16,6 +16,7 @@
         <ForgettingCurve
             slot="graph"
             data={$revlogStats?.forgetting_samples ?? []}
+            decayModel={$revlogStats?.forgetting_curve_long_term_model ?? null}
             decay={$revlogStats?.forgetting_curve_decay}
         />
         <p>{i18n("forgetting-curve-help")}</p>

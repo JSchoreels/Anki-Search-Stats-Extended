@@ -90,6 +90,7 @@ export type DeckConfig = {
 export interface SSEother {
     rollover: number
     learn_ahead_secs: number
+    selected_deck_id?: number
     deck_configs: Record<number, DeckConfig>
     deck_config_ids: Record<number, number>
     days_elapsed: number

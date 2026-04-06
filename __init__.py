@@ -50,6 +50,7 @@ def new_refresh(self: NewDeckStats):
     other = {
         "rollover": prefs.rollover,
         "learn_ahead_secs": prefs.learn_ahead_secs,
+        "selected_deck_id": mw.col.decks.current()["id"],
         "deck_configs": {conf["id"]: conf for conf in mw.col.decks.all_config()},
         "deck_config_ids": {
             deck["id"]: deck.get("conf", None) for deck in mw.col.decks.all()

@@ -4,6 +4,7 @@
     import {
         buildForgettingCurve,
         computeStabilityForSeries,
+        type ForgettingCurveDecayModel,
         type ForgettingCurveSeries,
         type ForgettingSample,
     } from "./forgettingCurveData"
@@ -16,6 +17,7 @@
 
     export let data: ForgettingSample[] = []
     export let decay: number | null = null
+    export let decayModel: ForgettingCurveDecayModel | null = null
     export let xLabel: string | null = null
     export let yLabel: string | null = null
     export let isShortTerm: boolean = false
@@ -32,6 +34,9 @@
     let dataMaxDelta: number = 1
     let series: ForgettingCurveSeries[] = []
     let seriesWithStability: ForgettingCurveSeries[] = []
+    let effectiveDecayModel: ForgettingCurveDecayModel = FSRS5_DEFAULT_DECAY
+
+    $: effectiveDecayModel = decayModel ?? decay ?? FSRS5_DEFAULT_DECAY
 
     // Process data into series for each rating (without stability calculation)
     $: {
@@ -63,7 +68,7 @@
             seriesWithStability = computeStabilityForSeries(
                 series,
                 data,
-                decay ?? FSRS5_DEFAULT_DECAY,
+                effectiveDecayModel,
                 {
                     minStability: 0.01,
                     maxStability: 1440,
@@ -73,7 +78,7 @@
             seriesWithStability = computeStabilityForSeries(
                 series,
                 data,
-                decay ?? FSRS5_DEFAULT_DECAY,
+                effectiveDecayModel,
                 {}
             )
         }
@@ -148,11 +153,21 @@
                 xLabel: xLabel ?? i18n("forgetting-curve-x-axis"),
                 yLabel: yLabel ?? i18n("forgetting-curve-y-axis"),
                 maxX: xAxisMax,
-                decay: decay ?? FSRS5_DEFAULT_DECAY,
+                decayModel: effectiveDecayModel,
             })
         } else if (svg) {
             svg.innerHTML = ""
         }
+    }
+
+    const decayText = (model: ForgettingCurveDecayModel) => {
+        if (Array.isArray(model)) {
+            if (model.length >= 35) {
+                return `${model[27].toFixed(2)}/${model[28].toFixed(2)}`
+            }
+            return (model[20] ?? FSRS5_DEFAULT_DECAY).toFixed(2)
+        }
+        return model.toFixed(2)
     }
 
     const legendLine = (entry: ForgettingCurveSeries) => {
@@ -160,7 +175,7 @@
             return ""
         }
         const stability = entry.stability !== null ? entry.stability.toFixed(2) : "—"
-        const decayText = (decay ?? FSRS5_DEFAULT_DECAY).toFixed(2)
+        const decayLabel = decayText(effectiveDecayModel)
         const countText = i18n("forgetting-curve-legend-count", {
             count: entry.sampleSize.toLocaleString(),
         })
@@ -171,7 +186,7 @@
         return i18n(legendKey, {
             rating: labelForRating(entry.rating),
             stability,
-            decay: decayText,
+            decay: decayLabel,
             count: countText,
         }).trim()
     }
