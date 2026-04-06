@@ -204,6 +204,59 @@ test("First long-term forgetting curve uses selected deck preset across subdecks
     }
 })
 
+test("Time distribution by retrievability and stability is generated with FSRS7 params", () => {
+    const previousSSEother = global.SSEother
+    try {
+        global.SSEother = {
+            ...previousSSEother,
+            deck_configs: {
+                1: {
+                    id: 1,
+                    fsrsParams7: fsrs7Params,
+                    fsrsParams6: [],
+                    fsrsParams5: [],
+                    fsrsParams4: [],
+                    fsrsWeights: [],
+                },
+            },
+            deck_config_ids: {
+                1: 1,
+            },
+            rollover: 0,
+        }
+
+        const builder = new RevlogBuilder()
+        const revlogs = [
+            builder.review(0, 3, 1000),
+            builder.review(1, 3, 2000),
+            builder.wait(2 * day_ms),
+            builder.review(2, 3, 4000),
+            builder.wait(2 * day_ms),
+            builder.review(3, 2, 6000),
+        ].filter(Boolean) as Revlog[]
+
+        const stats = calculateRevlogStats(
+            revlogs,
+            [{ ...builder.card(), did: 1, data: "{}" }] as any,
+            builder.last_review + 2
+        )
+
+        const retrievabilityValues = (stats.time_by_retrievability_mean ?? []).filter((v) =>
+            Number.isFinite(v)
+        )
+        const stabilityValues = (stats.time_by_stability_mean ?? []).filter((v) =>
+            Number.isFinite(v)
+        )
+
+        expect(retrievabilityValues.length).toBeGreaterThan(0)
+        expect(stabilityValues.length).toBeGreaterThan(0)
+        expect(Math.max(...retrievabilityValues)).toBeGreaterThan(0)
+        expect(Math.max(...stabilityValues)).toBeGreaterThan(0)
+    } finally {
+        global.SSEother = previousSSEother
+    }
+})
+
 test("Active cards are split by young/mature and suspended", () => {
     const youngBuilder = new RevlogBuilder()
     const matureBuilder = new RevlogBuilder()

@@ -75,6 +75,33 @@ function getFsrs(config: DeckConfig) {
     return deckFsrs[id]
 }
 
+function median(values: number[]) {
+    if (!values.length) {
+        return 0
+    }
+    const sorted = [...values].sort((a, b) => a - b)
+    const middle = Math.floor(sorted.length / 2)
+    if (sorted.length % 2 === 1) {
+        return sorted[middle]
+    }
+    return (sorted[middle - 1] + sorted[middle]) / 2
+}
+
+function bucketTimeStats(bucketedSamples: number[][]) {
+    const meanByBucket: number[] = []
+    const medianByBucket: number[] = []
+
+    bucketedSamples.forEach((samples, bucket) => {
+        if (!samples?.length) {
+            return
+        }
+        meanByBucket[bucket] = _.sum(samples) / samples.length
+        medianByBucket[bucket] = median(samples)
+    })
+
+    return { meanByBucket, medianByBucket }
+}
+
 function averageParams(paramSets: number[][]): number[] | null {
     if (!paramSets.length) {
         return null
@@ -166,15 +193,27 @@ function longTermForgettingCurveModelForCards(
     return decayValues.length > 0 ? averageDecay(decayValues) : FSRS5_DEFAULT_DECAY
 }
 
+type FSRSReplayStats = {
+    stabilityByRevlog: Map<Revlog, number>
+    timeByRetrievabilitySamples: number[][]
+    timeByStabilitySamples: number[][]
+}
+
 function stabilityAfterReviewsByRevlog(
     revlogData: Revlog[],
     id_card_data: Record<number, CardData>
-) {
+): FSRSReplayStats {
     const stabilityByRevlog = new Map<Revlog, number>()
+    const timeByRetrievabilitySamples: number[][] = []
+    const timeByStabilitySamples: number[][] = []
     const deckConfigs = SSEother.deck_configs
     const deckConfigIds = SSEother.deck_config_ids
     if (!deckConfigs || !deckConfigIds) {
-        return stabilityByRevlog
+        return {
+            stabilityByRevlog,
+            timeByRetrievabilitySamples,
+            timeByStabilitySamples,
+        }
     }
 
     const fsrsCards: Record<number, Card> = {}
@@ -224,6 +263,18 @@ function stabilityAfterReviewsByRevlog(
             const newDate = new Date(now.getTime() - rollover_ms)
             newDate.setHours(0, 0, 0, 0)
             elapsed = dateDiffInDays(oldDate, newDate)
+
+            if (revlog.time > 0 && card.stability > 0) {
+                const seconds = revlog.time / 1000
+                const retrievability = fsrs.forgetting_curve(elapsed, card.stability)
+                const retrievabilityBucket = Math.max(0, Math.min(99, Math.floor(retrievability * 100)))
+                const stabilityBucket = Math.max(0, Math.round(card.stability))
+
+                timeByRetrievabilitySamples[retrievabilityBucket] ??= []
+                timeByRetrievabilitySamples[retrievabilityBucket].push(seconds)
+                timeByStabilitySamples[stabilityBucket] ??= []
+                timeByStabilitySamples[stabilityBucket].push(seconds)
+            }
         }
 
         const newState = fsrs.next_state(memoryState, elapsed, revlog.ease)
@@ -234,7 +285,11 @@ function stabilityAfterReviewsByRevlog(
         stabilityByRevlog.set(revlog, card.stability)
     }
 
-    return stabilityByRevlog
+    return {
+        stabilityByRevlog,
+        timeByRetrievabilitySamples,
+        timeByStabilitySamples,
+    }
 }
 
 interface SiblingReview {
@@ -277,7 +332,9 @@ export function calculateRevlogStats(
 ) {
     console.time("revlog stats")
     let id_card_data = IDify(cardData)
-    const stability_after_review = stabilityAfterReviewsByRevlog(revlogData, id_card_data)
+    deckFsrs = {}
+    const fsrsReplayStats = stabilityAfterReviewsByRevlog(revlogData, id_card_data)
+    const stability_after_review = fsrsReplayStats.stabilityByRevlog
 
     function emptyArray<T>(init: T): T[] {
         const empty_array: T[] = []
@@ -606,6 +663,8 @@ export function calculateRevlogStats(
         .map((card) => getCardDecay(card))
     const forgetting_curve_decay =
         decayValues.length > 0 ? averageDecay(decayValues) : FSRS5_DEFAULT_DECAY
+    const retrievabilityTimeStats = bucketTimeStats(fsrsReplayStats.timeByRetrievabilitySamples)
+    const stabilityTimeStats = bucketTimeStats(fsrsReplayStats.timeByStabilitySamples)
 
     console.timeEnd("revlog stats")
 
@@ -640,6 +699,10 @@ export function calculateRevlogStats(
         forgetting_samples_short,
         forgetting_curve_decay,
         forgetting_curve_long_term_model,
+        time_by_retrievability_mean: retrievabilityTimeStats.meanByBucket,
+        time_by_retrievability_median: retrievabilityTimeStats.medianByBucket,
+        time_by_stability_mean: stabilityTimeStats.meanByBucket,
+        time_by_stability_median: stabilityTimeStats.medianByBucket,
     }
 }
 
