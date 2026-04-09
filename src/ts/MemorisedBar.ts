@@ -151,21 +151,24 @@ function applyOutlierFilter(revlogs: Revlog[]): Set<number> {
     return excludedRevlogIds
 }
 
-let deckFsrs: Record<number, FSRS> = {}
+let deckFsrs: Record<number, { signature: string; model: FSRS }> = {}
 export function getFsrs(config: DeckConfig) {
     const id = config.id
-    if (!deckFsrs[id]) {
-        const params = selectTsFsrsParams(config)
-
-        deckFsrs[id] = Fsrs(
-            generatorParameters({
-                w: checkParameters(params),
-                enable_fuzz: false,
-                enable_short_term: true,
-            })
-        )
+    const params = selectTsFsrsParams(config)
+    const signature = `${params.length}:${params.join(",")}`
+    if (!deckFsrs[id] || deckFsrs[id].signature !== signature) {
+        deckFsrs[id] = {
+            signature,
+            model: Fsrs(
+                generatorParameters({
+                    w: checkParameters(params),
+                    enable_fuzz: false,
+                    enable_short_term: true,
+                })
+            ),
+        }
     }
-    return deckFsrs[id]
+    return deckFsrs[id].model
 }
 
 const STABILITY_WEIGHT_FACTOR = 8 / 365

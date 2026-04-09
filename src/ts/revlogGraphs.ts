@@ -57,22 +57,25 @@ export const today = dayFromMs(Date.now())
 export const no_rollover_today = Math.floor(Date.now() / day_ms)
 const stability_maturity_threshold = 21
 
-let deckFsrs: Record<number, FSRS> = {}
+let deckFsrs: Record<number, { signature: string; model: FSRS }> = {}
 
 function getFsrs(config: DeckConfig) {
     const id = config.id
-    if (!deckFsrs[id]) {
-        const params = selectTsFsrsParams(config)
-
-        deckFsrs[id] = Fsrs(
-            generatorParameters({
-                w: checkParameters(params),
-                enable_fuzz: false,
-                enable_short_term: true,
-            })
-        )
+    const params = selectTsFsrsParams(config)
+    const signature = `${params.length}:${params.join(",")}`
+    if (!deckFsrs[id] || deckFsrs[id].signature !== signature) {
+        deckFsrs[id] = {
+            signature,
+            model: Fsrs(
+                generatorParameters({
+                    w: checkParameters(params),
+                    enable_fuzz: false,
+                    enable_short_term: true,
+                })
+            ),
+        }
     }
-    return deckFsrs[id]
+    return deckFsrs[id].model
 }
 
 function median(values: number[]) {

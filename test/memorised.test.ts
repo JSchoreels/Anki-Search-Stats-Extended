@@ -218,6 +218,80 @@ test("FSRS7 params are accepted in memorised graph pipeline", async () => {
     expect(memorised[0]).toBe(1)
 })
 
+test("Calibration uses FSRS6 equation when deck option selects FSRS6", async () => {
+    const card = new RevlogBuilder()
+    const cards = [
+        {
+            ...card.card(),
+            did: 1,
+        } as any,
+    ]
+    const revlogs = [card.review(1, 3), card.review(3, 3)] as Revlog[]
+    const config = {
+        1: {
+            id: 1,
+            fsrsVersion: 1,
+            fsrsParams6: weights,
+            fsrsParams7: weights7,
+        },
+    } as Record<number, Partial<DeckConfig>>
+    const mapping = { 1: 1 }
+    const resolver: S90BatchResolver = async (items) => items.map((item) => item.stability)
+
+    const stats = await getMemorisedDays(revlogs, cards, config, mapping, [], 2, 2, resolver)
+    const calibrationEntry = stats.calibration.find((entry) => !!entry && entry.count > 0)
+
+    expect(calibrationEntry).toBeTruthy()
+    expect(calibrationEntry!.count).toBe(1)
+
+    const fsrs6 = fsrs({ w: weights })
+    const fsrs7 = fsrs({ w: weights7 })
+    const firstState6 = fsrs6.next_state(null, 0, 3)
+    const expectedP6 = fsrs6.forgetting_curve(1, firstState6.stability)
+    const firstState7 = fsrs7.next_state(null, 0, 3)
+    const p7 = fsrs7.forgetting_curve(1, firstState7.stability)
+
+    expect(calibrationEntry!.predicted).toBeCloseTo(expectedP6, 6)
+    expect(Math.abs(calibrationEntry!.predicted - p7)).toBeGreaterThan(1e-4)
+})
+
+test("Calibration uses FSRS7 equation when deck option selects FSRS7", async () => {
+    const card = new RevlogBuilder()
+    const cards = [
+        {
+            ...card.card(),
+            did: 1,
+        } as any,
+    ]
+    const revlogs = [card.review(1, 3), card.review(3, 3)] as Revlog[]
+    const config = {
+        1: {
+            id: 1,
+            fsrsVersion: 0,
+            fsrsParams6: weights,
+            fsrsParams7: weights7,
+        },
+    } as Record<number, Partial<DeckConfig>>
+    const mapping = { 1: 1 }
+    const resolver: S90BatchResolver = async (items) => items.map((item) => item.stability)
+
+    const stats = await getMemorisedDays(revlogs, cards, config, mapping, [], 2, 2, resolver)
+    const calibrationEntry = stats.calibration.find((entry) => !!entry && entry.count > 0)
+
+    expect(calibrationEntry).toBeTruthy()
+    expect(calibrationEntry!.count).toBe(1)
+
+    const fsrs6 = fsrs({ w: weights })
+    const fsrs7 = fsrs({ w: weights7 })
+    const firstState6 = fsrs6.next_state(null, 0, 3)
+    const p6 = fsrs6.forgetting_curve(1, firstState6.stability)
+    const firstState7 = fsrs7.next_state(null, 0, 3)
+    const expectedP7 = fsrs7.forgetting_curve(1, firstState7.stability)
+
+    expect(calibrationEntry!.predicted).toBeCloseTo(expectedP7, 6)
+    expect(Math.abs(calibrationEntry!.predicted - p6)).toBeGreaterThan(1e-4)
+})
+
 test("Average stability over time uses S90 for FSRS7", async () => {
     const card = new RevlogBuilder()
     const fsrs7 = fsrs({ w: weights7 })
