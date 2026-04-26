@@ -197,6 +197,14 @@ type FSRSReplayStats = {
     stabilityByRevlog: Map<Revlog, number>
     timeByRetrievabilitySamples: number[][]
     timeByStabilitySamples: number[][]
+    gradeByRetrievability: number[][]
+    gradeByRetrievabilityExcludeSameDay: number[][]
+    gradeByRetrievabilitySuccessOnly: number[][]
+    gradeByRetrievabilitySuccessOnlyExcludeSameDay: number[][]
+    gradeByStability: number[][]
+    gradeByStabilitySuccessOnly: number[][]
+    gradeByDifficulty: number[][]
+    gradeByDifficultySuccessOnly: number[][]
 }
 
 function stabilityAfterReviewsByRevlog(
@@ -206,13 +214,38 @@ function stabilityAfterReviewsByRevlog(
     const stabilityByRevlog = new Map<Revlog, number>()
     const timeByRetrievabilitySamples: number[][] = []
     const timeByStabilitySamples: number[][] = []
+    const gradeByRetrievability: number[][] = []
+    const gradeByRetrievabilityExcludeSameDay: number[][] = []
+    const gradeByRetrievabilitySuccessOnly: number[][] = []
+    const gradeByRetrievabilitySuccessOnlyExcludeSameDay: number[][] = []
+    const gradeByStability: number[][] = []
+    const gradeByStabilitySuccessOnly: number[][] = []
+    const gradeByDifficulty: number[][] = []
+    const gradeByDifficultySuccessOnly: number[][] = []
     const deckConfigs = SSEother.deck_configs
     const deckConfigIds = SSEother.deck_config_ids
+
+    function incrementGrade(ease: number, buckets: number[][], bucket: number) {
+        if (ease < 0 || ease > 3) {
+            return
+        }
+        buckets[bucket] ??= [0, 0, 0, 0]
+        buckets[bucket][ease] += 1
+    }
+
     if (!deckConfigs || !deckConfigIds) {
         return {
             stabilityByRevlog,
             timeByRetrievabilitySamples,
             timeByStabilitySamples,
+            gradeByRetrievability,
+            gradeByRetrievabilityExcludeSameDay,
+            gradeByRetrievabilitySuccessOnly,
+            gradeByRetrievabilitySuccessOnlyExcludeSameDay,
+            gradeByStability,
+            gradeByStabilitySuccessOnly,
+            gradeByDifficulty,
+            gradeByDifficultySuccessOnly,
         }
     }
 
@@ -278,6 +311,43 @@ function stabilityAfterReviewsByRevlog(
                 timeByStabilitySamples[stabilityBucket] ??= []
                 timeByStabilitySamples[stabilityBucket].push(seconds)
             }
+
+            const retrievability = fsrs.forgetting_curve(elapsed, card.stability)
+            const retrievabilityBucket = Math.max(0, Math.min(99, Math.floor(retrievability * 100)))
+            const stabilityBucket = Math.max(0, Math.round(card.stability))
+            const difficultyBucket = Math.max(0, Math.min(99, Math.round(card.difficulty * 10) - 1))
+            const isSameDay = elapsed < 1
+            const isSuccess = revlog.ease > 1
+            incrementGrade(revlog.ease - 1, gradeByRetrievability, retrievabilityBucket)
+            if (!isSameDay) {
+                incrementGrade(
+                    revlog.ease - 1,
+                    gradeByRetrievabilityExcludeSameDay,
+                    retrievabilityBucket
+                )
+            }
+            if (isSuccess) {
+                incrementGrade(
+                    revlog.ease - 1,
+                    gradeByRetrievabilitySuccessOnly,
+                    retrievabilityBucket
+                )
+            }
+            if (isSuccess && !isSameDay) {
+                incrementGrade(
+                    revlog.ease - 1,
+                    gradeByRetrievabilitySuccessOnlyExcludeSameDay,
+                    retrievabilityBucket
+                )
+            }
+            incrementGrade(revlog.ease - 1, gradeByStability, stabilityBucket)
+            if (isSuccess) {
+                incrementGrade(revlog.ease - 1, gradeByStabilitySuccessOnly, stabilityBucket)
+            }
+            incrementGrade(revlog.ease - 1, gradeByDifficulty, difficultyBucket)
+            if (isSuccess) {
+                incrementGrade(revlog.ease - 1, gradeByDifficultySuccessOnly, difficultyBucket)
+            }
         }
 
         const newState = fsrs.next_state(memoryState, elapsed, revlog.ease)
@@ -292,6 +362,14 @@ function stabilityAfterReviewsByRevlog(
         stabilityByRevlog,
         timeByRetrievabilitySamples,
         timeByStabilitySamples,
+        gradeByRetrievability,
+        gradeByRetrievabilityExcludeSameDay,
+        gradeByRetrievabilitySuccessOnly,
+        gradeByRetrievabilitySuccessOnlyExcludeSameDay,
+        gradeByStability,
+        gradeByStabilitySuccessOnly,
+        gradeByDifficulty,
+        gradeByDifficultySuccessOnly,
     }
 }
 
@@ -401,6 +479,10 @@ export function calculateRevlogStats(
     let short_term_recorded_cards: Set<number> = new Set()
     let forgetting_samples: ForgettingSample[] = []
     let forgetting_samples_short: ForgettingSample[] = []
+    let timeByRepetitionSamples: number[][] = []
+    let gradeByRepetitions: number[][] = []
+    let gradeByRepetitionsSuccessOnly: number[][] = []
+    let repetitionsByCard: Record<number, number> = {}
 
     function incrementEase(ease_array: number[][], day: number, ease: number, amount = 1) {
         // Doesn't check for negative ease (manual reschedule)
@@ -521,6 +603,23 @@ export function calculateRevlogStats(
         const hasRating = revlog.ease > 0
         const isResetEntry = !hasRating && revlog.factor === 0
         const isCrammingEntry = hasRating && revlog.type === 3 && revlog.factor === 0
+
+        if (hasRating && !isCrammingEntry) {
+            repetitionsByCard[revlog.cid] = (repetitionsByCard[revlog.cid] ?? 0) + 1
+            const repetitionBucket = repetitionsByCard[revlog.cid]
+            gradeByRepetitions[repetitionBucket] ??= [0, 0, 0, 0]
+            gradeByRepetitions[repetitionBucket][revlog.ease - 1] += 1
+            if (revlog.ease > 1) {
+                gradeByRepetitionsSuccessOnly[repetitionBucket] ??= [0, 0, 0, 0]
+                gradeByRepetitionsSuccessOnly[repetitionBucket][revlog.ease - 1] += 1
+            }
+
+            if (revlog.time > 0) {
+                const seconds = revlog.time / 1000
+                timeByRepetitionSamples[repetitionBucket] ??= []
+                timeByRepetitionSamples[repetitionBucket].push(seconds)
+            }
+        }
 
         if (isResetEntry) {
             forgetting_samples = forgetting_samples.filter((sample) => sample.cid !== revlog.cid)
@@ -668,6 +767,7 @@ export function calculateRevlogStats(
         decayValues.length > 0 ? averageDecay(decayValues) : FSRS5_DEFAULT_DECAY
     const retrievabilityTimeStats = bucketTimeStats(fsrsReplayStats.timeByRetrievabilitySamples)
     const stabilityTimeStats = bucketTimeStats(fsrsReplayStats.timeByStabilitySamples)
+    const repetitionTimeStats = bucketTimeStats(timeByRepetitionSamples)
 
     console.timeEnd("revlog stats")
 
@@ -706,6 +806,20 @@ export function calculateRevlogStats(
         time_by_retrievability_median: retrievabilityTimeStats.medianByBucket,
         time_by_stability_mean: stabilityTimeStats.meanByBucket,
         time_by_stability_median: stabilityTimeStats.medianByBucket,
+        time_by_repetition_mean: repetitionTimeStats.meanByBucket,
+        time_by_repetition_median: repetitionTimeStats.medianByBucket,
+        grade_by_retrievability: fsrsReplayStats.gradeByRetrievability,
+        grade_by_retrievability_exclude_same_day:
+            fsrsReplayStats.gradeByRetrievabilityExcludeSameDay,
+        grade_by_retrievability_success_only: fsrsReplayStats.gradeByRetrievabilitySuccessOnly,
+        grade_by_retrievability_success_only_exclude_same_day:
+            fsrsReplayStats.gradeByRetrievabilitySuccessOnlyExcludeSameDay,
+        grade_by_stability: fsrsReplayStats.gradeByStability,
+        grade_by_stability_success_only: fsrsReplayStats.gradeByStabilitySuccessOnly,
+        grade_by_repetitions: gradeByRepetitions,
+        grade_by_repetitions_success_only: gradeByRepetitionsSuccessOnly,
+        grade_by_difficulty: fsrsReplayStats.gradeByDifficulty,
+        grade_by_difficulty_success_only: fsrsReplayStats.gradeByDifficultySuccessOnly,
     }
 }
 

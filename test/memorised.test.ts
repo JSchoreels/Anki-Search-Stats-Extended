@@ -324,6 +324,54 @@ test("Average stability over time uses S90 for FSRS7", async () => {
     expect(stats.day_young_ratio_s90[firstDay]).toBeLessThanOrEqual(1)
 })
 
+test("Average stability by reps uses current S90 and interval", async () => {
+    const cards = [
+        {
+            id: 1,
+            nid: 1,
+            did: 1,
+            ivl: 20,
+            reps: 2,
+            data: JSON.stringify({ s: 10 }),
+        },
+        {
+            id: 2,
+            nid: 2,
+            did: 1,
+            ivl: 30,
+            reps: 2,
+            data: JSON.stringify({ s: 14 }),
+        },
+        {
+            id: 3,
+            nid: 3,
+            did: 1,
+            ivl: 50,
+            reps: 5,
+            data: JSON.stringify({ s: 21 }),
+        },
+        {
+            id: 4,
+            nid: 4,
+            did: 1,
+            ivl: 70,
+            reps: 5,
+            data: "{}",
+        },
+    ] as any[]
+
+    const stats = await getMemorisedDays([], cards, configs, mappings, [], 2, 2, async (items) =>
+        items.map((item) => item.stability * 2)
+    )
+
+    expect(stats.average_stability_by_reps[2]).toBeCloseTo(24)
+    expect(stats.average_stability_by_reps[5]).toBeCloseTo(42)
+    expect(stats.average_stability_by_reps[4]).toBeUndefined()
+    expect(stats.average_interval_by_reps[2]).toBeCloseTo(25)
+    expect(stats.average_interval_by_reps[5]).toBeCloseTo(60)
+    expect(stats.average_interval_by_reps[4]).toBeUndefined()
+})
+
 test("S90 batch requests deduplicate close stabilities per config", async () => {
     const cardA = new RevlogBuilder()
     const cardB = new RevlogBuilder()
@@ -404,4 +452,113 @@ test("S90 dedup cache avoids repeated backend calls across flushes", async () =>
 
     expect(batchSizes.length).toBe(1)
     expect(batchSizes[0]).toBeGreaterThan(0)
+})
+
+test("Time distribution by difficulty is generated", async () => {
+    const card = new RevlogBuilder()
+    const cards = [
+        {
+            ...card.card(),
+            did: 1,
+        } as any,
+    ]
+
+    const revlogs = [
+        card.review(0, 3, 1000),
+        card.review(1, 3, 2000),
+        card.wait(2 * 24 * 60 * 60 * 1000),
+        card.review(2, 3, 4000),
+        card.wait(2 * 24 * 60 * 60 * 1000),
+        card.review(3, 2, 6000),
+    ].filter(Boolean) as Revlog[]
+
+    const stats = await getMemorisedDays(
+        revlogs,
+        cards,
+        configs,
+        mappings,
+        [],
+        2,
+        2,
+        localS90Resolver(cards)
+    )
+
+    const difficultyValues = (stats.time_by_difficulty_mean ?? []).filter((v) => Number.isFinite(v))
+    const difficultyBuckets = Object.keys(stats.time_by_difficulty_mean ?? {}).map((v) => +v)
+
+    expect(difficultyValues.length).toBeGreaterThan(0)
+    expect(Math.max(...difficultyValues)).toBeGreaterThan(0)
+    expect(Math.max(...difficultyBuckets)).toBeGreaterThan(10)
+})
+
+test("Time distribution by retrievability supports same-day and success filters", async () => {
+    const cid = 99999
+    const card = {
+        id: cid,
+        nid: cid,
+        did: 1,
+        odid: 0,
+        queue: 2,
+        type: 2,
+        ivl: 1,
+        data: "{}",
+    } as any
+    const revlogs: Revlog[] = [
+        {
+            id: 1,
+            cid,
+            ease: 3,
+            ivl: 1,
+            lastIvl: 0,
+            factor: 200,
+            time: 1000,
+            type: 1,
+        },
+        {
+            id: 2,
+            cid,
+            ease: 1,
+            ivl: 1,
+            lastIvl: 1,
+            factor: 200,
+            time: 1000,
+            type: 1,
+        },
+        {
+            id: 3,
+            cid,
+            ease: 2,
+            ivl: 1,
+            lastIvl: 1,
+            factor: 200,
+            time: 2000,
+            type: 1,
+        },
+        {
+            id: 24 * 60 * 60 * 1000 + 10,
+            cid,
+            ease: 3,
+            ivl: 2,
+            lastIvl: 1,
+            factor: 200,
+            time: 4000,
+            type: 1,
+        },
+    ]
+
+    const stats = await getMemorisedDays(
+        revlogs,
+        [card],
+        configs,
+        { 1: 1 },
+        [],
+        2,
+        2,
+        localS90Resolver([card])
+    )
+
+    expect(stats.time_by_retrievability_mean[99]).toBeCloseTo(1.5, 5)
+    expect(stats.time_by_retrievability_mean_success_only[99]).toBeCloseTo(2, 5)
+    expect(stats.time_by_retrievability_mean_exclude_same_day[99]).toBeUndefined()
+    expect(stats.time_by_retrievability_mean_success_only_exclude_same_day[99]).toBeUndefined()
 })

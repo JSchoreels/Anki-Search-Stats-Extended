@@ -1,3 +1,4 @@
+import _ from "lodash"
 import { DeltaIfy } from "../src/ts/Candlestick"
 import {
     averageDecay,
@@ -278,7 +279,7 @@ test("First short-term forgetting curve uses FSRS7 decay parameters", () => {
     }
 })
 
-test("Time distribution by retrievability and stability is generated with FSRS7 params", () => {
+test("Time distribution by retrievability, stability and repetitions is generated", () => {
     const previousSSEother = global.SSEother
     try {
         global.SSEother = {
@@ -321,11 +322,65 @@ test("Time distribution by retrievability and stability is generated with FSRS7 
         const stabilityValues = (stats.time_by_stability_mean ?? []).filter((v) =>
             Number.isFinite(v)
         )
+        const repetitionValues = (stats.time_by_repetition_mean ?? []).filter((v) =>
+            Number.isFinite(v)
+        )
+        const retrievabilityGradeCount = _.sum(
+            (stats.grade_by_retrievability ?? []).flatMap((v) => v ?? [])
+        )
+        const retrievabilityGradeCountExcludeSameDay = _.sum(
+            (stats.grade_by_retrievability_exclude_same_day ?? []).flatMap((v) => v ?? [])
+        )
+        const retrievabilityGradeCountSuccessOnly = _.sum(
+            (stats.grade_by_retrievability_success_only ?? []).flatMap((v) => v ?? [])
+        )
+        const retrievabilityGradeCountSuccessOnlyExcludeSameDay = _.sum(
+            (stats.grade_by_retrievability_success_only_exclude_same_day ?? []).flatMap(
+                (v) => v ?? []
+            )
+        )
+        const stabilityGradeCount = _.sum((stats.grade_by_stability ?? []).flatMap((v) => v ?? []))
+        const stabilityGradeCountSuccessOnly = _.sum(
+            (stats.grade_by_stability_success_only ?? []).flatMap((v) => v ?? [])
+        )
+        const repetitionGradeCount = _.sum(
+            (stats.grade_by_repetitions ?? []).flatMap((v) => v ?? [])
+        )
+        const repetitionGradeCountSuccessOnly = _.sum(
+            (stats.grade_by_repetitions_success_only ?? []).flatMap((v) => v ?? [])
+        )
+        const difficultyGradeCount = _.sum(
+            (stats.grade_by_difficulty ?? []).flatMap((v) => v ?? [])
+        )
+        const difficultyGradeCountSuccessOnly = _.sum(
+            (stats.grade_by_difficulty_success_only ?? []).flatMap((v) => v ?? [])
+        )
 
         expect(retrievabilityValues.length).toBeGreaterThan(0)
         expect(stabilityValues.length).toBeGreaterThan(0)
+        expect(repetitionValues.length).toBeGreaterThan(0)
         expect(Math.max(...retrievabilityValues)).toBeGreaterThan(0)
         expect(Math.max(...stabilityValues)).toBeGreaterThan(0)
+        expect(Math.max(...repetitionValues)).toBeGreaterThan(0)
+        expect(retrievabilityGradeCount).toBe(3)
+        expect(retrievabilityGradeCountExcludeSameDay).toBe(2)
+        expect(retrievabilityGradeCountSuccessOnly).toBe(3)
+        expect(retrievabilityGradeCountSuccessOnlyExcludeSameDay).toBe(2)
+        expect(stabilityGradeCount).toBe(3)
+        expect(stabilityGradeCountSuccessOnly).toBe(3)
+        expect(repetitionGradeCount).toBe(4)
+        expect(repetitionGradeCountSuccessOnly).toBe(4)
+        expect(difficultyGradeCount).toBe(3)
+        expect(difficultyGradeCountSuccessOnly).toBe(3)
+
+        expect(stats.time_by_repetition_mean[1]).toBeCloseTo(1)
+        expect(stats.time_by_repetition_mean[2]).toBeCloseTo(2)
+        expect(stats.time_by_repetition_mean[3]).toBeCloseTo(4)
+        expect(stats.time_by_repetition_mean[4]).toBeCloseTo(6)
+        expect(stats.grade_by_repetitions[1][2]).toBe(1)
+        expect(stats.grade_by_repetitions[2][2]).toBe(1)
+        expect(stats.grade_by_repetitions[3][2]).toBe(1)
+        expect(stats.grade_by_repetitions[4][1]).toBe(1)
     } finally {
         global.SSEother = previousSSEother
     }

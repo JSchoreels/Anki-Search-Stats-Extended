@@ -143,6 +143,20 @@ average-second-per-day = 平均每{$n ->
         [one] 秒
         *[many] 秒
     }
+average-second-per-repetition = 平均每{$n ->
+        [one] 个重复次数分箱
+        *[many] {$n}个重复次数分箱
+    }{$value} {$value ->
+        [one] 秒
+        *[many] 秒
+    }
+average-second-per-difficulty = 平均每{$n ->
+        [one] 个难度分箱
+        *[many] {$n}个难度分箱
+    }{$value} {$value ->
+        [one] 秒
+        *[many] 秒
+    }
 
 sxr-heatmap = SxR热力图
 sxr-heatmap-help =
@@ -234,9 +248,17 @@ time-totals-help =
 time-distribution-by-retrievability = 按可提取性划分的耗时分布
 time-distribution-by-retrievability-help =
     按每次复习前预测可提取性分箱，显示答题耗时（秒）的均值或中位数。
+exclude-same-day-reviews = 排除同日复习
+success-only-hard-good-easy = 仅成功（困难/良好/简单）
 time-distribution-by-stability = 按稳定期划分的耗时分布
 time-distribution-by-stability-help =
     按每次复习前预测稳定期（天）分箱，显示答题耗时（秒）的均值或中位数。
+time-distribution-by-repetitions = 按重复次数划分的耗时分布
+time-distribution-by-repetitions-help =
+    按每次复习时卡片的重复次数分箱，显示答题耗时（秒）的均值或中位数。
+time-distribution-by-difficulty = 按难度划分的耗时分布
+time-distribution-by-difficulty-help =
+    按每次复习前预测难度分箱，显示答题耗时（秒）的均值或中位数。
 
 introduced = 新学习
 re-introduced = 重新学习
@@ -307,6 +329,8 @@ forgetting-curve-legend-count = n={$count}
     
 retrievability-and-stability = 记忆可提取性和稳定期
 cards-and-stability = 卡片和稳定期
+stability = 稳定期
+interval = 间隔
 
 # Between Minus Within? If I'm honest I have no idea what this stands for.
 b-w-matrix = B-W矩阵
@@ -330,6 +354,18 @@ time-ratings = 耗时评分
 time-ratings-help = 
     按回答耗时分析的评分分布。
     受牌组“最长回答时间”设置影响。
+grade-distribution-by-retrievability = 按可提取性划分的评分分布
+grade-distribution-by-retrievability-help =
+    按每次复习前预测可提取性分箱显示评分分布。
+grade-distribution-by-stability = 按稳定期划分的评分分布
+grade-distribution-by-stability-help =
+    按每次复习前预测稳定期（天）分箱显示评分分布。
+grade-distribution-by-repetitions = 按重复次数划分的评分分布
+grade-distribution-by-repetitions-help =
+    按每次复习时卡片重复次数分箱显示评分分布。
+grade-distribution-by-difficulty = 按难度划分的评分分布
+grade-distribution-by-difficulty-help =
+    按每次复习前预测难度分箱显示评分分布。
 
 card-count-time-machine = 卡片数量时光机
 card-count-time-machine-help = 
@@ -417,8 +453,13 @@ fsrs-loss-by-fatigue-help =
     This graph displays how inaccurate FSRS is by the number of reviews you did prior in that day.
     Useful if you want to set a review limit.
 
+average-stability-over-reps = Average Stability over Reps
+average-stability-over-reps-help =
+    This graph groups current cards by their repetition count (prop:reps) and shows the average current S90 stability or current interval for each group.
+
 days-since-sibling-review = {$value} Days since sibling review
 x-previous-reviews = {$value} Previous reviews
+x-repetitions = {$value} Repetitions
 
 retention-per-day-since-last-sibling-review = {$value} retention per {$n ->
         [one] day
@@ -433,4 +474,13 @@ retention-per-prior-review-that-day = {$value} retention per {$n ->
 loss-per-prior-review-that-day = {$value} loss per {$n ->
         [one] prior review
         *[many] {$n} prior reviews
+    }
+
+stability-per-repetition = {$value} stability per {$n ->
+        [one] repetition
+        *[many] {$n} repetitions
+    }
+interval-per-repetition = {$value} interval per {$n ->
+        [one] repetition
+        *[many] {$n} repetitions
     }

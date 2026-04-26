@@ -23,6 +23,8 @@ export const TREND_PERSISTENCE_KEYS = {
         naiveSiblingSimilarity: "bad:naive-sibling-similarity",
         ratingFatigue: "bad:rating-fatigue",
         fsrsLossByFatigue: "bad:fsrs-loss-by-fatigue",
+        averageStabilityOverReps: "bad:average-stability-over-reps",
+        averageIntervalOverReps: "bad:average-interval-over-reps",
     },
     introduced: {
         activeCards: "introduced:active-cards",

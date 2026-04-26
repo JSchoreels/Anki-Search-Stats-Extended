@@ -14,7 +14,7 @@ import type { LossBar } from "./bar"
 import type { DeckConfig } from "./config"
 import { selectTsFsrsParams } from "./fsrsParams"
 import { type Buckets, dayFromMs, emptyBuckets, IDify, rollover_ms, today } from "./revlogGraphs"
-import type { CardData, Revlog } from "./search"
+import { type CardData, getExtraDataFromCard, type Revlog } from "./search"
 
 export interface LossBin {
     real: number
@@ -261,6 +261,22 @@ function bucketTimeStats(bucketedSamples: number[][]) {
     return { meanByBucket, medianByBucket }
 }
 
+function meanByReps(cards: CardData[], valueForCard: (card: CardData) => number | undefined) {
+    const sums: number[] = []
+    const counts: number[] = []
+
+    for (const card of cards) {
+        const value = valueForCard(card)
+        if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
+            continue
+        }
+        sums[card.reps] = (sums[card.reps] ?? 0) + value
+        counts[card.reps] = (counts[card.reps] ?? 0) + 1
+    }
+
+    return sums.map((sum, reps) => sum / counts[reps])
+}
+
 export async function getMemorisedDays(
     revlogs: Revlog[],
     cards: CardData[],
@@ -346,6 +362,7 @@ export async function getMemorisedDays(
 
     let last_stability: number[] = []
     let s90_by_key = new Map<string, number>()
+    let current_card_s90_key_by_cid = new Map<number, string>()
     let s90_events_by_day = new Map<number, { card_id: number; key: string }[]>()
     let s90_request_items: S90BatchItem[] = []
     let s90_request_index_by_key = new Map<string, number>()
@@ -360,6 +377,20 @@ export async function getMemorisedDays(
         } else {
             map.delete(key)
         }
+    }
+
+    function queueS90Request(configId: number, stability: number) {
+        const { step, bucket } = stabilityBucketForS90(stability)
+        const s90_key = `${configId}:${step}:${bucket}`
+        s90_dedup_total += 1
+        if (!s90_request_index_by_key.has(s90_key)) {
+            s90_request_index_by_key.set(s90_key, s90_request_items.length)
+            s90_request_items.push({
+                config_id: configId,
+                stability,
+            })
+        }
+        return s90_key
     }
 
     function weightedValueAtRank(entries: { s90: number; count: number }[], rank: number): number {
@@ -442,7 +473,11 @@ export async function getMemorisedDays(
     const uniqueCids = new Set(revlogs.map((r) => r.cid))
     let probabilities: Record<number, number[]> = {}
     let time_by_retrievability_samples: number[][] = []
+    let time_by_retrievability_samples_exclude_same_day: number[][] = []
+    let time_by_retrievability_samples_success_only: number[][] = []
+    let time_by_retrievability_samples_success_only_exclude_same_day: number[][] = []
     let time_by_stability_samples: number[][] = []
+    let time_by_difficulty_samples: number[][] = []
     for (const cid of uniqueCids) probabilities[cid] = [1]
 
     // let log: any[] = []
@@ -508,11 +543,37 @@ export async function getMemorisedDays(
                 const seconds = revlog.time / 1000
                 const retrievabilityBucket = Math.max(0, Math.min(99, Math.floor(p * 100)))
                 const stabilityBucket = Math.max(0, Math.round(card.stability))
+                const difficultyBucket = Math.max(
+                    0,
+                    Math.min(99, Math.round(card.difficulty * 10) - 1)
+                )
+                const isSameDay = elapsed < 1
+                const isSuccess = grade > 1
 
                 time_by_retrievability_samples[retrievabilityBucket] ??= []
                 time_by_retrievability_samples[retrievabilityBucket].push(seconds)
+                if (!isSameDay) {
+                    time_by_retrievability_samples_exclude_same_day[retrievabilityBucket] ??= []
+                    time_by_retrievability_samples_exclude_same_day[retrievabilityBucket].push(
+                        seconds
+                    )
+                }
+                if (isSuccess) {
+                    time_by_retrievability_samples_success_only[retrievabilityBucket] ??= []
+                    time_by_retrievability_samples_success_only[retrievabilityBucket].push(seconds)
+                }
+                if (isSuccess && !isSameDay) {
+                    time_by_retrievability_samples_success_only_exclude_same_day[
+                        retrievabilityBucket
+                    ] ??= []
+                    time_by_retrievability_samples_success_only_exclude_same_day[
+                        retrievabilityBucket
+                    ].push(seconds)
+                }
                 time_by_stability_samples[stabilityBucket] ??= []
                 time_by_stability_samples[stabilityBucket].push(seconds)
+                time_by_difficulty_samples[difficultyBucket] ??= []
+                time_by_difficulty_samples[difficultyBucket].push(seconds)
             }
             const y = grade > 1 ? 1 : 0
 
@@ -584,16 +645,7 @@ export async function getMemorisedDays(
         card.stability = newState.stability
         card.difficulty = newState.difficulty
         last_stability[revlog.cid] = card.stability // To prevent "forget" affecting the forgetting curve
-        const { step, bucket } = stabilityBucketForS90(card.stability)
-        const s90_key = `${config.id}:${step}:${bucket}`
-        s90_dedup_total += 1
-        if (!s90_request_index_by_key.has(s90_key)) {
-            s90_request_index_by_key.set(s90_key, s90_request_items.length)
-            s90_request_items.push({
-                config_id: config.id,
-                stability: card.stability,
-            })
-        }
+        const s90_key = queueS90Request(config.id, card.stability)
         const day_events = s90_events_by_day.get(revlogDay) ?? []
         day_events.push({
             card_id: revlog.cid,
@@ -602,6 +654,20 @@ export async function getMemorisedDays(
         s90_events_by_day.set(revlogDay, day_events)
 
         fsrsCards[revlog.cid] = card
+    }
+
+    for (const card of cards) {
+        const config = card_config(card.id)
+        const stability = getExtraDataFromCard(card).s
+        if (
+            !config ||
+            typeof stability !== "number" ||
+            !Number.isFinite(stability) ||
+            stability <= 0
+        ) {
+            continue
+        }
+        current_card_s90_key_by_cid.set(card.id, queueS90Request(config.id, stability))
     }
 
     s90_deduped_total = Math.max(0, s90_dedup_total - s90_request_items.length)
@@ -693,7 +759,22 @@ export async function getMemorisedDays(
         )}%), backend calls: ${s90_backend_calls}`
     )
     const retrievabilityTimeStats = bucketTimeStats(time_by_retrievability_samples)
+    const retrievabilityTimeStatsExcludeSameDay = bucketTimeStats(
+        time_by_retrievability_samples_exclude_same_day
+    )
+    const retrievabilityTimeStatsSuccessOnly = bucketTimeStats(
+        time_by_retrievability_samples_success_only
+    )
+    const retrievabilityTimeStatsSuccessOnlyExcludeSameDay = bucketTimeStats(
+        time_by_retrievability_samples_success_only_exclude_same_day
+    )
     const stabilityTimeStats = bucketTimeStats(time_by_stability_samples)
+    const difficultyTimeStats = bucketTimeStats(time_by_difficulty_samples)
+    const averageStabilityByReps = meanByReps(cards, (card) => {
+        const key = current_card_s90_key_by_cid.get(card.id)
+        return key ? s90_by_key.get(key) : undefined
+    })
+    const averageIntervalByReps = meanByReps(cards, (card) => card.ivl)
     console.timeEnd("Calculating memorised days")
     return {
         retrievabilityDays,
@@ -711,7 +792,22 @@ export async function getMemorisedDays(
         calibration,
         time_by_retrievability_mean: retrievabilityTimeStats.meanByBucket,
         time_by_retrievability_median: retrievabilityTimeStats.medianByBucket,
+        time_by_retrievability_mean_exclude_same_day:
+            retrievabilityTimeStatsExcludeSameDay.meanByBucket,
+        time_by_retrievability_median_exclude_same_day:
+            retrievabilityTimeStatsExcludeSameDay.medianByBucket,
+        time_by_retrievability_mean_success_only: retrievabilityTimeStatsSuccessOnly.meanByBucket,
+        time_by_retrievability_median_success_only:
+            retrievabilityTimeStatsSuccessOnly.medianByBucket,
+        time_by_retrievability_mean_success_only_exclude_same_day:
+            retrievabilityTimeStatsSuccessOnlyExcludeSameDay.meanByBucket,
+        time_by_retrievability_median_success_only_exclude_same_day:
+            retrievabilityTimeStatsSuccessOnlyExcludeSameDay.medianByBucket,
         time_by_stability_mean: stabilityTimeStats.meanByBucket,
         time_by_stability_median: stabilityTimeStats.medianByBucket,
+        time_by_difficulty_mean: difficultyTimeStats.meanByBucket,
+        time_by_difficulty_median: difficultyTimeStats.medianByBucket,
+        average_stability_by_reps: averageStabilityByReps,
+        average_interval_by_reps: averageIntervalByReps,
     }
 }

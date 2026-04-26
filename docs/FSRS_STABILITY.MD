@@ -26,3 +26,22 @@ This document describes how stability-related values are computed for FSRS graph
 
 - Raw `stability` values are still used in other places that need original FSRS state.
 - This split avoids mixing display-oriented “stability over time” with raw state internals.
+
+## Average Stability Over Reps
+
+- Source: [`getMemorisedDays()`](/Users/jschoreels/workspace/Anki-Search-Stats-Extended/src/ts/MemorisedBar.ts)
+- Output field:
+    - `average_stability_by_reps`
+    - `average_interval_by_reps`
+
+### Semantics
+
+- Cards are grouped by current `CardData.reps`, matching Anki's `prop:reps` value.
+- The default stability view stores the mean current `S90` derived from raw FSRS stability in `card.data.s`.
+- The interval view stores the mean current positive `CardData.ivl`.
+- Cards without a positive finite value for the selected metric are not included in that mean.
+
+### Notes
+
+- The stability view intentionally uses `S90`, not raw FSRS stability.
+- It is a current card-data graph, not a replayed review-history graph.

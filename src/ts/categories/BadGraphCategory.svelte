@@ -20,6 +20,14 @@
     let interval_scroll = 1
     let interval_bin_size = 1
     let fatigue_bin_size = 10
+    let stability_reps_bin_size = 1
+
+    enum RepsMetric {
+        STABILITY,
+        INTERVAL,
+    }
+
+    let reps_metric = RepsMetric.STABILITY
 
     let retention_trend = (values: number[]) => (_.sum(values) == 0 ? 0 : 1 - values[3])
 
@@ -46,6 +54,33 @@
         tick_spacing: Math.floor(granularity / 5),
         barWidth: ((domain[1] - domain[0]) * 100) / leech_bins.length,
         columnLabeler: (v, w) => `${(parseFloat(v) - w!).toPrecision(3)}%-${v}`,
+    }
+
+    $: reps_metric_series =
+        reps_metric === RepsMetric.STABILITY
+            ? ($memorised_stats?.average_stability_by_reps ?? [])
+            : ($memorised_stats?.average_interval_by_reps ?? [])
+    $: reps_metric_label =
+        reps_metric === RepsMetric.STABILITY ? i18n("stability") : i18n("interval")
+    $: reps_metric_trend_pattern =
+        reps_metric === RepsMetric.STABILITY
+            ? i18n_pattern("stability-per-repetition")
+            : i18n_pattern("interval-per-repetition")
+    $: reps_metric_trend_key =
+        reps_metric === RepsMetric.STABILITY
+            ? TREND_PERSISTENCE_KEYS.bad.averageStabilityOverReps
+            : TREND_PERSISTENCE_KEYS.bad.averageIntervalOverReps
+
+    let average_stability_or_interval_by_reps_bar: BarChart
+    $: average_stability_or_interval_by_reps_bar = {
+        row_colours: ["#70AFD6"],
+        row_labels: [reps_metric_label],
+        data: Array.from(reps_metric_series).map((value, reps) => ({
+            label: reps.toString(),
+            values: [value ?? 0],
+        })),
+        tick_spacing: 5,
+        columnLabeler: barStringLabeler(i18n_bundle.getMessage("x-repetitions")?.value!),
     }
 </script>
 
@@ -148,6 +183,32 @@
         <MatureFilterSelector bind:group={mature_filter}></MatureFilterSelector>
         <p>
             {i18n("fsrs-loss-by-fatigue-help")}
+        </p>
+    </MemorisedGraphContainer>
+    <MemorisedGraphContainer>
+        <h1 slot="title">{i18n("average-stability-over-reps")}</h1>
+        <BarScrollable
+            slot="graph"
+            bind:binSize={stability_reps_bin_size}
+            data={average_stability_or_interval_by_reps_bar}
+            left_aligned
+            average
+            trend
+            trendPersistenceKey={reps_metric_trend_key}
+            trend_info={{ pattern: reps_metric_trend_pattern }}
+        ></BarScrollable>
+        <div>
+            <label>
+                <input type="radio" value={RepsMetric.STABILITY} bind:group={reps_metric} />
+                {i18n("stability")}
+            </label>
+            <label>
+                <input type="radio" value={RepsMetric.INTERVAL} bind:group={reps_metric} />
+                {i18n("interval")}
+            </label>
+        </div>
+        <p>
+            {i18n("average-stability-over-reps-help")}
         </p>
     </MemorisedGraphContainer>
 </GraphCategory>

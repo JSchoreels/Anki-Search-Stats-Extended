@@ -15,8 +15,64 @@
     let mature_filter: keyof RevlogBuckets = "not_learn"
     let interval_scroll = 1
     let interval_bin_size = 1
+    let retrievabilityBinSize = 2
+    let retrievabilityExcludeSameDay = true
+    let gradeSuccessOnly = false
+    let stabilityBinSize = 2
+    let repetitionsBinSize = 1
+    let difficultyBinSize = 1
 
     let retention_trend = (values: number[]) => (_.sum(values) == 0 ? 0 : 1 - values[3])
+
+    function retrievabilityBucketLabeler(label: string, width = 1) {
+        const raw = Number(label)
+        const start = raw < 0 ? 99 + raw : raw
+        const end = Math.min(100, start + width)
+        return i18n("retrievability-of", { value: `${start}-${end}%` })
+    }
+
+    function stabilityBucketLabeler(label: string, width = 1) {
+        const start = Number(label)
+        const end = width > 1 ? `${start}-${start + width - 1}` : label
+        return i18n("stability-of", { value: end })
+    }
+
+    function repetitionsBucketLabeler(label: string, width = 1) {
+        const start = Number(label)
+        return width > 1 ? `${start}-${start + width - 1}` : label
+    }
+
+    function difficultyBucketLabeler(label: string, width = 1) {
+        const start = (Number(label) + 1) / 10
+        const end = (Number(label) + width) / 10
+        const value = width > 1 ? `${start.toFixed(1)}-${end.toFixed(1)}` : start.toFixed(1)
+        return i18n("difficulty-of", { value })
+    }
+
+    $: gradeByRetrievabilitySeries = (() => {
+        if (retrievabilityExcludeSameDay && gradeSuccessOnly) {
+            return $revlogStats?.grade_by_retrievability_success_only_exclude_same_day ?? []
+        }
+        if (retrievabilityExcludeSameDay) {
+            return $revlogStats?.grade_by_retrievability_exclude_same_day ?? []
+        }
+        if (gradeSuccessOnly) {
+            return $revlogStats?.grade_by_retrievability_success_only ?? []
+        }
+        return $revlogStats?.grade_by_retrievability ?? []
+    })()
+
+    $: gradeByStabilitySeries = gradeSuccessOnly
+        ? ($revlogStats?.grade_by_stability_success_only ?? [])
+        : ($revlogStats?.grade_by_stability ?? [])
+
+    $: gradeByRepetitionsSeries = gradeSuccessOnly
+        ? ($revlogStats?.grade_by_repetitions_success_only ?? [])
+        : ($revlogStats?.grade_by_repetitions ?? [])
+
+    $: gradeByDifficultySeries = gradeSuccessOnly
+        ? ($revlogStats?.grade_by_difficulty_success_only ?? [])
+        : ($revlogStats?.grade_by_difficulty ?? [])
 </script>
 
 <GraphCategory hidden_title={i18n("ratings")} config_name="rating">
@@ -133,4 +189,111 @@
             {i18n("time-ratings-help")}
         </p>
     </RevlogGraphContainer>
+    <RevlogGraphContainer>
+        <h1 slot="title">{i18n("grade-distribution-by-retrievability")}</h1>
+        <BarScrollable
+            slot="graph"
+            data={easeBarChart(
+                gradeByRetrievabilitySeries,
+                0,
+                normalize_ease,
+                retrievabilityBucketLabeler
+            )}
+            average={normalize_ease}
+            bind:binSize={retrievabilityBinSize}
+        />
+        <label>
+            <input type="checkbox" bind:checked={normalize_ease} />
+            {i18n("as-ratio")}
+        </label>
+        <div class="toggle">
+            <label>
+                <input type="checkbox" bind:checked={retrievabilityExcludeSameDay} />
+                {i18n("exclude-same-day-reviews")}
+            </label>
+            <label>
+                <input type="checkbox" bind:checked={gradeSuccessOnly} />
+                {i18n("success-only-hard-good-easy")}
+            </label>
+        </div>
+        <p>{i18n("grade-distribution-by-retrievability-help")}</p>
+    </RevlogGraphContainer>
+    <RevlogGraphContainer>
+        <h1 slot="title">{i18n("grade-distribution-by-stability")}</h1>
+        <BarScrollable
+            slot="graph"
+            data={easeBarChart(gradeByStabilitySeries, 0, normalize_ease, stabilityBucketLabeler)}
+            average={normalize_ease}
+            left_aligned
+            bind:binSize={stabilityBinSize}
+        />
+        <label>
+            <input type="checkbox" bind:checked={normalize_ease} />
+            {i18n("as-ratio")}
+        </label>
+        <div class="toggle">
+            <label>
+                <input type="checkbox" bind:checked={gradeSuccessOnly} />
+                {i18n("success-only-hard-good-easy")}
+            </label>
+        </div>
+        <p>{i18n("grade-distribution-by-stability-help")}</p>
+    </RevlogGraphContainer>
+    <RevlogGraphContainer>
+        <h1 slot="title">{i18n("grade-distribution-by-repetitions")}</h1>
+        <BarScrollable
+            slot="graph"
+            data={easeBarChart(
+                gradeByRepetitionsSeries,
+                0,
+                normalize_ease,
+                repetitionsBucketLabeler
+            )}
+            average={normalize_ease}
+            left_aligned
+            bind:binSize={repetitionsBinSize}
+        />
+        <label>
+            <input type="checkbox" bind:checked={normalize_ease} />
+            {i18n("as-ratio")}
+        </label>
+        <div class="toggle">
+            <label>
+                <input type="checkbox" bind:checked={gradeSuccessOnly} />
+                {i18n("success-only-hard-good-easy")}
+            </label>
+        </div>
+        <p>{i18n("grade-distribution-by-repetitions-help")}</p>
+    </RevlogGraphContainer>
+    <RevlogGraphContainer>
+        <h1 slot="title">{i18n("grade-distribution-by-difficulty")}</h1>
+        <BarScrollable
+            slot="graph"
+            data={easeBarChart(gradeByDifficultySeries, 0, normalize_ease, difficultyBucketLabeler)}
+            average={normalize_ease}
+            left_aligned
+            bins={100}
+            bind:binSize={difficultyBinSize}
+        />
+        <label>
+            <input type="checkbox" bind:checked={normalize_ease} />
+            {i18n("as-ratio")}
+        </label>
+        <div class="toggle">
+            <label>
+                <input type="checkbox" bind:checked={gradeSuccessOnly} />
+                {i18n("success-only-hard-good-easy")}
+            </label>
+        </div>
+        <p>{i18n("grade-distribution-by-difficulty-help")}</p>
+    </RevlogGraphContainer>
 </GraphCategory>
+
+<style>
+    div.toggle {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 1em;
+        margin-top: 0.5em;
+    }
+</style>

@@ -170,6 +170,20 @@ average-second-per-stability-day = {$value} {$value ->
         [one] 1-day stability bucket
         *[many] {$n}-day stability buckets
     }
+average-second-per-repetition = {$value} {$value ->
+        [one] second
+        *[many] seconds
+    } on average per {$n ->
+        [one] repetition bucket
+        *[many] {$n} repetition buckets
+    }
+average-second-per-difficulty = {$value} {$value ->
+        [one] second
+        *[many] seconds
+    } on average per {$n ->
+        [one] 0.1-point difficulty bucket
+        *[many] {$n}×0.1-point difficulty buckets
+    }
 
 sxr-heatmap = SxR Heatmap
 sxr-heatmap-help =
@@ -250,9 +264,17 @@ time-totals-help =
 time-distribution-by-retrievability = Time Distribution by Retrievability
 time-distribution-by-retrievability-help =
     The average or median answer time (seconds) grouped by predicted retrievability bucket before each review.
+exclude-same-day-reviews = Exclude same-day reviews
+success-only-hard-good-easy = Success only (Hard/Good/Easy)
 time-distribution-by-stability = Time Distribution by Stability
 time-distribution-by-stability-help =
     The average or median answer time (seconds) grouped by predicted stability bucket (days) before each review.
+time-distribution-by-repetitions = Time Distribution by Repetitions
+time-distribution-by-repetitions-help =
+    The average or median answer time (seconds) grouped by the card repetition number at each review.
+time-distribution-by-difficulty = Time Distribution by Difficulty
+time-distribution-by-difficulty-help =
+    The average or median answer time (seconds) grouped by predicted difficulty bucket before each review.
 
 introduced = Introduced
 re-introduced = Re-Introduced
@@ -345,6 +367,7 @@ notes = Notes
 cards-by-burden = Cards/Load
 average-retrievability = Average Per Card
 stability = Stability
+interval = Interval
 retrievability = Retrievability
 retrievability-and-stability = Retrievability & Stability
 cards-and-stability = Stable cards
@@ -363,6 +386,7 @@ average-stability-over-time-help =
     This graph represents how your average stability, which is desired retention
     independent, has evolved over time. The mean gives a better sense of daily increases,
     while the median gives a value that is better representative of the real average.
+    The values shown here use S90 (the interval where retrievability reaches 90%), not raw FSRS stability.
 
     Note that the young/mature values are based on the amount of the respective cards in the deck (if there are 9 young cards and 1 mature card,
     90% of the bar will marked as young). A cards maturity is calculated here using the stability, not the interval,
@@ -377,6 +401,18 @@ interval-ratings-help = Ratings plotted by the interval they had before you rate
 time-ratings = Rating by Time Spent
 time-ratings-help =
     Ratings plotted by how long you spent looking at a card before rating it. Respects the deck presets "Maximum answer seconds" of the moment the answer was reviewed.
+grade-distribution-by-retrievability = Rating Distribution by Retrievability
+grade-distribution-by-retrievability-help =
+    Ratings grouped by predicted retrievability bucket before each review.
+grade-distribution-by-stability = Rating Distribution by Stability
+grade-distribution-by-stability-help =
+    Ratings grouped by predicted stability bucket (days) before each review.
+grade-distribution-by-repetitions = Rating Distribution by Repetitions
+grade-distribution-by-repetitions-help =
+    Ratings grouped by repetition number per card at each review.
+grade-distribution-by-difficulty = Rating Distribution by Difficulty
+grade-distribution-by-difficulty-help =
+    Ratings grouped by predicted difficulty bucket before each review.
 
 ratings-by-duration = {ratings} (Duration)
 ratings-by-duration-help =
@@ -521,8 +557,13 @@ fsrs-loss-by-fatigue-help =
     This graph displays how inaccurate FSRS is by the number of reviews you did prior in that day.
     Useful if you want to set a review limit.
 
+average-stability-over-reps = Average Stability over Reps
+average-stability-over-reps-help =
+    This graph groups current cards by their repetition count (prop:reps) and shows the average current S90 stability or current interval for each group.
+
 days-since-sibling-review = {$value} Days since sibling review
 x-previous-reviews = {$value} Previous reviews
+x-repetitions = {$value} Repetitions
 
 retention-per-day-since-last-sibling-review = {$value} retention per {$n ->
         [one] day
@@ -532,6 +573,15 @@ retention-per-day-since-last-sibling-review = {$value} retention per {$n ->
 retention-per-prior-review-that-day = {$value} retention per {$n ->
         [one] prior review
         *[many] {$n} prior reviews
+    }
+
+stability-per-repetition = {$value} stability per {$n ->
+        [one] repetition
+        *[many] {$n} repetitions
+    }
+interval-per-repetition = {$value} interval per {$n ->
+        [one] repetition
+        *[many] {$n} repetitions
     }
 
 loss-per-prior-review-that-day = {$value} loss per {$n ->

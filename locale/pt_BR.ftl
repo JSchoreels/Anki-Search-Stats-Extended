@@ -141,6 +141,20 @@ average-second-per-day = {$value} {$value ->
         [one] dia
         *[many] {$n} dias
     }
+average-second-per-repetition = {$value} {$value ->
+        [one] segundo
+        *[many] segundos
+    } em média por {$n ->
+        [one] faixa de repetição
+        *[many] {$n} faixas de repetição
+    }
+average-second-per-difficulty = {$value} {$value ->
+        [one] segundo
+        *[many] segundos
+    } em média por {$n ->
+        [one] faixa de dificuldade de 0,1 ponto
+        *[many] {$n} faixas de dificuldade de 0,1 ponto
+    }
 
 sxr-heatmap = Mapa de Calor ExR
 sxr-heatmap-help =
@@ -224,9 +238,17 @@ time-totals-help =
 time-distribution-by-retrievability = Distribuição de Tempo por Recuperabilidade
 time-distribution-by-retrievability-help =
     O tempo médio ou mediano de resposta (segundos), agrupado por faixa de recuperabilidade prevista antes de cada revisão.
+exclude-same-day-reviews = Excluir revisões no mesmo dia
+success-only-hard-good-easy = Apenas sucesso (Difícil/Bom/Fácil)
 time-distribution-by-stability = Distribuição de Tempo por Estabilidade
 time-distribution-by-stability-help =
     O tempo médio ou mediano de resposta (segundos), agrupado por faixa de estabilidade prevista (dias) antes de cada revisão.
+time-distribution-by-repetitions = Distribuição de Tempo por Repetições
+time-distribution-by-repetitions-help =
+    O tempo médio ou mediano de resposta (segundos), agrupado pelo número de repetição do cartão em cada revisão.
+time-distribution-by-difficulty = Distribuição de Tempo por Dificuldade
+time-distribution-by-difficulty-help =
+    O tempo médio ou mediano de resposta (segundos), agrupado por faixa de dificuldade prevista antes de cada revisão.
 
 introduced = Introduzidos
 re-introduced = Reintroduzidos
@@ -309,6 +331,7 @@ cards = Cartões
 notes = Notas
 average-retrievability = Média por Cartão
 stability = Estabilidade
+interval = Intervalo
 retrievability = Recuperabilidade
 retrievability-and-stability = Recuperabilidade e Estabilidade
 cards-and-stability = Cartões estáveis
@@ -341,6 +364,18 @@ time-ratings = Avaliações por Tempo
 time-ratings-help =
     Avaliações plotadas por quanto tempo você passou olhando para um cartão antes de avaliá-lo.
     Respeita os "Segundos máximos de resposta" das predefinições do baralho no momento em que a resposta foi revisada.
+grade-distribution-by-retrievability = Distribuição de Avaliações por Recuperabilidade
+grade-distribution-by-retrievability-help =
+    Avaliações agrupadas pela faixa de recuperabilidade prevista antes de cada revisão.
+grade-distribution-by-stability = Distribuição de Avaliações por Estabilidade
+grade-distribution-by-stability-help =
+    Avaliações agrupadas pela faixa de estabilidade prevista (dias) antes de cada revisão.
+grade-distribution-by-repetitions = Distribuição de Avaliações por Repetições
+grade-distribution-by-repetitions-help =
+    Avaliações agrupadas pelo número de repetição por cartão em cada revisão.
+grade-distribution-by-difficulty = Distribuição de Avaliações por Dificuldade
+grade-distribution-by-difficulty-help =
+    Avaliações agrupadas pela faixa de dificuldade prevista antes de cada revisão.
 card-count-time-machine = Máquina do Tempo da Contagem de Cartões
 card-count-time-machine-help =
     Mostra a contagem de tipos de seus cartões para uma data específica.
@@ -471,8 +506,13 @@ fsrs-loss-by-fatigue-help =
     Este gráfico exibe o quão impreciso o FSRS é pelo número de revisões que você fez anteriormente naquele dia.
     Útil se você quiser definir um limite de revisão.
 
+average-stability-over-reps = Estabilidade Média por Repetições
+average-stability-over-reps-help =
+    Este gráfico agrupa os cartões atuais pela contagem de repetições (prop:reps) e mostra a estabilidade S90 atual média ou o intervalo atual para cada grupo.
+
 days-since-sibling-review = {$value} Dias desde a revisão de um irmão
 x-previous-reviews = {$value} Revisões anteriores
+x-repetitions = {$value} Repetições
 
 retention-per-day-since-last-sibling-review = {$value} de retenção por {$n ->
         [one] dia
@@ -487,4 +527,13 @@ retention-per-prior-review-that-day = {$value} de retenção por {$n ->
 loss-per-prior-review-that-day = {$value} de perda por {$n ->
         [one] revisão anterior
         *[many] {$n} revisões anteriores
+    }
+
+stability-per-repetition = {$value} de estabilidade por {$n ->
+        [one] repetição
+        *[many] {$n} repetições
+    }
+interval-per-repetition = {$value} de intervalo por {$n ->
+        [one] repetição
+        *[many] {$n} repetições
     }
