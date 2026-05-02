@@ -311,12 +311,16 @@ export async function getMemorisedDays(
         <number[]>[]
     )
 
+    function configDeckId(card: CardData) {
+        return card.odid || card.did
+    }
+
     function card_config(cid: number) {
         const card = cards_by_id[cid]
         if (!card) {
             return undefined
         }
-        return configs[config_mapping[card.odid || card.did]]
+        return configs[config_mapping[configDeckId(card)]]
     }
 
     let stability_day_bins: number[][] = []

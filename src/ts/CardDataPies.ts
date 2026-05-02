@@ -1,11 +1,15 @@
 import { forgetting_curve } from "ts-fsrs"
+import type { DeckConfig } from "./config"
+import { getFsrsForConfig } from "./fsrsModel"
 import { day_ms } from "./revlogGraphs"
 import { getDecay, getExtraDataFromCard, type CardData } from "./search"
 
 export function calculateCardDataPies(
     cardData: CardData[],
     include_suspended: boolean,
-    zero_inclusive: boolean
+    zero_inclusive: boolean,
+    deckConfigs: Record<number, DeckConfig> | undefined = SSEother.deck_configs,
+    deckConfigIds: Record<number, number> | undefined = SSEother.deck_config_ids
 ) {
     let lapses: number[] = []
     let repetitions: number[] = []
@@ -29,7 +33,12 @@ export function calculateCardDataPies(
                 const stability = extraData.s
                 if (stability && card.ivl > 0 && card.type == 2 && card.queue > 0) {
                     let due = card.due < 365_000 ? card.due - days_elapsed : card.due / day_ms
-                    const target_R = forgetting_curve(getDecay(extraData), card.ivl, stability)
+                    const deckConfigId = deckConfigIds?.[card.odid || card.did]
+                    const deckConfig =
+                        deckConfigId === undefined ? undefined : deckConfigs?.[deckConfigId]
+                    const target_R = deckConfig
+                        ? getFsrsForConfig(deckConfig).forgetting_curve(card.ivl, stability)
+                        : forgetting_curve(getDecay(extraData), card.ivl, stability)
                     target_R_days[due] = (target_R_days[due] ?? 0) + target_R
                 }
             }

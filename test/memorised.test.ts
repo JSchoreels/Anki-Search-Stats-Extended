@@ -292,6 +292,78 @@ test("Calibration uses FSRS7 equation when deck option selects FSRS7", async () 
     expect(Math.abs(calibrationEntry!.predicted - p6)).toBeGreaterThan(1e-4)
 })
 
+test("Calibration uses each card's deck preset when a parent deck is selected", async () => {
+    const childA = new RevlogBuilder()
+    const childB = new RevlogBuilder()
+    const cards = [
+        {
+            ...childA.card(),
+            did: 11,
+        },
+        {
+            ...childB.card(),
+            did: 12,
+        },
+    ] as any[]
+    const revlogs = [
+        childA.review(1, 3),
+        childB.review(1, 3),
+        childA.review(1, 3),
+        childB.review(1, 3),
+    ] as Revlog[]
+    const config = {
+        10: {
+            id: 10,
+            fsrsVersion: 0,
+            fsrsParams7: weights7,
+            fsrsParams6: [],
+            fsrsParams5: [],
+            fsrsParams4: [],
+            fsrsWeights: [],
+        },
+        11: {
+            id: 11,
+            fsrsVersion: 1,
+            fsrsParams7: [],
+            fsrsParams6: weights,
+            fsrsParams5: [],
+            fsrsParams4: [],
+            fsrsWeights: [],
+        },
+        12: {
+            id: 12,
+            fsrsVersion: 2,
+            fsrsParams7: [],
+            fsrsParams6: [],
+            fsrsParams5: weights2,
+            fsrsParams4: [],
+            fsrsWeights: [],
+        },
+    } as Record<number, Partial<DeckConfig>>
+    const mapping = { 10: 10, 11: 11, 12: 12 }
+    const resolver: S90BatchResolver = async (items) => items.map((item) => item.stability)
+
+    const stats = await getMemorisedDays(revlogs, cards, config, mapping, [], 2, 2, resolver)
+    const calibrationEntries = stats.calibration.filter((entry) => !!entry && entry.count > 0)
+    const predicted = calibrationEntries.reduce((sum, entry) => sum + entry.predicted, 0)
+    const count = calibrationEntries.reduce((sum, entry) => sum + entry.count, 0)
+
+    const fsrsChildA = fsrs({ w: weights })
+    const fsrsChildB = fsrs({ w: weights2 })
+    const fsrsParent = fsrs({ w: weights7 })
+    const childAState = fsrsChildA.next_state(null, 0, 3)
+    const childBState = fsrsChildB.next_state(null, 0, 3)
+    const parentState = fsrsParent.next_state(null, 0, 3)
+    const expectedPerCardPreset =
+        fsrsChildA.forgetting_curve(1, childAState.stability) +
+        fsrsChildB.forgetting_curve(1, childBState.stability)
+    const parentPresetForBothCards = 2 * fsrsParent.forgetting_curve(1, parentState.stability)
+
+    expect(count).toBe(2)
+    expect(predicted).toBeCloseTo(expectedPerCardPreset, 6)
+    expect(Math.abs(predicted - parentPresetForBothCards)).toBeGreaterThan(1e-4)
+})
+
 test("Average stability over time uses S90 for FSRS7", async () => {
     const card = new RevlogBuilder()
     const fsrs7 = fsrs({ w: weights7 })

@@ -26,6 +26,8 @@ This document describes how stability-related values are computed for FSRS graph
 
 - Raw `stability` values are still used in other places that need original FSRS state.
 - This split avoids mixing display-oriented “stability over time” with raw state internals.
+- The Ease Factor graph reads raw current `card.data.s` and `card.data.d` from Anki, then passes that state to `ts-fsrs` to estimate the next Good-review stability gain.
+- Anki may persist FSRS stability values below the current `ts-fsrs` `S_MIN` floor. The graph treats values down to Anki's `0.0001` stability minimum as valid input, but raises them to `ts-fsrs` `S_MIN` before calling `next_state()` so a low-stability card does not abort graph rendering.
 
 ## Average Stability Over Reps
 
