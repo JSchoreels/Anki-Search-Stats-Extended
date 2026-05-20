@@ -24,9 +24,13 @@ This document describes how stability-related values are computed for FSRS graph
 
 ### Notes
 
-- Raw `stability` values are still used in other places that need original FSRS state.
+- Raw internal stability values are still used in places that need original
+  FSRS state. Current card data reads those values from `card.data.s_int`, with
+  fallback to `card.data.s` for older collections.
 - This split avoids mixing display-oriented “stability over time” with raw state internals.
-- The Ease Factor graph reads raw current `card.data.s` and `card.data.d` from Anki, then passes that state to `ts-fsrs` to estimate the next Good-review stability gain.
+- The Ease Factor graph reads current `card.data.s_int` and `card.data.d` from
+  Anki, then passes that state to `ts-fsrs` to estimate the next Good-review
+  stability gain.
 - Anki may persist FSRS stability values below the current `ts-fsrs` `S_MIN` floor. The graph treats values down to Anki's `0.0001` stability minimum as valid input, but raises them to `ts-fsrs` `S_MIN` before calling `next_state()` so a low-stability card does not abort graph rendering.
 
 ## Average Stability Over Reps
@@ -39,7 +43,7 @@ This document describes how stability-related values are computed for FSRS graph
 ### Semantics
 
 - Cards are grouped by current `CardData.reps`, matching Anki's `prop:reps` value.
-- The default stability view stores the mean current `S90` derived from raw FSRS stability in `card.data.s`.
+- The default stability view stores the mean current `S90` from `card.data.s`.
 - The interval view stores the mean current positive `CardData.ivl`.
 - Cards without a positive finite value for the selected metric are not included in that mean.
 

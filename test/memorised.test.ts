@@ -396,7 +396,7 @@ test("Average stability over time uses S90 for FSRS7", async () => {
     expect(stats.day_young_ratio_s90[firstDay]).toBeLessThanOrEqual(1)
 })
 
-test("Average stability by reps uses current S90 and interval", async () => {
+test("Average stability by reps uses stored current S90 and interval", async () => {
     const cards = [
         {
             id: 1,
@@ -432,12 +432,12 @@ test("Average stability by reps uses current S90 and interval", async () => {
         },
     ] as any[]
 
-    const stats = await getMemorisedDays([], cards, configs, mappings, [], 2, 2, async (items) =>
-        items.map((item) => item.stability * 2)
-    )
+    const stats = await getMemorisedDays([], cards, configs, mappings, [], 2, 2, async () => {
+        throw new Error("current card S90 should be read from card data")
+    })
 
-    expect(stats.average_stability_by_reps[2]).toBeCloseTo(24)
-    expect(stats.average_stability_by_reps[5]).toBeCloseTo(42)
+    expect(stats.average_stability_by_reps[2]).toBeCloseTo(12)
+    expect(stats.average_stability_by_reps[5]).toBeCloseTo(21)
     expect(stats.average_stability_by_reps[4]).toBeUndefined()
     expect(stats.average_interval_by_reps[2]).toBeCloseTo(25)
     expect(stats.average_interval_by_reps[5]).toBeCloseTo(60)

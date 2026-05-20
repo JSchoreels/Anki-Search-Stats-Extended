@@ -2,7 +2,12 @@ import { forgetting_curve } from "ts-fsrs"
 import type { DeckConfig } from "./config"
 import { getFsrsForConfig } from "./fsrsModel"
 import { day_ms } from "./revlogGraphs"
-import { getDecay, getExtraDataFromCard, type CardData } from "./search"
+import {
+    getDecay,
+    getExtraDataFromCard,
+    getFsrsInternalStabilityFromExtraData,
+    type CardData,
+} from "./search"
 
 export function calculateCardDataPies(
     cardData: CardData[],
@@ -30,7 +35,7 @@ export function calculateCardDataPies(
                 repetitions_burden[card.reps] = (repetitions_burden[card.reps] ?? 0) + burden
 
                 const extraData = getExtraDataFromCard(card)
-                const stability = extraData.s
+                const stability = getFsrsInternalStabilityFromExtraData(extraData)
                 if (stability && card.ivl > 0 && card.type == 2 && card.queue > 0) {
                     let due = card.due < 365_000 ? card.due - days_elapsed : card.due / day_ms
                     const deckConfigId = deckConfigIds?.[card.odid || card.did]

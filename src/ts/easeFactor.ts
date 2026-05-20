@@ -1,6 +1,10 @@
 import { createEmptyCard, S_MIN } from "ts-fsrs"
 import { getFsrs } from "./MemorisedBar"
-import { getExtraDataFromCard, type CardData } from "./search"
+import {
+    getExtraDataFromCard,
+    getFsrsInternalStabilityFromExtraData,
+    type CardData,
+} from "./search"
 
 const ANKI_MIN_FSRS_STABILITY = 0.0001
 
@@ -24,7 +28,10 @@ export function calculateEaseFactors(
             }
 
             const difficulty = data.d
-            const stability = data.s
+            const stability = getFsrsInternalStabilityFromExtraData(data)
+            if (stability === undefined) {
+                return
+            }
             const dr = data.dr
             const effectiveStability = stabilityForTsFsrs(stability)
             if (effectiveStability === undefined) {

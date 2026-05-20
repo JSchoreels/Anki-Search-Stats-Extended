@@ -110,3 +110,25 @@ test("future due retention keeps decay-only card path when deck config is unavai
 
     expect(stats.target_R_days[7]).toBeCloseTo(forgetting_curve(FSRS5_DEFAULT_DECAY, 7, 12), 6)
 })
+
+test("future due retention uses internal stability when stored S90 differs", () => {
+    const stats = calculateCardDataPies(
+        [reviewCard({ data: JSON.stringify({ s: 4, s_int: 12 }) })],
+        false,
+        false,
+        {
+            1: deckConfig({
+                id: 1,
+                fsrsVersion: 0,
+                fsrsParams7: weights7,
+            }),
+        },
+        { 10: 1 }
+    )
+
+    expect(stats.target_R_days[7]).toBeCloseTo(fsrs({ w: weights7 }).forgetting_curve(7, 12), 6)
+    expect(stats.target_R_days[7]).not.toBeCloseTo(
+        fsrs({ w: weights7 }).forgetting_curve(7, 4),
+        6
+    )
+})

@@ -14,7 +14,13 @@ import type { LossBar } from "./bar"
 import type { DeckConfig } from "./config"
 import { selectTsFsrsParams } from "./fsrsParams"
 import { type Buckets, dayFromMs, emptyBuckets, IDify, rollover_ms, today } from "./revlogGraphs"
-import { type CardData, getExtraDataFromCard, type Revlog } from "./search"
+import {
+    type CardData,
+    getExtraDataFromCard,
+    getFsrsInternalStabilityFromCard,
+    getFsrsS90FromCard,
+    type Revlog,
+} from "./search"
 
 export interface LossBin {
     real: number
@@ -366,7 +372,7 @@ export async function getMemorisedDays(
 
     let last_stability: number[] = []
     let s90_by_key = new Map<string, number>()
-    let current_card_s90_key_by_cid = new Map<number, string>()
+    let current_card_s90_by_cid = new Map<number, number>()
     let s90_events_by_day = new Map<number, { card_id: number; key: string }[]>()
     let s90_request_items: S90BatchItem[] = []
     let s90_request_index_by_key = new Map<string, number>()
@@ -661,17 +667,11 @@ export async function getMemorisedDays(
     }
 
     for (const card of cards) {
-        const config = card_config(card.id)
-        const stability = getExtraDataFromCard(card).s
-        if (
-            !config ||
-            typeof stability !== "number" ||
-            !Number.isFinite(stability) ||
-            stability <= 0
-        ) {
+        const stability = getFsrsS90FromCard(card)
+        if (stability === undefined) {
             continue
         }
-        current_card_s90_key_by_cid.set(card.id, queueS90Request(config.id, stability))
+        current_card_s90_by_cid.set(card.id, stability)
     }
 
     s90_deduped_total = Math.max(0, s90_dedup_total - s90_request_items.length)
@@ -718,10 +718,9 @@ export async function getMemorisedDays(
         const previous = dayFromMs(card.last_review!.getTime())
         const fsrs = getFsrs(card_config(num_cid)!)
         forgetting_curve(fsrs, last_stability[num_cid], previous, today + 1, card, num_cid)
-        const extra_data = cards_by_id[num_cid].data ? JSON.parse(cards_by_id[num_cid].data) : null
-        if (extra_data?.s) {
+        const actual = getFsrsInternalStabilityFromCard(cards_by_id[num_cid])
+        if (actual !== undefined) {
             const expected = last_stability[num_cid]
-            const actual = extra_data.s
             if (Math.abs(expected - actual) > 0.01) {
                 inaccurate_cids.push({
                     cid: num_cid,
@@ -775,8 +774,7 @@ export async function getMemorisedDays(
     const stabilityTimeStats = bucketTimeStats(time_by_stability_samples)
     const difficultyTimeStats = bucketTimeStats(time_by_difficulty_samples)
     const averageStabilityByReps = meanByReps(cards, (card) => {
-        const key = current_card_s90_key_by_cid.get(card.id)
-        return key ? s90_by_key.get(key) : undefined
+        return current_card_s90_by_cid.get(card.id)
     })
     const averageIntervalByReps = meanByReps(cards, (card) => card.ivl)
     console.timeEnd("Calculating memorised days")

@@ -88,6 +88,7 @@ export interface CardExtraData {
     dr?: number
     pos?: number
     s?: number
+    s_int?: number
     decay?: number
 }
 
@@ -108,6 +109,28 @@ export function getCardDecay(card: CardData) {
 
 export function getDecay(data: CardExtraData) {
     return data.decay ?? FSRS5_DEFAULT_DECAY
+}
+
+function positiveFinite(value: unknown): number | undefined {
+    return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : undefined
+}
+
+export function getFsrsS90FromExtraData(data: CardExtraData): number | undefined {
+    return positiveFinite(data.s)
+}
+
+export function getFsrsInternalStabilityFromExtraData(
+    data: CardExtraData
+): number | undefined {
+    return positiveFinite(data.s_int) ?? getFsrsS90FromExtraData(data)
+}
+
+export function getFsrsS90FromCard(card: CardData): number | undefined {
+    return getFsrsS90FromExtraData(getExtraDataFromCard(card))
+}
+
+export function getFsrsInternalStabilityFromCard(card: CardData): number | undefined {
+    return getFsrsInternalStabilityFromExtraData(getExtraDataFromCard(card))
 }
 
 export interface Revlog {

@@ -34,6 +34,35 @@ test("Normal card uses due field", () => {
     const dataset = create_card_sr_dataset(cards, 100)
     expect(dataset).not.toBeNull()
     expect(dataset!.card_sr_data.length).toBe(1)
+    expect(dataset!.card_sr_data[0].s).toBe(5)
+})
+
+test("Retrievability uses internal stability when stored S90 differs", () => {
+    const cards: CardData[] = [{
+        id: 1,
+        nid: 1,
+        did: 1,
+        ord: 0,
+        mod: 0,
+        usn: 0,
+        type: CardType.Review,
+        queue: 0,
+        due: 100,
+        ivl: 10,
+        factor: 0,
+        reps: 0,
+        lapses: 0,
+        left: 0,
+        odue: 0,
+        odid: 0,
+        flags: 0,
+        data: JSON.stringify({ s: 5, s_int: 20, d: 0.3 })
+    }]
+
+    const dataset = create_card_sr_dataset(cards, 100)
+    expect(dataset).not.toBeNull()
+    expect(dataset!.card_sr_data[0].s).toBe(5)
+    expect(dataset!.card_sr_data[0].r).not.toBeCloseTo(1)
 })
 
 test("Filtered card uses odue field", () => {
