@@ -4,6 +4,7 @@ import {
     averageDecay,
     buildForgettingCurve,
     computeStabilityForSeries,
+    fitStability,
 } from "../src/ts/forgettingCurveData"
 import { calculateRevlogStats, day_ms, dayFromMs } from "../src/ts/revlogGraphs"
 import type { Revlog } from "../src/ts/search"
@@ -69,6 +70,18 @@ test("Burden delta", () => {
 test("learn_step_count", () => {
     console.log(burden_revlogs)
     expect(learn_steps_per_card).toContain(2)
+})
+
+
+test("Forgetting curve stability fit uses Anki minimum stability", () => {
+    const stability = fitStability(
+        [{ cid: 1, firstRating: 1, delta: 10, recall: 0 }],
+        0.0001,
+        -0.5
+    )
+
+    expect(stability).toBeGreaterThanOrEqual(0.0001)
+    expect(stability).toBeLessThan(0.001)
 })
 
 test("Forgetting curve aggregates recall data", () => {

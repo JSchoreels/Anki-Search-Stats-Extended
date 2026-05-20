@@ -1,5 +1,5 @@
 import { mean } from "d3-array"
-import { default_w, forgetting_curve, FSRS5_DEFAULT_DECAY, S_MIN } from "ts-fsrs"
+import { default_w, forgetting_curve, FSRS5_DEFAULT_DECAY } from "ts-fsrs"
 
 export type ForgettingCurveDecayModel = number | readonly number[]
 
@@ -38,6 +38,7 @@ const RATING_DEFAULT_STABILITY: Record<number, number> = {
     4: default_w[3],
 }
 
+const ANKI_MIN_FSRS_STABILITY = 0.0001
 const MAX_STABILITY = 100
 const EPSILON = 1e-6
 
@@ -316,7 +317,7 @@ export function fitStability(
     samples: ForgettingSample[],
     initial: number,
     decay: ForgettingCurveDecayModel = FSRS5_DEFAULT_DECAY,
-    minStability: number = S_MIN,
+    minStability: number = ANKI_MIN_FSRS_STABILITY,
     maxStability: number = MAX_STABILITY
 ): number | null {
     if (!samples.length) {
