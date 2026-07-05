@@ -1,10 +1,16 @@
 import { fsrs } from "ts-fsrs"
 import {
-    type S90BatchResolver,
+    buildCalibrationBins,
     getMemorisedDays,
-    s90DedupStepForStability,
+    intervalAtRetrievability,
+    type S90BatchResolver,
 } from "../src/ts/MemorisedBar"
-import type { DeckConfig } from "../src/ts/config"
+import type { DeckConfig, ResolvedFsrsPreset } from "../src/ts/config"
+import {
+    paramsForTsFsrs,
+    selectResolvedFsrsPresetParams,
+    selectTsFsrsParams,
+} from "../src/ts/fsrsParams"
 import { dayFromMs } from "../src/ts/revlogGraphs"
 import { Revlog } from "../src/ts/search"
 import { RevlogBuilder } from "./revlogBuilder"
@@ -50,6 +56,11 @@ const weights2 = [
     2.9898, // on initial good: 100, no intra-day
 ]
 const weights7 = [
+    0.1104, 2.2395, 3.9221, 11.7841, 6.1686, 0.6457, 3.6807, 1.9795, 0.0, 1.3826, 0.7024, 0.5999,
+    0.8146, 0.6398, 1.0, 1.3207, 0.6707, 3.8668, 0.4416, 0.0934, 1.8631, 0.6162, 1.0869, 0.1567,
+    0.0801, 0.2421, 0.9464, 0.1433, 0.7145, 0.0, 0.5667, 0.3734, 0.5333, 0.3048,
+]
+const legacyPreviewWeights7 = [
     0.041, 2.4175, 4.1283, 11.9709, 5.6385, 0.4468, 3.262, 2.3054, 0.1688, 1.3325, 0.3524, 0.0049,
     0.7503, 0.0896, 0.6625, 1.3, 0.882, 0.3072, 3.5875, 0.303, 0.0107, 0.2279, 2.6413, 0.5594, 1.3,
     2.5, 1.0, 0.0723, 0.1634, 0.5, 0.9555, 0.2245, 0.6232, 0.1362, 0.3862,
@@ -62,35 +73,78 @@ const configs: Record<number, Partial<DeckConfig>> = {
     3: { id: 3, fsrsParams7: weights7 },
 }
 
-function s90(fsrsInstance: ReturnType<typeof fsrs>, stability: number, target = 0.9): number {
-    let low = 0
-    let high = Math.max(stability, 1)
-    while (fsrsInstance.forgetting_curve(high, stability) > target && high < 36500) {
-        high = Math.min(high * 2, 36500)
-    }
-    for (let i = 0; i < 50; i++) {
-        const mid = (low + high) / 2
-        const r = fsrsInstance.forgetting_curve(mid, stability)
-        if (r > target) {
-            low = mid
-        } else {
-            high = mid
+function localS90Resolver(
+    cards: any[],
+    deckConfigs: Record<number, Partial<DeckConfig>>,
+    configMapping: Record<number, number>,
+    fsrsPresetsByCard: Record<number, ResolvedFsrsPreset> = {}
+): S90BatchResolver {
+    const cardsById = Object.fromEntries(cards.map((card) => [card.id, card]))
+    const fsrsBySignature: Record<string, ReturnType<typeof fsrs>> = {}
+
+    function paramsForCard(cardId: number) {
+        const preset = fsrsPresetsByCard[cardId]
+        if (preset) {
+            return selectResolvedFsrsPresetParams(preset)
         }
+        const card = cardsById[cardId]
+        const config = deckConfigs[configMapping[card.odid || card.did]]
+        return selectTsFsrsParams(config as DeckConfig)
     }
-    return (low + high) / 2
+
+    return async (items, target) =>
+        items.map((item) => {
+            const params = paramsForCard(item.card_id)
+            const signature = `${params.length}:${params.join(",")}`
+            fsrsBySignature[signature] ??= fsrs({ w: paramsForTsFsrs(params) })
+            return intervalAtRetrievability(fsrsBySignature[signature], item.stability, target)
+        })
 }
 
-function localS90Resolver(cards: any[]): S90BatchResolver {
-    const fsrsByConfigId: Record<number, ReturnType<typeof fsrs>> = {
-        1: fsrs({ w: weights }),
-        2: fsrs({ w: weights2 }),
-        3: fsrs({ w: weights7 }),
-    }
-    return async (items, target) => {
-        return items.map((item) => {
-            const fsrsModel = fsrsByConfigId[item.config_id]
-            return s90(fsrsModel, item.stability, target)
-        })
+function getMemorisedDaysForTest(
+    revlogs: Revlog[],
+    cards: any[],
+    deckConfigs: Record<number, Partial<DeckConfig>>,
+    configMapping: Record<number, number>,
+    lastForget: number[] = [],
+    leechElapsedThreshold = 2,
+    leechMinReviews = 2,
+    fsrsPresetsByCard: Record<number, ResolvedFsrsPreset> = {}
+) {
+    return getMemorisedDays(
+        revlogs,
+        cards,
+        deckConfigs as typeof SSEother.deck_configs,
+        configMapping,
+        lastForget,
+        leechElapsedThreshold,
+        leechMinReviews,
+        fsrsPresetsByCard,
+        localS90Resolver(cards, deckConfigs, configMapping, fsrsPresetsByCard)
+    )
+}
+
+function resolvedPreset(
+    params: number[],
+    id = "addon:test",
+    fsrsVersion: ResolvedFsrsPreset["fsrsVersion"] = "seven"
+): ResolvedFsrsPreset {
+    return {
+        id,
+        name: id,
+        fsrsVersion,
+        params,
+        desiredRetention: 0.9,
+        historicalRetention: 0.9,
+        ignoreRevlogsBeforeDate: "",
+        fsrsDynamicDesiredRetentionEnabled: false,
+        fsrsDynamicDesiredRetentionParams: [],
+        fsrsDynamicDesiredRetentionWeights: [],
+        fsrsDynamicDesiredRetentionAvgDrs: [],
+        fsrsDynamicDesiredRetentionFsrsEqWeights: [],
+        fsrsDynamicDesiredRetentionFsrsEqDrs: [],
+        fsrsDynamicDesiredRetentionMin: 0,
+        fsrsDynamicDesiredRetentionMax: 0,
     }
 }
 
@@ -111,9 +165,8 @@ test("Day Timings", async () => {
         card.review(20, 3),
     ] as Revlog[]
 
-    const memorised = (
-        await getMemorisedDays(revlogs, cards, configs, mappings, [], 2, 2, localS90Resolver(cards))
-    ).retrievabilityDays
+    const memorised = (await getMemorisedDaysForTest(revlogs, cards, configs, mappings, [], 2, 2))
+        .retrievabilityDays
 
     expect(memorised.length).not.toBe(0)
     expect(memorised[0]).toBe(1)
@@ -140,9 +193,8 @@ test("Stability", async () => {
         card.review(80, 3),
     ] as Revlog[]
 
-    const memorised = (
-        await getMemorisedDays(revlogs, cards, configs, mappings, [], 2, 2, localS90Resolver(cards))
-    ).retrievabilityDays
+    const memorised = (await getMemorisedDaysForTest(revlogs, cards, configs, mappings, [], 2, 2))
+        .retrievabilityDays
 
     const OFFSET = 10
 
@@ -171,9 +223,8 @@ test("Stability On Forget", async () => {
         card.review(80, 3),
     ] as Revlog[]
 
-    const memorised = (
-        await getMemorisedDays(revlogs, cards, configs, mappings, [], 2, 2, localS90Resolver(cards))
-    ).retrievabilityDays
+    const memorised = (await getMemorisedDaysForTest(revlogs, cards, configs, mappings, [], 2, 2))
+        .retrievabilityDays
 
     const OFFSET = 10
 
@@ -194,7 +245,7 @@ test("Leech Detection", async () => {
     const revlogs = [card.review(-100, 3), card.review(100, 3), card.review(100, 1)] as Revlog[]
 
     const leech_probabilities = (
-        await getMemorisedDays(revlogs, cards, configs, mappings, [], 1, 0, localS90Resolver(cards))
+        await getMemorisedDaysForTest(revlogs, cards, configs, mappings, [], 1, 0)
     ).leech_probabilities
 
     expect(leech_probabilities[card.card().id]).toBeCloseTo(0.1)
@@ -210,8 +261,37 @@ test("FSRS7 params are accepted in memorised graph pipeline", async () => {
     ]
     const revlogs = [card.review(-3000, 3), card.review(-3000, 3), card.review(5, 3)] as Revlog[]
 
+    const memorised = (await getMemorisedDaysForTest(revlogs, cards, configs, mappings, [], 2, 2))
+        .retrievabilityDays
+
+    expect(memorised.length).not.toBe(0)
+    expect(memorised[0]).toBeCloseTo(0.99999, 5)
+})
+
+test("Legacy preview FSRS7 params are accepted in memorised graph pipeline", async () => {
+    const card = new RevlogBuilder()
+    const cards = [
+        {
+            ...card.card(),
+            did: 4,
+        } as any,
+    ]
+    const legacyConfigs = {
+        ...configs,
+        4: { id: 4, fsrsParams7: legacyPreviewWeights7 },
+    }
+    const revlogs = [card.review(-3000, 3), card.review(-3000, 3), card.review(5, 3)] as Revlog[]
+
     const memorised = (
-        await getMemorisedDays(revlogs, cards, configs, mappings, [], 2, 2, localS90Resolver(cards))
+        await getMemorisedDaysForTest(
+            revlogs,
+            cards,
+            legacyConfigs,
+            { ...mappings, 4: 4 },
+            [],
+            2,
+            2
+        )
     ).retrievabilityDays
 
     expect(memorised.length).not.toBe(0)
@@ -236,16 +316,15 @@ test("Calibration uses FSRS6 equation when deck option selects FSRS6", async () 
         },
     } as Record<number, Partial<DeckConfig>>
     const mapping = { 1: 1 }
-    const resolver: S90BatchResolver = async (items) => items.map((item) => item.stability)
 
-    const stats = await getMemorisedDays(revlogs, cards, config, mapping, [], 2, 2, resolver)
+    const stats = await getMemorisedDaysForTest(revlogs, cards, config, mapping, [], 2, 2)
     const calibrationEntry = stats.calibration.find((entry) => !!entry && entry.count > 0)
 
     expect(calibrationEntry).toBeTruthy()
     expect(calibrationEntry!.count).toBe(1)
 
     const fsrs6 = fsrs({ w: weights })
-    const fsrs7 = fsrs({ w: weights7 })
+    const fsrs7 = fsrs({ w: paramsForTsFsrs(weights7) })
     const firstState6 = fsrs6.next_state(null, 0, 3)
     const expectedP6 = fsrs6.forgetting_curve(1, firstState6.stability)
     const firstState7 = fsrs7.next_state(null, 0, 3)
@@ -273,16 +352,15 @@ test("Calibration uses FSRS7 equation when deck option selects FSRS7", async () 
         },
     } as Record<number, Partial<DeckConfig>>
     const mapping = { 1: 1 }
-    const resolver: S90BatchResolver = async (items) => items.map((item) => item.stability)
 
-    const stats = await getMemorisedDays(revlogs, cards, config, mapping, [], 2, 2, resolver)
+    const stats = await getMemorisedDaysForTest(revlogs, cards, config, mapping, [], 2, 2)
     const calibrationEntry = stats.calibration.find((entry) => !!entry && entry.count > 0)
 
     expect(calibrationEntry).toBeTruthy()
     expect(calibrationEntry!.count).toBe(1)
 
     const fsrs6 = fsrs({ w: weights })
-    const fsrs7 = fsrs({ w: weights7 })
+    const fsrs7 = fsrs({ w: paramsForTsFsrs(weights7) })
     const firstState6 = fsrs6.next_state(null, 0, 3)
     const p6 = fsrs6.forgetting_curve(1, firstState6.stability)
     const firstState7 = fsrs7.next_state(null, 0, 3)
@@ -290,6 +368,50 @@ test("Calibration uses FSRS7 equation when deck option selects FSRS7", async () 
 
     expect(calibrationEntry!.predicted).toBeCloseTo(expectedP7, 6)
     expect(Math.abs(calibrationEntry!.predicted - p6)).toBeGreaterThan(1e-4)
+})
+
+test("Calibration samples can be reused with alternate review-time predictions", async () => {
+    const card = new RevlogBuilder()
+    const cards = [
+        {
+            ...card.card(),
+            did: 1,
+        } as any,
+    ]
+    const revlogs = [card.review(1, 3), card.review(3, 3)] as Revlog[]
+    const stats = await getMemorisedDaysForTest(revlogs, cards, configs, mappings, [], 2, 2)
+    const rwkvPrediction = 0.42
+    const rwkvBins = buildCalibrationBins(stats.calibration_samples, {
+        [revlogs[1].id]: rwkvPrediction,
+    })
+    const rwkvEntry = rwkvBins.find((entry) => !!entry && entry.count > 0)
+
+    expect(stats.calibration_samples).toEqual([{ revlogId: revlogs[1].id, actual: 1 }])
+    expect(stats.fsrs_calibration_predictions_by_revlog_id[revlogs[1].id]).toBeGreaterThan(0)
+    expect(rwkvEntry).toBeTruthy()
+    expect(rwkvEntry!.count).toBe(1)
+    expect(rwkvEntry!.predicted).toBeCloseTo(rwkvPrediction, 6)
+    expect(rwkvEntry!.real).toBe(1)
+})
+
+test("Alternate calibration bins ignore missing and invalid predictions", () => {
+    const bins = buildCalibrationBins(
+        [
+            { revlogId: 1, actual: 1 },
+            { revlogId: 2, actual: 0 },
+            { revlogId: 3, actual: 1 },
+        ],
+        {
+            1: 0.25,
+            2: 1.5,
+        }
+    )
+    const entries = bins.filter((entry) => !!entry && entry.count > 0)
+
+    expect(entries).toHaveLength(1)
+    expect(entries[0].count).toBe(1)
+    expect(entries[0].predicted).toBeCloseTo(0.25, 6)
+    expect(entries[0].real).toBe(1)
 })
 
 test("Calibration uses each card's deck preset when a parent deck is selected", async () => {
@@ -341,16 +463,15 @@ test("Calibration uses each card's deck preset when a parent deck is selected", 
         },
     } as Record<number, Partial<DeckConfig>>
     const mapping = { 10: 10, 11: 11, 12: 12 }
-    const resolver: S90BatchResolver = async (items) => items.map((item) => item.stability)
 
-    const stats = await getMemorisedDays(revlogs, cards, config, mapping, [], 2, 2, resolver)
+    const stats = await getMemorisedDaysForTest(revlogs, cards, config, mapping, [], 2, 2)
     const calibrationEntries = stats.calibration.filter((entry) => !!entry && entry.count > 0)
     const predicted = calibrationEntries.reduce((sum, entry) => sum + entry.predicted, 0)
     const count = calibrationEntries.reduce((sum, entry) => sum + entry.count, 0)
 
     const fsrsChildA = fsrs({ w: weights })
     const fsrsChildB = fsrs({ w: weights2 })
-    const fsrsParent = fsrs({ w: weights7 })
+    const fsrsParent = fsrs({ w: paramsForTsFsrs(weights7) })
     const childAState = fsrsChildA.next_state(null, 0, 3)
     const childBState = fsrsChildB.next_state(null, 0, 3)
     const parentState = fsrsParent.next_state(null, 0, 3)
@@ -364,9 +485,41 @@ test("Calibration uses each card's deck preset when a parent deck is selected", 
     expect(Math.abs(predicted - parentPresetForBothCards)).toBeGreaterThan(1e-4)
 })
 
-test("Average stability over time uses S90 for FSRS7", async () => {
+test("Calibration uses Anki-resolved dynamic preset for a card", async () => {
     const card = new RevlogBuilder()
-    const fsrs7 = fsrs({ w: weights7 })
+    const cards = [
+        {
+            ...card.card(),
+            did: 3,
+        } as any,
+    ]
+    const revlogs = [card.review(1, 3), card.review(3, 3)] as Revlog[]
+    const dynamicPreset = resolvedPreset(weights, "addon:test:dynamic", "six")
+    const stats = await getMemorisedDaysForTest(revlogs, cards, configs, mappings, [], 2, 2, {
+        [card.card().id]: dynamicPreset,
+    })
+    const calibrationEntry = stats.calibration.find((entry) => !!entry && entry.count > 0)
+
+    const deckFsrs = fsrs({ w: paramsForTsFsrs(weights7) })
+    const dynamicFsrs = fsrs({ w: weights })
+    const deckState = deckFsrs.next_state(null, 0, 3)
+    const dynamicState = dynamicFsrs.next_state(null, 0, 3)
+
+    expect(calibrationEntry).toBeTruthy()
+    expect(calibrationEntry!.count).toBe(1)
+    expect(calibrationEntry!.predicted).toBeCloseTo(
+        dynamicFsrs.forgetting_curve(1, dynamicState.stability),
+        6
+    )
+    expect(calibrationEntry!.predicted).not.toBeCloseTo(
+        deckFsrs.forgetting_curve(1, deckState.stability),
+        4
+    )
+})
+
+test("Average stability over time uses replayed S90 for FSRS7", async () => {
+    const card = new RevlogBuilder()
+    const fsrs7 = fsrs({ w: paramsForTsFsrs(weights7) })
     const cards = [
         {
             ...card.card(),
@@ -375,25 +528,53 @@ test("Average stability over time uses S90 for FSRS7", async () => {
     ]
     const revlogs = [card.review(1, 3), card.review(3, 3)] as Revlog[]
 
-    const stats = await getMemorisedDays(
-        revlogs,
-        cards,
-        configs,
-        mappings,
-        [],
-        2,
-        2,
-        localS90Resolver(cards)
-    )
+    const stats = await getMemorisedDaysForTest(revlogs, cards, configs, mappings, [], 2, 2)
 
     const firstDay = dayFromMs(revlogs[0].id)
     const firstReviewState = fsrs7.next_state(null, 0, 3)
-    const expectedS90 = s90(fsrs7, firstReviewState.stability)
+    const expectedS90 = intervalAtRetrievability(fsrs7, firstReviewState.stability, 0.9)
 
     expect(stats.day_means[firstDay]).toBeCloseTo(expectedS90, 5)
     expect(stats.day_means[firstDay]).not.toBeCloseTo(firstReviewState.stability, 2)
     expect(stats.day_young_ratio_s90[firstDay]).toBeGreaterThanOrEqual(0)
     expect(stats.day_young_ratio_s90[firstDay]).toBeLessThanOrEqual(1)
+})
+
+test("Average stability over time resolves S90 locally by default", async () => {
+    const card = new RevlogBuilder()
+    const cards = [
+        {
+            ...card.card(),
+            did: 3,
+        } as any,
+    ]
+    const revlogs = [card.review(1, 3), card.review(3, 3)] as Revlog[]
+    const fetchSpy = jest.spyOn(global, "fetch").mockImplementation(() => {
+        throw new Error("S90 backend should not be called")
+    })
+
+    try {
+        const stats = await getMemorisedDays(
+            revlogs,
+            cards,
+            configs as typeof SSEother.deck_configs,
+            mappings,
+            [],
+            2,
+            2
+        )
+        const firstDay = dayFromMs(revlogs[0].id)
+        const fsrs7 = fsrs({ w: paramsForTsFsrs(weights7) })
+        const firstReviewState = fsrs7.next_state(null, 0, 3)
+
+        expect(stats.day_means[firstDay]).toBeCloseTo(
+            intervalAtRetrievability(fsrs7, firstReviewState.stability, 0.9),
+            5
+        )
+        expect(fetchSpy).not.toHaveBeenCalled()
+    } finally {
+        fetchSpy.mockRestore()
+    }
 })
 
 test("Average stability by reps uses stored current S90 and interval", async () => {
@@ -432,9 +613,7 @@ test("Average stability by reps uses stored current S90 and interval", async () 
         },
     ] as any[]
 
-    const stats = await getMemorisedDays([], cards, configs, mappings, [], 2, 2, async () => {
-        throw new Error("current card S90 should be read from card data")
-    })
+    const stats = await getMemorisedDaysForTest([], cards, configs, mappings, [], 2, 2)
 
     expect(stats.average_stability_by_reps[2]).toBeCloseTo(12)
     expect(stats.average_stability_by_reps[5]).toBeCloseTo(21)
@@ -444,86 +623,29 @@ test("Average stability by reps uses stored current S90 and interval", async () 
     expect(stats.average_interval_by_reps[4]).toBeUndefined()
 })
 
-test("S90 batch requests deduplicate close stabilities per config", async () => {
-    const cardA = new RevlogBuilder()
-    const cardB = new RevlogBuilder()
-    const cards = [
-        {
-            ...cardA.card(),
-            did: 3,
-        } as any,
-        {
-            ...cardB.card(),
-            did: 3,
-        } as any,
-    ]
-    const revlogs = [cardA.review(1, 3), cardB.review(1, 3), cardA.review(3, 3)] as Revlog[]
-
-    const batchSizes: number[] = []
-    const logSpy = jest.spyOn(console, "log").mockImplementation(() => {})
-    const resolver: S90BatchResolver = async (items) => {
-        batchSizes.push(items.length)
-        return items.map((item) => item.stability)
-    }
-
-    await getMemorisedDays(revlogs, cards, configs, mappings, [], 2, 2, resolver)
-    const dedupSummaryLogs = logSpy.mock.calls
-        .map((call) => String(call[0]))
-        .filter((line) => line.startsWith("S90 dedup summary:"))
-    logSpy.mockRestore()
-
-    expect(batchSizes.length).toBe(1)
-    expect(batchSizes[0]).toBeLessThan(3)
-    expect(dedupSummaryLogs.length).toBeGreaterThan(0)
-    expect(dedupSummaryLogs[0]).toMatch(
-        /^S90 dedup summary: \d+\/\d+ \(\d+\.\d%\), backend calls: \d+$/
+test("Stability mismatch warning logs a bounded sample", async () => {
+    const builders = Array.from({ length: 25 }, () => new RevlogBuilder())
+    const cards = builders.map(
+        (builder) =>
+            ({
+                ...builder.card(),
+                did: 3,
+                data: JSON.stringify({ s_int: 999 }),
+            }) as any
     )
-})
+    const revlogs = builders.map((builder) => builder.review(1, 3)) as Revlog[]
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {})
 
-test("S90 dedup step is dynamic by stability range", () => {
-    expect(s90DedupStepForStability(10)).toBe(0.1)
-    expect(s90DedupStepForStability(10.01)).toBe(0.5)
-    expect(s90DedupStepForStability(3.2)).toBe(0.1)
-    expect(s90DedupStepForStability(25)).toBe(0.5)
-})
+    await getMemorisedDaysForTest(revlogs, cards, configs, mappings, [], 2, 2)
 
-test("S90 dedup cache avoids repeated backend calls across flushes", async () => {
-    const cardA = new RevlogBuilder()
-    const cardB = new RevlogBuilder()
-    const cardC = new RevlogBuilder()
-    cardC.wait(24 * 60 * 60 * 1000)
+    const warning = warnSpy.mock.calls.find((call) =>
+        String(call[0]).startsWith("The stability of ")
+    )
+    warnSpy.mockRestore()
 
-    const cards = [
-        {
-            ...cardA.card(),
-            did: 3,
-        } as any,
-        {
-            ...cardB.card(),
-            did: 3,
-        } as any,
-        {
-            ...cardC.card(),
-            did: 3,
-        } as any,
-    ]
-    const revlogs = [
-        cardA.review(2, 3),
-        cardB.review(2, 3),
-        cardC.review(2, 3),
-        cardA.review(1, 3),
-    ].sort((a, b) => a.id - b.id) as Revlog[]
-
-    const batchSizes: number[] = []
-    const resolver: S90BatchResolver = async (items) => {
-        batchSizes.push(items.length)
-        return items.map((item) => item.stability)
-    }
-
-    await getMemorisedDays(revlogs, cards, configs, mappings, [], 2, 2, resolver)
-
-    expect(batchSizes.length).toBe(1)
-    expect(batchSizes[0]).toBeGreaterThan(0)
+    expect(warning).toBeDefined()
+    expect(warning![1].inaccurate_cids).toHaveLength(20)
+    expect(warning![1].omitted_inaccurate_cids).toBe(5)
 })
 
 test("Time distribution by difficulty is generated", async () => {
@@ -544,16 +666,7 @@ test("Time distribution by difficulty is generated", async () => {
         card.review(3, 2, 6000),
     ].filter(Boolean) as Revlog[]
 
-    const stats = await getMemorisedDays(
-        revlogs,
-        cards,
-        configs,
-        mappings,
-        [],
-        2,
-        2,
-        localS90Resolver(cards)
-    )
+    const stats = await getMemorisedDaysForTest(revlogs, cards, configs, mappings, [], 2, 2)
 
     const difficultyValues = (stats.time_by_difficulty_mean ?? []).filter((v) => Number.isFinite(v))
     const difficultyBuckets = Object.keys(stats.time_by_difficulty_mean ?? {}).map((v) => +v)
@@ -618,16 +731,7 @@ test("Time distribution by retrievability supports same-day and success filters"
         },
     ]
 
-    const stats = await getMemorisedDays(
-        revlogs,
-        [card],
-        configs,
-        { 1: 1 },
-        [],
-        2,
-        2,
-        localS90Resolver([card])
-    )
+    const stats = await getMemorisedDaysForTest(revlogs, [card], configs, { 1: 1 }, [], 2, 2)
 
     expect(stats.time_by_retrievability_mean[99]).toBeCloseTo(1.5, 5)
     expect(stats.time_by_retrievability_mean_success_only[99]).toBeCloseTo(2, 5)

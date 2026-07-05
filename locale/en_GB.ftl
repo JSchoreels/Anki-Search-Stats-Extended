@@ -283,11 +283,24 @@ introduced-help =
 
 introduced-load = Load by Introduction Day
 cumulative-load = Cumulative Load
+cumulative-load-ratio = Cumulative Load Ratio
+load-ratio = Load Ratio
 cumulative-mode = Cumulative Mode
 introduced-load-help =
     This graph shows the total current load (sum of 1 / current interval) for cards grouped by when they were introduced. For example, if 10 cards were introduced 1 year ago and now have a 10-day interval each, they contribute 10×(1/10) = 1.0 load to the 1-year-ago data point. This helps identify which cohorts of introduced cards are currently contributing most to your review burden. In cumulative mode, each day shows the total accumulated load from all cards introduced from the beginning up to that day.
 introduced-load-truncated-warning =
     Introduced load does not work for cards introduced before the cutoff date.
+
+load-by-reps = Load by Reps
+load-by-reps-help =
+    This graph shows the current load (sum of 1 / interval) for reviewed, unsuspended cards grouped by their current repetition count. As Ratio divides each bucket by total load. Per Percentile groups cards into configurable percentile slices sorted by reps, with equal reps sorted by ascending load. Cumulative Mode accumulates from low to high reps. Only Young keeps cards with S90 stability below 21.
+load-by-lapses = Load by Lapses
+load-by-lapses-help =
+    This graph shows the current load (sum of 1 / interval) for reviewed, unsuspended cards grouped by their current lapse count. As Ratio divides each bucket by total load. Per Percentile groups cards into configurable percentile slices sorted by lapses, with equal lapses sorted by ascending load. Cumulative Mode accumulates from low to high lapses. Only Young keeps cards with S90 stability below 21.
+only-young = Only Young
+per-percentile = Per Percentile
+percentile-size = Percentile Size
+percentile-range = {$start}-{$end}% Percentile
 
 forgotten = Reset
 forgotten-help = You "reset" a card when you manually mark it as new.
@@ -333,7 +346,17 @@ memorised-truncated-warning =
     affect the results.
 
 fsrs-calibration = FSRS Calibration
-fsrs-calibration-help = This compares the average retention FSRS predicts you should have on cards (Perfect/orange line) to the retention you actually have (Actual/blue line).
+rwkv-calibration = RWKV Calibration
+combined-calibration = FSRS + RWKV Calibration
+calibration-source = Calibration source
+calibration-source-fsrs = FSRS
+calibration-source-rwkv = RWKV
+calibration-source-both = Both
+calibration-legend-fsrs = Actual FSRS R
+calibration-legend-rwkv = Actual RWKV R
+calibration-no-data = Not enough eligible review history to draw calibration yet.
+rwkv-calibration-no-data = No complete persisted RWKV review retrievability state was found for this search and date range.
+fsrs-calibration-help = This compares the average retention the selected source predicts you should have on cards (Perfect/orange line) to the retention you actually have (Actual/blue line).
 forgetting-curve = First Long-term Forgetting Curve
 forgetting-curve-help =
     Compares the observed rate of recall against fitted FSRS forgetting curves which are grouped by the card's first rating.

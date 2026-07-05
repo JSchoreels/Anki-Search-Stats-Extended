@@ -2,6 +2,7 @@ import * as d3 from "d3"
 import * as _ from "lodash"
 import { forgetting_curve } from "ts-fsrs"
 import type { ForgettingCurveDecayModel, ForgettingCurveSeries } from "./forgettingCurveData"
+import { paramsForTsFsrs } from "./fsrsParams"
 import { defaultGraphBounds } from "./graph"
 import { tooltip, tooltipShown } from "./stores"
 import { tooltipX } from "./tooltip"
@@ -35,7 +36,7 @@ function forgettingCurveWithModel(
     stability: number
 ) {
     if (typeof model !== "number") {
-        return forgetting_curve(model, elapsedDays, stability)
+        return forgetting_curve(paramsForTsFsrs(model), elapsedDays, stability)
     }
     return forgetting_curve(model, elapsedDays, stability)
 }

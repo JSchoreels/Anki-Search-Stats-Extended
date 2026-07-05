@@ -46,7 +46,7 @@ const { burden, learn_steps_per_card } = calculateRevlogStats(
 const fsrs7Params = [
     0.041, 2.4175, 4.1283, 11.9709, 5.6385, 0.4468, 3.262, 2.3054, 0.1688, 1.3325, 0.3524, 0.0049,
     0.7503, 0.0896, 0.6625, 1.3, 0.882, 0.3072, 3.5875, 0.303, 0.0107, 0.2279, 2.6413, 0.5594, 1.3,
-    2.5, 1.0, 0.0723, 0.1634, 0.5, 0.9555, 0.2245, 0.6232, 0.1362, 0.3862,
+    2.5, 1.0, 0.0723, 0.1634, 0.5, 0.9555, 0.2245, 0.6232, 0.1362,
 ]
 const fsrs7ParamsAlt = fsrs7Params.map((value, index) => {
     if (index === 27) {
@@ -72,13 +72,8 @@ test("learn_step_count", () => {
     expect(learn_steps_per_card).toContain(2)
 })
 
-
 test("Forgetting curve stability fit uses Anki minimum stability", () => {
-    const stability = fitStability(
-        [{ cid: 1, firstRating: 1, delta: 10, recall: 0 }],
-        0.0001,
-        -0.5
-    )
+    const stability = fitStability([{ cid: 1, firstRating: 1, delta: 10, recall: 0 }], 0.0001, -0.5)
 
     expect(stability).toBeGreaterThanOrEqual(0.0001)
     expect(stability).toBeLessThan(0.001)
@@ -150,7 +145,7 @@ test("First long-term forgetting curve uses FSRS7 decay parameters", () => {
 
         expect(Array.isArray(stats.forgetting_curve_long_term_model)).toBe(true)
         if (Array.isArray(stats.forgetting_curve_long_term_model)) {
-            expect(stats.forgetting_curve_long_term_model.length).toBe(35)
+            expect(stats.forgetting_curve_long_term_model.length).toBe(34)
             expect(stats.forgetting_curve_long_term_model[27]).toBeCloseTo(fsrs7Params[27], 6)
             expect(stats.forgetting_curve_long_term_model[28]).toBeCloseTo(fsrs7Params[28], 6)
         }
@@ -215,7 +210,7 @@ test("First long-term forgetting curve uses selected deck preset across subdecks
 
         expect(Array.isArray(stats.forgetting_curve_long_term_model)).toBe(true)
         if (Array.isArray(stats.forgetting_curve_long_term_model)) {
-            expect(stats.forgetting_curve_long_term_model.length).toBe(35)
+            expect(stats.forgetting_curve_long_term_model.length).toBe(34)
             expect(stats.forgetting_curve_long_term_model[27]).toBeCloseTo(fsrs7Params[27], 6)
             expect(stats.forgetting_curve_long_term_model[28]).toBeCloseTo(fsrs7Params[28], 6)
             expect(stats.forgetting_curve_long_term_model[27]).not.toBeCloseTo(
@@ -265,7 +260,7 @@ test("First short-term forgetting curve uses FSRS7 decay parameters", () => {
 
         expect(Array.isArray(stats.forgetting_curve_long_term_model)).toBe(true)
         if (Array.isArray(stats.forgetting_curve_long_term_model)) {
-            expect(stats.forgetting_curve_long_term_model.length).toBe(35)
+            expect(stats.forgetting_curve_long_term_model.length).toBe(34)
             expect(stats.forgetting_curve_long_term_model[27]).toBeCloseTo(fsrs7Params[27], 6)
             expect(stats.forgetting_curve_long_term_model[28]).toBeCloseTo(fsrs7Params[28], 6)
         }

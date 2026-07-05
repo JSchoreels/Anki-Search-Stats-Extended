@@ -18,7 +18,7 @@
     "lodash": "^4.17.21",
     "rainbowvis.js": "^1.1.1",
     "trendline": "^1.0.0",
-    "ts-fsrs": "file:../ts-fsrs/packages/fsrs"
+    "ts-fsrs": "file:vendor/ts-fsrs-a32fb5e15e2a4117ddb18bc9776969ef282a5e83.tgz"
   },
   "devDependencies": {
     "@babel/preset-env": "^7.25.4",

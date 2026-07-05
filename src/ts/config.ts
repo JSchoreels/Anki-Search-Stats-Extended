@@ -88,6 +88,24 @@ export type DeckConfig = {
     autoAlert: number
 }
 
+export type ResolvedFsrsPreset = {
+    id: string
+    name: string
+    fsrsVersion: "seven" | "six" | "five" | "four"
+    params: Array<number>
+    desiredRetention: number
+    historicalRetention: number
+    ignoreRevlogsBeforeDate: string
+    fsrsDynamicDesiredRetentionEnabled: boolean
+    fsrsDynamicDesiredRetentionParams: Array<number>
+    fsrsDynamicDesiredRetentionWeights: Array<number>
+    fsrsDynamicDesiredRetentionAvgDrs: Array<number>
+    fsrsDynamicDesiredRetentionFsrsEqWeights: Array<number>
+    fsrsDynamicDesiredRetentionFsrsEqDrs: Array<number>
+    fsrsDynamicDesiredRetentionMin: number
+    fsrsDynamicDesiredRetentionMax: number
+}
+
 export interface SSEother {
     rollover: number
     learn_ahead_secs: number

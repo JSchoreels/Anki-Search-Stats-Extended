@@ -1,6 +1,7 @@
 import { forgetting_curve, fsrs, FSRS5_DEFAULT_DECAY } from "ts-fsrs"
 import { calculateCardDataPies } from "../src/ts/CardDataPies"
 import type { DeckConfig } from "../src/ts/config"
+import { paramsForTsFsrs } from "../src/ts/fsrsParams"
 import type { CardData } from "../src/ts/search"
 
 const weights6 = [
@@ -11,7 +12,7 @@ const weights6 = [
 const weights7 = [
     0.041, 2.4175, 4.1283, 11.9709, 5.6385, 0.4468, 3.262, 2.3054, 0.1688, 1.3325, 0.3524, 0.0049,
     0.7503, 0.0896, 0.6625, 1.3, 0.882, 0.3072, 3.5875, 0.303, 0.0107, 0.2279, 2.6413, 0.5594, 1.3,
-    2.5, 1.0, 0.0723, 0.1634, 0.5, 0.9555, 0.2245, 0.6232, 0.1362, 0.3862,
+    2.5, 1.0, 0.0723, 0.1634, 0.5, 0.9555, 0.2245, 0.6232, 0.1362,
 ]
 
 function deckConfig(params: Partial<DeckConfig>): DeckConfig {
@@ -71,7 +72,7 @@ test("future due retention uses selected FSRS7 deck model", () => {
         { 10: 1 }
     )
 
-    const expected = fsrs({ w: weights7 }).forgetting_curve(7, 12)
+    const expected = fsrs({ w: paramsForTsFsrs(weights7) }).forgetting_curve(7, 12)
     const decayOnly = forgetting_curve(0.1, 7, 12)
 
     expect(stats.target_R_days[7]).toBeCloseTo(expected, 6)
@@ -95,7 +96,7 @@ test("future due retention follows selected FSRS version", () => {
     )
 
     const expected = fsrs({ w: weights6 }).forgetting_curve(7, 12)
-    const fsrs7Value = fsrs({ w: weights7 }).forgetting_curve(7, 12)
+    const fsrs7Value = fsrs({ w: paramsForTsFsrs(weights7) }).forgetting_curve(7, 12)
 
     expect(stats.target_R_days[7]).toBeCloseTo(expected, 6)
     expect(stats.target_R_days[7]).not.toBeCloseTo(fsrs7Value, 6)
@@ -126,9 +127,12 @@ test("future due retention uses internal stability when stored S90 differs", () 
         { 10: 1 }
     )
 
-    expect(stats.target_R_days[7]).toBeCloseTo(fsrs({ w: weights7 }).forgetting_curve(7, 12), 6)
+    expect(stats.target_R_days[7]).toBeCloseTo(
+        fsrs({ w: paramsForTsFsrs(weights7) }).forgetting_curve(7, 12),
+        6
+    )
     expect(stats.target_R_days[7]).not.toBeCloseTo(
-        fsrs({ w: weights7 }).forgetting_curve(7, 4),
+        fsrs({ w: paramsForTsFsrs(weights7) }).forgetting_curve(7, 4),
         6
     )
 })

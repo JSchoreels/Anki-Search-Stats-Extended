@@ -49,6 +49,7 @@ async function fetchAndDecode(fetchPromise: Promise<Response>) {
 let origBody: any = undefined
 let origReq: string = ""
 let origHeaders: any = { body: undefined }
+let graphRequestId = 0
 
 export function fetchSwappedSearch(criteria: string, limit?: number) {
     const headers = { ...origHeaders, body: bodySwap(origBody, criteria, limit) }
@@ -59,7 +60,9 @@ export function patchFetch() {
     //@ts-ignore
     fetch = (req: string, headers: Record<string, any>) => {
         if (req == "/_anki/graphs") {
+            const requestId = ++graphRequestId
             data.set(null)
+            not_suspended_data.set(null)
 
             origReq = req
             origBody = headers.body
@@ -70,11 +73,29 @@ export function patchFetch() {
             graphsRequest.set(search_request)
 
             const cidSearch = search(search_request?.search)
-            cidSearch.then(cids.set)
+            cidSearch.then((result) => {
+                if (requestId == graphRequestId) {
+                    cids.set(result)
+                }
+            })
 
             const limit = get(alwaysAllTime) ? 0 : undefined
-            fetchSwappedSearch("", limit).then(data.set)
-            fetchSwappedSearch("-is:suspended", limit).then(not_suspended_data.set)
+            const originalResponse = realFetch(req, headers)
+            const defaultGraphData =
+                limit === undefined || search_request.days == limit
+                    ? fetchAndDecode(originalResponse.then((response) => response.clone()))
+                    : fetchSwappedSearch("", limit)
+            defaultGraphData.then((result) => {
+                if (requestId == graphRequestId) {
+                    data.set(result)
+                }
+            })
+            fetchSwappedSearch("-is:suspended", limit).then((result) => {
+                if (requestId == graphRequestId) {
+                    not_suspended_data.set(result)
+                }
+            })
+            return originalResponse
         }
         return realFetch(req, headers)
     }

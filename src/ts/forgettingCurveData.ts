@@ -1,5 +1,6 @@
 import { mean } from "d3-array"
 import { default_w, forgetting_curve, FSRS5_DEFAULT_DECAY } from "ts-fsrs"
+import { paramsForTsFsrs } from "./fsrsParams"
 
 export type ForgettingCurveDecayModel = number | readonly number[]
 
@@ -60,7 +61,7 @@ function forgettingCurveWithModel(
     stability: number
 ) {
     if (typeof model !== "number") {
-        return forgetting_curve(model, elapsedDays, stability)
+        return forgetting_curve(paramsForTsFsrs(model), elapsedDays, stability)
     }
     return forgetting_curve(model, elapsedDays, stability)
 }

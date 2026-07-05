@@ -1,6 +1,6 @@
 import { checkParameters, type FSRS, fsrs as Fsrs, generatorParameters } from "ts-fsrs"
 import type { DeckConfig } from "./config"
-import { selectTsFsrsParams } from "./fsrsParams"
+import { paramsForTsFsrs, selectTsFsrsParams } from "./fsrsParams"
 
 const deckFsrs: Record<number, { signature: string; model: FSRS }> = {}
 
@@ -12,7 +12,7 @@ export function getFsrsForConfig(config: DeckConfig) {
             signature,
             model: Fsrs(
                 generatorParameters({
-                    w: checkParameters(params),
+                    w: checkParameters(paramsForTsFsrs(params)),
                     enable_fuzz: false,
                     enable_short_term: true,
                 })

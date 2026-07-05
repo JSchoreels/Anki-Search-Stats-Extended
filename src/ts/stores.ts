@@ -1,14 +1,18 @@
 import { derived, get, writable, type Readable } from "svelte/store"
 import { calculateCardDataPies } from "./CardDataPies"
 import { DEFAULT_ORDER, type SSEconfig, type SSEother } from "./config"
-import { getMemorisedDays } from "./MemorisedBar"
+import { buildCalibrationBins, getMemorisedDays } from "./MemorisedBar"
 import type { GraphsRequest, GraphsResponse } from "./proto/anki/stats_pb"
 import { calculateRevlogStats } from "./revlogGraphs"
 import {
     catchErrors,
     getCardData,
+    getFsrsPresetData,
+    getFsrsReviewRetrievability,
     getRevlogs,
+    getRwkvReviewRetrievability,
     saveConfigValue,
+    uniqueRevlogCids,
     type CardData,
     type Revlog,
 } from "./search"
@@ -28,6 +32,8 @@ export let shownCategories = writable(SSEconfig.categories ?? {})
 export let autoRevlogStats = writable(SSEconfig.autoRevlogStats ?? false)
 export let autoMemorisedStats = writable(SSEconfig.autoMemorisedStats ?? false)
 export let alwaysAllTime = writable(SSEconfig.alwaysAllTime ?? false)
+export type CalibrationMode = "fsrs" | "rwkv" | "both"
+export let calibrationMode = writable<CalibrationMode>("fsrs")
 export let categoryOrder = writable([
     ...(SSEconfig.categoryOrder ?? []).filter((c) => DEFAULT_ORDER.includes(c)),
     ...DEFAULT_ORDER.filter((c) => !(SSEconfig.categoryOrder ?? []).includes(c)),
@@ -146,15 +152,100 @@ derived(
     ) => {
         set(null)
         if ($revlogs && $card_data && $showFsrsStats && $last_forget) {
-            catchErrors(() =>
-                getMemorisedDays(
+            catchErrors(async () => {
+                const fsrsPresets = await getFsrsPresetData(uniqueRevlogCids($revlogs))
+                const stats = await getMemorisedDays(
                     $revlogs,
                     $card_data,
                     SSEother.deck_configs,
                     SSEother.deck_config_ids,
-                    $last_forget
+                    $last_forget,
+                    2,
+                    2,
+                    fsrsPresets
                 )
-            ).then(set)
+                return stats
+            }).then(set)
         }
     }
 ).subscribe(memorised_stats.set)
+
+export type FsrsCalibrationStats = {
+    column: string | null
+    bins: ReturnType<typeof buildCalibrationBins>
+    warnings: string[]
+}
+export let fsrsCalibrationStats = writable<FsrsCalibrationStats | null>(null)
+derived(
+    [cids, searchLimit, memorised_stats],
+    (
+        [$cids, $searchLimit, $memorised_stats],
+        set: (value: FsrsCalibrationStats | null) => void
+    ) => {
+        set(null)
+        if (!$cids || !$memorised_stats) {
+            return
+        }
+
+        const samples = $memorised_stats.calibration_samples ?? []
+        if (samples.length === 0) {
+            set({ column: null, bins: [], warnings: [] })
+            return
+        }
+
+        catchErrors(async () => {
+            const { column, predictionsByRevlogId, warnings } = await getFsrsReviewRetrievability(
+                $cids,
+                $searchLimit,
+                samples.map((sample) => sample.revlogId)
+            )
+            return {
+                column,
+                bins: buildCalibrationBins(samples, predictionsByRevlogId),
+                warnings,
+            }
+        }).then(set)
+    }
+).subscribe(fsrsCalibrationStats.set)
+
+export type RwkvCalibrationStats = {
+    column: string | null
+    bins: ReturnType<typeof buildCalibrationBins>
+    warnings: string[]
+}
+export let rwkvCalibrationStats = writable<RwkvCalibrationStats | null>(null)
+derived(
+    [calibrationMode, cids, searchLimit, memorised_stats],
+    (
+        [$calibrationMode, $cids, $searchLimit, $memorised_stats],
+        set: (value: RwkvCalibrationStats | null) => void
+    ) => {
+        set(null)
+        if (
+            ($calibrationMode !== "rwkv" && $calibrationMode !== "both") ||
+            !$cids ||
+            !$memorised_stats
+        ) {
+            return
+        }
+
+        const samples = $memorised_stats.calibration_samples ?? []
+        if (samples.length === 0) {
+            set({ column: null, bins: [], warnings: [] })
+            return
+        }
+
+        catchErrors(async () => {
+            const { column, predictionsByRevlogId, warnings } = await getRwkvReviewRetrievability(
+                $cids,
+                $searchLimit,
+                samples.map((sample) => sample.revlogId)
+            )
+            return {
+                column,
+                bins: buildCalibrationBins(samples, predictionsByRevlogId),
+                warnings,
+            }
+        }).then(set)
+    }
+).subscribe(rwkvCalibrationStats.set)

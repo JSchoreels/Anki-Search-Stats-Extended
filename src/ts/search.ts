@@ -1,5 +1,6 @@
 import { get } from "svelte/store"
 import { FSRS5_DEFAULT_DECAY } from "ts-fsrs"
+import type { ResolvedFsrsPreset } from "./config"
 import { realFetch, searchJoin } from "./root"
 import { searchString } from "./stores"
 
@@ -17,7 +18,7 @@ ${e?.stack ? e.stack : e}`)
     }
 }
 
-async function endpoint(endpoint: string, body?: string) {
+async function endpoint(endpoint: string, body?: string, alertOnError = true) {
     const resp = await realFetch(`/_anki/${endpoint}`, {
         method: "POST",
         body,
@@ -25,7 +26,9 @@ async function endpoint(endpoint: string, body?: string) {
     })
 
     if (!resp.ok) {
-        alert(`Search Stats Extended has encountered an error.
+        const responseText = await resp.text()
+        if (alertOnError) {
+            alert(`Search Stats Extended has encountered an error.
 
 --- *** If you have recently updated the addon please ensure you have restarted Anki. *** ---
 
@@ -35,8 +38,9 @@ async function endpoint(endpoint: string, body?: string) {
 If the problem persists copy the following information into a github issue (https://github.com/Luc-Mcgrady/Anki-Search-Stats-Extended/issues/new) with a description of what you were doing at the time:
 
 Fetch Response: ${resp.status}
-${await resp.text()}`)
-        throw resp.status
+${responseText}`)
+        }
+        throw new Error(`Endpoint ${endpoint} failed: ${resp.status} ${responseText}`)
     }
 
     const blob = await resp.text()
@@ -119,9 +123,7 @@ export function getFsrsS90FromExtraData(data: CardExtraData): number | undefined
     return positiveFinite(data.s)
 }
 
-export function getFsrsInternalStabilityFromExtraData(
-    data: CardExtraData
-): number | undefined {
+export function getFsrsInternalStabilityFromExtraData(data: CardExtraData): number | undefined {
     return positiveFinite(data.s_int) ?? getFsrsS90FromExtraData(data)
 }
 
@@ -154,6 +156,10 @@ export interface Revlog {
     Rescheduled = 5,
     */
     type: number
+}
+
+export function uniqueRevlogCids(revlogs: Pick<Revlog, "cid">[]): number[] {
+    return [...new Set(revlogs.map((revlog) => revlog.cid))]
 }
 
 export async function openLocaleFolder() {
@@ -202,8 +208,42 @@ export async function getCardData(cids: number[]) {
     return cards
 }
 
+export async function getFsrsPresetData(cids: number[]) {
+    if (cids.length === 0) {
+        return {}
+    }
+    return (await endpoint("fsrsPresetData", JSON.stringify(cids))) as Record<
+        number,
+        ResolvedFsrsPreset
+    >
+}
+
 export async function saveConfigValue(key: string, value: any) {
     await endpoint("writeConfig", JSON.stringify({ key, value }))
+}
+
+export async function saveFsrsReviewRetrievability(predictionsByRevlogId: Record<number, number>) {
+    const data = Object.entries(predictionsByRevlogId)
+        .map(([revlogId, prediction]) => [Number(revlogId), prediction])
+        .filter(
+            ([revlogId, prediction]) =>
+                Number.isInteger(revlogId) &&
+                revlogId > 0 &&
+                typeof prediction === "number" &&
+                Number.isFinite(prediction) &&
+                prediction >= 0 &&
+                prediction <= 1
+        )
+
+    if (data.length === 0) {
+        return
+    }
+
+    await endpoint(
+        "cacheFsrsReviewRetrievability",
+        JSON.stringify({ source: "stats_fsrs_replay", data }),
+        false
+    )
 }
 
 export async function getRevlogs(cids: number[], day_range: number) {
@@ -239,6 +279,62 @@ export async function getRevlogs(cids: number[], day_range: number) {
     }
 
     return revlogs
+}
+
+export async function getRwkvReviewRetrievability(
+    cids: number[],
+    day_range: number,
+    revlogIds: number[] = []
+) {
+    return getReviewRetrievability("rwkvReviewRetrievability", cids, day_range, revlogIds)
+}
+
+export async function getFsrsReviewRetrievability(
+    cids: number[],
+    day_range: number,
+    revlogIds: number[] = []
+) {
+    return getReviewRetrievability("fsrsReviewRetrievability", cids, day_range, revlogIds)
+}
+
+async function getReviewRetrievability(
+    endpointName: "fsrsReviewRetrievability" | "rwkvReviewRetrievability",
+    cids: number[],
+    day_range: number,
+    revlogIds: number[] = []
+) {
+    const revlog_ids = [...new Set(revlogIds)].filter(
+        (revlogId) => Number.isInteger(revlogId) && revlogId > 0
+    )
+    const response = (await endpoint(
+        endpointName,
+        JSON.stringify({ cids, day_range, revlog_ids })
+    )) as {
+        column?: string | null
+        data?: [number, number | string | null][]
+        warnings?: unknown[]
+    }
+    const predictionsByRevlogId: Record<number, number> = {}
+    const warnings = (response.warnings ?? []).filter(
+        (warning): warning is string => typeof warning === "string" && warning.length > 0
+    )
+
+    for (const [revlogId, rawPrediction] of response.data ?? []) {
+        const prediction = typeof rawPrediction === "string" ? Number(rawPrediction) : rawPrediction
+        if (typeof prediction === "number" && Number.isFinite(prediction)) {
+            predictionsByRevlogId[revlogId] = prediction
+        }
+    }
+
+    for (const warning of warnings) {
+        console.warn("Search Stats Extended:", warning)
+    }
+
+    return {
+        column: response.column ?? null,
+        predictionsByRevlogId,
+        warnings,
+    }
 }
 
 export function browserSearch(search: string) {

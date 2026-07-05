@@ -12,7 +12,16 @@
     import { i18n, i18n_bundle, i18n_pattern } from "../i18n"
     import { TREND_PERSISTENCE_KEYS } from "../trendPersistenceKeys"
     import { barDateLabeler, barStringLabeler, barHourLabeler, type BarChart } from "../bar"
-    import { memorised_stats, scroll, searchLimit, binSize, revlogStats } from "../stores"
+    import {
+        calibrationMode,
+        fsrsCalibrationStats,
+        memorised_stats,
+        rwkvCalibrationStats,
+        scroll,
+        searchLimit,
+        binSize,
+        revlogStats,
+    } from "../stores"
     import { today, day_ms, no_rollover_today } from "../revlogGraphs"
     import { YOUNG_COLOUR, MATURE_COLOUR } from "../graph"
     import type { PieDatum } from "../pie"
@@ -78,6 +87,54 @@
 
     $: review_leftmost = minIndex($revlogStats?.intervals ?? {}) - today
     $: time_machine_min = review_leftmost
+    $: cachedFsrsCalibrationData = $fsrsCalibrationStats?.bins ?? []
+    $: fsrsCalibrationData =
+        _.sumBy(cachedFsrsCalibrationData, (bin) => bin?.count ?? 0) > 0
+            ? cachedFsrsCalibrationData
+            : ($memorised_stats?.calibration ?? [])
+    $: rwkvCalibrationData = $rwkvCalibrationStats?.bins ?? []
+    $: calibrationData = $calibrationMode === "rwkv" ? rwkvCalibrationData : fsrsCalibrationData
+    $: calibrationSeries =
+        $calibrationMode === "both"
+            ? [
+                  {
+                      label: i18n("calibration-legend-fsrs"),
+                      bins: fsrsCalibrationData,
+                      color: "steelblue",
+                  },
+                  {
+                      label: i18n("calibration-legend-rwkv"),
+                      bins: rwkvCalibrationData,
+                      color: "green",
+                  },
+              ]
+            : $calibrationMode === "rwkv"
+              ? [
+                    {
+                        label: i18n("calibration-legend-rwkv"),
+                        bins: rwkvCalibrationData,
+                        color: "green",
+                    },
+                ]
+              : undefined
+    $: calibrationLoading =
+        (($calibrationMode === "fsrs" || $calibrationMode === "both") &&
+            $memorised_stats &&
+            !$fsrsCalibrationStats) ||
+        (($calibrationMode === "rwkv" || $calibrationMode === "both") && !$rwkvCalibrationStats)
+    $: calibrationCount = _.sumBy(
+        calibrationSeries?.flatMap((series) => series.bins) ?? calibrationData,
+        (bin) => bin?.count ?? 0
+    )
+    $: calibrationWarnings =
+        $calibrationMode === "both"
+            ? [
+                  ...($fsrsCalibrationStats?.warnings ?? []),
+                  ...($rwkvCalibrationStats?.warnings ?? []),
+              ]
+            : $calibrationMode === "rwkv"
+              ? ($rwkvCalibrationStats?.warnings ?? [])
+              : ($fsrsCalibrationStats?.warnings ?? [])
 </script>
 
 <GraphCategory hidden_title="FSRS" config_name="fsrs">
@@ -95,8 +152,47 @@
         </p>
     </MemorisedGraphContainer>
     <MemorisedGraphContainer>
-        <h1 slot="title">{i18n("fsrs-calibration")}</h1>
-        <FsrsCalibration slot="graph" data={$memorised_stats!.calibration} />
+        <h1 slot="title">
+            {i18n(
+                $calibrationMode === "rwkv"
+                    ? "rwkv-calibration"
+                    : $calibrationMode === "both"
+                      ? "combined-calibration"
+                      : "fsrs-calibration"
+            )}
+        </h1>
+        <div slot="graph" class="calibration-panel">
+            <div class="calibration-mode" role="group" aria-label={i18n("calibration-source")}>
+                <label>
+                    <input type="radio" value="fsrs" bind:group={$calibrationMode} />
+                    {i18n("calibration-source-fsrs")}
+                </label>
+                <label>
+                    <input type="radio" value="rwkv" bind:group={$calibrationMode} />
+                    {i18n("calibration-source-rwkv")}
+                </label>
+                <label>
+                    <input type="radio" value="both" bind:group={$calibrationMode} />
+                    {i18n("calibration-source-both")}
+                </label>
+            </div>
+            {#if calibrationWarnings.length > 0}
+                <Warning always>{calibrationWarnings.join(" ")}</Warning>
+            {/if}
+            {#if calibrationLoading}
+                <div class="calibration-message">{i18n("loading")}</div>
+            {:else if calibrationCount > 0}
+                <FsrsCalibration data={calibrationData} series={calibrationSeries} />
+            {:else}
+                <div class="calibration-message">
+                    {i18n(
+                        $calibrationMode === "rwkv" || $calibrationMode === "both"
+                            ? "rwkv-calibration-no-data"
+                            : "calibration-no-data"
+                    )}
+                </div>
+            {/if}
+        </div>
         <p>
             {i18n("fsrs-calibration-help")}
         </p>
@@ -175,5 +271,27 @@
         display: flex;
         align-items: center;
         gap: 0.5em;
+    }
+
+    .calibration-panel {
+        display: flex;
+        min-height: 16rem;
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+
+    .calibration-mode {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 1rem;
+    }
+
+    .calibration-message {
+        display: flex;
+        flex: 1;
+        align-items: center;
+        justify-content: center;
+        color: var(--fg-faint);
+        text-align: center;
     }
 </style>

@@ -20,6 +20,7 @@
         trendRangeFromAxisDatum,
         visibleTrendRangeFromAxisData,
     } from "./trendAxis"
+    import { leftAlignedBarWindowEnd } from "./barScrollable"
     import {
         createGraphTrendSessionState,
         type GraphTrendSessionState,
@@ -46,13 +47,18 @@
     export let trendPersistenceKey = ""
     export let trend_date_axis = false
     export let search: undefined | ((i: number, width: number) => void) = undefined
+    export let cumulative = false
+    export let asRatio = false
 
     $: min = left_aligned ? 0 : 1
     $: absOffset = Math.abs(offset)
-    $: realOffset = left_aligned ? absOffset + bins * binSize + min : -absOffset
-    $: leftmost = realOffset - bins * binSize
+    $: requestedOffset = left_aligned ? absOffset + bins * binSize + min : -absOffset
+    $: leftmost = requestedOffset - bins * binSize
 
     $: binSize = binSize > 0 ? binSize : 1
+    $: realOffset = left_aligned
+        ? leftAlignedBarWindowEnd(leftmost, requestedOffset, binSize, data.data)
+        : requestedOffset
     $: separate_bars = data.data.slice(
         leftmost,
         realOffset == 0 || realOffset >= data.data.length ? undefined : realOffset
@@ -213,6 +219,34 @@
                     bar.values = bar.values.map((a) => a / (count || 1))
                 }
             })
+        }
+
+        if (cumulative) {
+            const precedingData = data.data.slice(0, Math.max(absoluteDataIndex(leftmost), 0))
+            let cumulativeValues = data.row_labels.map((_) => 0)
+
+            for (const datum of precedingData) {
+                cumulativeValues = cumulativeValues.map(
+                    (value, i) => value + (datum?.values?.[i] ?? 0)
+                )
+            }
+
+            for (const bar of bars) {
+                cumulativeValues = cumulativeValues.map(
+                    (value, i) => value + (bar.values?.[i] ?? 0)
+                )
+                bar.values = cumulativeValues
+            }
+        }
+
+        if (asRatio) {
+            const total = data.data.reduce((sum, datum) => sum + _.sum(datum?.values ?? []), 0)
+
+            if (total > 0) {
+                for (const bar of bars) {
+                    bar.values = bar.values.map((value) => value / total)
+                }
+            }
         }
     }
 </script>

@@ -14,12 +14,9 @@ This document describes how stability-related values are computed for FSRS graph
 
 - `day_means` and `day_medians` are computed from `S90`, not raw FSRS `stability`.
 - `S90` is defined as the interval in days where retrievability is `90%`.
-- Conversion uses Anki's backend batch API (`/_anki/fsrsS90Batch`) which calls:
-    - `mw.col.fsrs_interval_at_retrievability_by_config_batch(...)`
-- For performance, replay collects all candidate `(config_id, stability-bucket)` values first, resolves unique keys in one batch, then computes day stats from the recorded replay transitions.
-- Request payload is deduplicated by `(config_id, stability)` with dynamic stability step:
-    - `stability <= 10`: step `0.1`
-    - `stability > 10`: step `0.5`
+- Historical replay stores the raw `ts-fsrs` internal stability after each review, then computes S90 locally from the resolved preset params already read through `/_anki/fsrsPresetData`.
+- This avoids an additional backend S90 conversion request while preserving Anki's dynamic preset overlay resolution for the FSRS params used in the conversion.
+- Replay records each card's resolved S90 after review, then computes day stats from the recorded replay transitions.
 - `day_young_ratio_s90` stores the young-card ratio based on `S90 < 21`.
 
 ### Notes
@@ -28,6 +25,7 @@ This document describes how stability-related values are computed for FSRS graph
   FSRS state. Current card data reads those values from `card.data.s_int`, with
   fallback to `card.data.s` for older collections.
 - This split avoids mixing display-oriented “stability over time” with raw state internals.
+- For current persisted card data, Anki stores `card.data.s` as S90 and `card.data.s_int` as internal stability.
 - The Ease Factor graph reads current `card.data.s_int` and `card.data.d` from
   Anki, then passes that state to `ts-fsrs` to estimate the next Good-review
   stability gain.

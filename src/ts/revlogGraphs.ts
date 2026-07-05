@@ -18,7 +18,7 @@ import {
     type ForgettingCurveDecayModel,
     type ForgettingSample,
 } from "./forgettingCurveData"
-import { selectTsFsrsParams } from "./fsrsParams"
+import { paramsForTsFsrs, selectTsFsrsParams } from "./fsrsParams"
 import { i18n } from "./i18n"
 import { type CardData, getCardDecay, type Revlog } from "./search"
 
@@ -68,7 +68,7 @@ function getFsrs(config: DeckConfig) {
             signature,
             model: Fsrs(
                 generatorParameters({
-                    w: checkParameters(params),
+                    w: checkParameters(paramsForTsFsrs(params)),
                     enable_fuzz: false,
                     enable_short_term: true,
                 })

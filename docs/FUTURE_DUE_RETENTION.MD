@@ -16,6 +16,6 @@ For each review card with FSRS stability in `card.data.s`, the graph resolves th
 2. `SSEother.deck_configs[config_id]`
 3. [`selectTsFsrsParams()`](/Users/jschoreels/workspace/Anki-Search-Stats-Extended/src/ts/fsrsParams.ts)
 
-`selectTsFsrsParams()` follows Anki's selected `fsrsVersion` first. When `fsrsVersion` selects FSRS7, the graph uses the 35-parameter FSRS7 model through `ts-fsrs`.
+`selectTsFsrsParams()` follows Anki's selected `fsrsVersion` first. When `fsrsVersion` selects FSRS7, the graph uses the 34-parameter FSRS7 model through `ts-fsrs`.
 
 If deck config data is unavailable, the graph keeps the older per-card `card.data.decay` path.

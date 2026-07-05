@@ -11,12 +11,11 @@ import {
     generatorParameters,
 } from "ts-fsrs"
 import type { LossBar } from "./bar"
-import type { DeckConfig } from "./config"
-import { selectTsFsrsParams } from "./fsrsParams"
+import type { DeckConfig, ResolvedFsrsPreset } from "./config"
+import { paramsForTsFsrs, selectResolvedFsrsPresetParams, selectTsFsrsParams } from "./fsrsParams"
 import { type Buckets, dayFromMs, emptyBuckets, IDify, rollover_ms, today } from "./revlogGraphs"
 import {
     type CardData,
-    getExtraDataFromCard,
     getFsrsInternalStabilityFromCard,
     getFsrsS90FromCard,
     type Revlog,
@@ -26,6 +25,59 @@ export interface LossBin {
     real: number
     predicted: number
     count: number
+}
+
+export type CalibrationSample = {
+    revlogId: number
+    actual: number
+}
+
+export const CALIBRATION_BIN_COUNT = 20
+
+const default_bin = { predicted: 0, real: 0, count: 0 }
+
+function incrementLoss(bin: LossBin | null | undefined, predicted: number, real: number) {
+    bin ??= { ...default_bin }
+
+    bin.predicted = (bin.predicted || 0) + predicted
+    bin.real = (bin.real || 0) + real
+    bin.count = (bin.count || 0) + 1
+
+    return bin
+}
+
+function isValidProbability(value: unknown): value is number {
+    return typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= 1
+}
+
+export function calibrationBinIndex(predicted: number, binCount = CALIBRATION_BIN_COUNT) {
+    return Math.max(
+        0,
+        Math.min(binCount - 1, Math.floor(Math.exp(Math.log(binCount + 1) * predicted)) - 1)
+    )
+}
+
+export function addCalibrationSample(bins: LossBin[], predicted: number, actual: number) {
+    if (!isValidProbability(predicted) || !isValidProbability(actual)) {
+        return false
+    }
+
+    const bin = calibrationBinIndex(predicted, bins.length || CALIBRATION_BIN_COUNT)
+    bins[bin] = incrementLoss(bins[bin], predicted, actual)
+    return true
+}
+
+export function buildCalibrationBins(
+    samples: CalibrationSample[],
+    predictionsByRevlogId: Record<number, number>
+) {
+    const bins = <LossBin[]>Array(CALIBRATION_BIN_COUNT)
+
+    for (const sample of samples) {
+        addCalibrationSample(bins, predictionsByRevlogId[sample.revlogId], sample.actual)
+    }
+
+    return bins
 }
 
 /**
@@ -157,17 +209,25 @@ function applyOutlierFilter(revlogs: Revlog[]): Set<number> {
     return excludedRevlogIds
 }
 
-let deckFsrs: Record<number, { signature: string; model: FSRS }> = {}
-export function getFsrs(config: DeckConfig) {
-    const id = config.id
-    const params = selectTsFsrsParams(config)
+type FsrsSource = DeckConfig | ResolvedFsrsPreset
+
+function isResolvedPreset(source: FsrsSource): source is ResolvedFsrsPreset {
+    return "params" in source
+}
+
+let deckFsrs: Record<string, { signature: string; model: FSRS }> = {}
+export function getFsrs(source: FsrsSource) {
+    const id = isResolvedPreset(source) ? `preset:${source.id}` : `deck:${source.id}`
+    const params = isResolvedPreset(source)
+        ? selectResolvedFsrsPresetParams(source)
+        : selectTsFsrsParams(source)
     const signature = `${params.length}:${params.join(",")}`
     if (!deckFsrs[id] || deckFsrs[id].signature !== signature) {
         deckFsrs[id] = {
             signature,
             model: Fsrs(
                 generatorParameters({
-                    w: checkParameters(params),
+                    w: checkParameters(paramsForTsFsrs(params)),
                     enable_fuzz: false,
                     enable_short_term: true,
                 })
@@ -202,7 +262,7 @@ function stabilityBucketForS90(stability: number): { step: number; bucket: numbe
 }
 
 type S90BatchItem = {
-    config_id: number
+    card_id: number
     stability: number
 }
 
@@ -211,29 +271,26 @@ export type S90BatchResolver = (
     targetRetrievability: number
 ) => Promise<number[]>
 
-async function resolveS90BatchWithAnki(
-    items: S90BatchItem[],
+export function intervalAtRetrievability(
+    fsrs: FSRS,
+    stability: number,
     targetRetrievability: number
-): Promise<number[]> {
-    if (!items.length) {
-        return []
+): number {
+    const target = Math.max(0.0001, Math.min(0.9999, targetRetrievability))
+    let low = 0
+    let high = Math.max(stability, 1)
+    while (fsrs.forgetting_curve(high, stability) > target && high < 36500) {
+        high = Math.min(high * 2, 36500)
     }
-    const resp = await fetch("/_anki/fsrsS90Batch", {
-        method: "POST",
-        body: JSON.stringify({
-            items,
-            target_retrievability: targetRetrievability,
-        }),
-        headers: { "Content-Type": "application/binary" },
-    })
-    if (!resp.ok) {
-        throw new Error(`fsrsS90Batch failed: ${resp.status}`)
+    for (let i = 0; i < 50; i++) {
+        const mid = (low + high) / 2
+        if (fsrs.forgetting_curve(mid, stability) > target) {
+            low = mid
+        } else {
+            high = mid
+        }
     }
-    const body = await resp.text()
-    if (body === "") {
-        return []
-    }
-    return JSON.parse(body)
+    return (low + high) / 2
 }
 
 // Constants for B-W matrix
@@ -291,7 +348,8 @@ export async function getMemorisedDays(
     last_forget: number[] = [],
     leech_elapsed_threshold = 2,
     leech_min_reviews = 2,
-    resolveS90Batch: S90BatchResolver = resolveS90BatchWithAnki
+    fsrs_presets_by_card: Record<number, ResolvedFsrsPreset> = {},
+    resolveS90Batch?: S90BatchResolver
 ) {
     console.log(`ts-fsrs ${FSRSVersion}`)
 
@@ -321,7 +379,7 @@ export async function getMemorisedDays(
         return card.odid || card.did
     }
 
-    function card_config(cid: number) {
+    function card_config(cid: number): DeckConfig | undefined {
         const card = cards_by_id[cid]
         if (!card) {
             return undefined
@@ -329,11 +387,20 @@ export async function getMemorisedDays(
         return configs[config_mapping[configDeckId(card)]]
     }
 
+    function card_fsrs_source(cid: number): FsrsSource | undefined {
+        const preset = fsrs_presets_by_card[cid]
+        if (preset) {
+            return preset
+        }
+        return card_config(cid)
+    }
+
     let stability_day_bins: number[][] = []
     let difficulty_day_bins: number[][] = []
 
-    const calibration_bin_count = 20
-    let calibration = <LossBin[]>Array(calibration_bin_count)
+    let calibration = <LossBin[]>Array(CALIBRATION_BIN_COUNT)
+    let calibration_samples: CalibrationSample[] = []
+    let fsrs_calibration_predictions_by_revlog_id: Record<number, number> = {}
 
     function forgetting_curve(
         fsrs: FSRS,
@@ -378,7 +445,7 @@ export async function getMemorisedDays(
     let s90_request_index_by_key = new Map<string, number>()
     let s90_dedup_total = 0
     let s90_deduped_total = 0
-    let s90_backend_calls = 0
+    let s90_custom_resolver_calls = 0
 
     function incrementCount(map: Map<string, number>, key: string, delta: number) {
         const next = (map.get(key) ?? 0) + delta
@@ -389,14 +456,25 @@ export async function getMemorisedDays(
         }
     }
 
-    function queueS90Request(configId: number, stability: number) {
+    function s90SourceKey(cid: number) {
+        const source = card_fsrs_source(cid)
+        if (!source) {
+            return `card:${cid}`
+        }
+        if (Array.isArray((source as ResolvedFsrsPreset).params)) {
+            return `preset:${(source as ResolvedFsrsPreset).id}`
+        }
+        return `deck:${(source as DeckConfig).id}`
+    }
+
+    function queueS90Request(cardId: number, stability: number) {
         const { step, bucket } = stabilityBucketForS90(stability)
-        const s90_key = `${configId}:${step}:${bucket}`
+        const s90_key = `${s90SourceKey(cardId)}:${step}:${bucket}`
         s90_dedup_total += 1
         if (!s90_request_index_by_key.has(s90_key)) {
             s90_request_index_by_key.set(s90_key, s90_request_items.length)
             s90_request_items.push({
-                config_id: configId,
+                card_id: cardId,
                 stability,
             })
         }
@@ -460,17 +538,6 @@ export async function getMemorisedDays(
         }
     }
 
-    const default_bin = { predicted: 0, real: 0, count: 0 }
-    function incrementLoss(bin: LossBin | null, predicted: number, real: number) {
-        bin ??= { ...default_bin }
-
-        bin.predicted = (bin.predicted || 0) + predicted
-        bin.real = (bin.real || 0) + real
-        bin.count = (bin.count || 0) + 1
-
-        return bin
-    }
-
     let fatigue_bins: Buckets<LossBin[]> = emptyBuckets(() => [])
     let today_so_far = 0
     let last_date = new Date()
@@ -492,15 +559,15 @@ export async function getMemorisedDays(
 
     // let log: any[] = []
     for (const revlog of revlogs) {
-        const config = card_config(revlog.cid)
-        if (!config) {
+        const fsrsSource = card_fsrs_source(revlog.cid)
+        if (!fsrsSource) {
             continue
         }
 
         const grade = revlog.ease
         const new_card = !fsrsCards[revlog.cid]
         const now = new Date(revlog.id)
-        const fsrs = getFsrs(config)
+        const fsrs = getFsrs(fsrsSource)
         let card = fsrsCards[revlog.cid] ?? createEmptyCard(new Date(revlog.cid))
         const revlogDay = dayFromMs(revlog.id)
 
@@ -616,13 +683,9 @@ export async function getMemorisedDays(
 
                     // Calibration graph
                     if (!excludedRevlogIds.has(revlog.id)) {
-                        let calibration_r_bin =
-                            Math.floor(Math.exp(Math.log(calibration_bin_count + 1) * p)) - 1
-                        calibration[calibration_r_bin] = incrementLoss(
-                            calibration[calibration_r_bin],
-                            p,
-                            y
-                        )
+                        calibration_samples.push({ revlogId: revlog.id, actual: y })
+                        fsrs_calibration_predictions_by_revlog_id[revlog.id] = p
+                        addCalibrationSample(calibration, p, y)
                         /* log.push({
                             d: card.difficulty,
                             s: card.stability,
@@ -655,7 +718,7 @@ export async function getMemorisedDays(
         card.stability = newState.stability
         card.difficulty = newState.difficulty
         last_stability[revlog.cid] = card.stability // To prevent "forget" affecting the forgetting curve
-        const s90_key = queueS90Request(config.id, card.stability)
+        const s90_key = queueS90Request(revlog.cid, card.stability)
         const day_events = s90_events_by_day.get(revlogDay) ?? []
         day_events.push({
             card_id: revlog.cid,
@@ -676,8 +739,20 @@ export async function getMemorisedDays(
 
     s90_deduped_total = Math.max(0, s90_dedup_total - s90_request_items.length)
     if (s90_request_items.length > 0) {
-        s90_backend_calls = 1
-        const intervals = await resolveS90Batch(s90_request_items, TARGET_RETRIEVABILITY)
+        const intervals = resolveS90Batch
+            ? await resolveS90Batch(s90_request_items, TARGET_RETRIEVABILITY)
+            : s90_request_items.map((item) => {
+                  const source = card_fsrs_source(item.card_id)
+                  if (!source) {
+                      return 0
+                  }
+                  return intervalAtRetrievability(
+                      getFsrs(source),
+                      item.stability,
+                      TARGET_RETRIEVABILITY
+                  )
+              })
+        s90_custom_resolver_calls = resolveS90Batch ? 1 : 0
         for (const [key, requestIndex] of s90_request_index_by_key) {
             const s90 = intervals[requestIndex]
             if (s90 !== undefined) {
@@ -710,38 +785,53 @@ export async function getMemorisedDays(
 
     // console.log(log)
 
-    let inaccurate_cids: any[] = []
-    let accurate_cids: number[] = []
+    let comparedStabilityCount = 0
+    let inaccurateStabilityCount = 0
+    let stabilityErrorSum = 0
+    const inaccurateStabilitySample: {
+        cid: number
+        expected: string
+        actual: string
+    }[] = []
+    const inaccurateStabilitySampleLimit = 20
 
     for (const [cid, card] of Object.entries(fsrsCards)) {
         const num_cid = +cid
         const previous = dayFromMs(card.last_review!.getTime())
-        const fsrs = getFsrs(card_config(num_cid)!)
+        const source = card_fsrs_source(num_cid)
+        if (!source) {
+            continue
+        }
+        const fsrs = getFsrs(source)
         forgetting_curve(fsrs, last_stability[num_cid], previous, today + 1, card, num_cid)
         const actual = getFsrsInternalStabilityFromCard(cards_by_id[num_cid])
         if (actual !== undefined) {
+            comparedStabilityCount += 1
             const expected = last_stability[num_cid]
-            if (Math.abs(expected - actual) > 0.01) {
-                inaccurate_cids.push({
-                    cid: num_cid,
-                    expected: expected.toFixed(2),
-                    actual: actual.toFixed(2),
-                })
-            } else {
-                accurate_cids.push(num_cid)
+            const error = Math.abs(expected - actual)
+            if (error > 0.01) {
+                inaccurateStabilityCount += 1
+                stabilityErrorSum += error
+                if (inaccurateStabilitySample.length < inaccurateStabilitySampleLimit) {
+                    inaccurateStabilitySample.push({
+                        cid: num_cid,
+                        expected: expected.toFixed(2),
+                        actual: actual.toFixed(2),
+                    })
+                }
             }
         }
     }
 
-    if (inaccurate_cids.length) {
-        const mean_error = _.meanBy(inaccurate_cids, (a) =>
-            Math.abs(a.expected - a.actual)
-        ).toFixed(2)
+    if (inaccurateStabilityCount) {
+        const mean_error = (stabilityErrorSum / inaccurateStabilityCount).toFixed(2)
         console.warn(
-            `The stability of the following ${inaccurate_cids.length}/${
-                inaccurate_cids.length + accurate_cids.length
-            } cards differ between SSE and anki with a mean error of ${mean_error}:`,
-            { inaccurate_cids, accurate_cids }
+            `The stability of ${inaccurateStabilityCount}/${comparedStabilityCount} cards differs between SSE and Anki with a mean error of ${mean_error}. Showing up to ${inaccurateStabilitySampleLimit} examples:`,
+            {
+                inaccurate_cids: inaccurateStabilitySample,
+                omitted_inaccurate_cids:
+                    inaccurateStabilityCount - inaccurateStabilitySample.length,
+            }
         )
     }
 
@@ -757,9 +847,11 @@ export async function getMemorisedDays(
     )
     const s90_dedup_percent = s90_dedup_total > 0 ? (s90_deduped_total / s90_dedup_total) * 100 : 0
     console.log(
-        `S90 dedup summary: ${s90_deduped_total}/${s90_dedup_total} (${s90_dedup_percent.toFixed(
+        `S90 card-preset dedup summary: ${s90_deduped_total}/${s90_dedup_total} (${s90_dedup_percent.toFixed(
             1
-        )}%), backend calls: ${s90_backend_calls}`
+        )}%), custom resolver calls: ${s90_custom_resolver_calls}, resolver: ${
+            resolveS90Batch ? "custom" : "local"
+        }`
     )
     const retrievabilityTimeStats = bucketTimeStats(time_by_retrievability_samples)
     const retrievabilityTimeStatsExcludeSameDay = bucketTimeStats(
@@ -792,6 +884,8 @@ export async function getMemorisedDays(
         leech_probabilities,
         difficulty_days: difficulty_day_bins,
         calibration,
+        calibration_samples,
+        fsrs_calibration_predictions_by_revlog_id,
         time_by_retrievability_mean: retrievabilityTimeStats.meanByBucket,
         time_by_retrievability_median: retrievabilityTimeStats.medianByBucket,
         time_by_retrievability_mean_exclude_same_day:

@@ -17,7 +17,7 @@ This document describes how long-term and short-term forgetting curve models are
 - The dominant parameter-length group is averaged element-wise and used as the model.
 - Fallback: average `card.data.decay` if no usable parameter group exists.
 
-This allows FSRS7 parameter arrays (length `35`) to drive long-term curve predictions, including the FSRS7 dual-decay formula path in `ts-fsrs`.
+This allows FSRS7 parameter arrays (length `34`) to drive long-term curve predictions, including the FSRS7 dual-decay formula path in `ts-fsrs`.
 
 ## Short-term Curve Model
 

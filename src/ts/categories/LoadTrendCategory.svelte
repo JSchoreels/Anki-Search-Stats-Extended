@@ -1,6 +1,7 @@
 <script lang="ts">
     import RevlogGraphContainer from "../RevlogGraphContainer.svelte"
     import IntervalGraph from "../IntervalGraph.svelte"
+    import CardLoadByMetric from "../CardLoadByMetric.svelte"
     import GraphCategory from "../GraphCategory.svelte"
     import Warning from "../Warning.svelte"
     import LineOrCandlestick from "../LineOrCandlestick.svelte"
@@ -91,6 +92,20 @@
             </Warning>
         {/if}
     </RevlogGraphContainer>
+    <CardLoadByMetric
+        metric="reps"
+        titleKey="load-by-reps"
+        helpKey="load-by-reps-help"
+        metricLabelKey="repetition-count"
+        colour="#5ca7f7"
+    />
+    <CardLoadByMetric
+        metric="lapses"
+        titleKey="load-by-lapses"
+        helpKey="load-by-lapses-help"
+        metricLabelKey="lapse-count"
+        colour="#bd3f09"
+    />
     <RevlogGraphContainer>
         <h1 slot="title">{i18n("learn-reviews-per-card")}</h1>
         <IntervalGraph

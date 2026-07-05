@@ -8,7 +8,19 @@ import { tooltipX } from "./tooltip"
 
 const percentify = (d: any) => `${(+d * 100).toFixed(0)}%`
 
-export function fsrsCalibrationGraph(svg: SVGElement, bins: LossBin[]) {
+export type CalibrationSeries = {
+    label: string
+    bins: LossBin[]
+    color: string
+}
+
+function isCalibrationSeries(input: LossBin[] | CalibrationSeries[]): input is CalibrationSeries[] {
+    return !!input[0] && "bins" in input[0]
+}
+
+export function fsrsCalibrationGraph(svg: SVGElement, input: LossBin[] | CalibrationSeries[]) {
+    d3.select(svg).selectAll("*").remove()
+
     const { width, height } = defaultGraphBounds()
     const xTicks = 10
 
@@ -17,17 +29,33 @@ export function fsrsCalibrationGraph(svg: SVGElement, bins: LossBin[]) {
         index: number
     }
 
+    interface CalibrationHoverBinData {
+        index: number
+        series: {
+            label: string
+            datum: CalibrationBinData
+        }[]
+    }
+
+    const series = isCalibrationSeries(input)
+        ? input
+        : [{ label: i18n("calibration-legend-fsrs"), bins: input, color: "steelblue" }]
+    const binCount = d3.max(series.map((s) => s.bins.length)) ?? 0
+
     const x = d3.scaleLinear().domain([0, 1]).range([0, width])
     const y = d3.scaleLinear().domain([0, 1]).range([height, 0])
 
     function binWidth(i: number) {
-        const L = Math.log(bins.length + 1)
+        const L = Math.log(binCount + 1)
         const pLow = Math.log(i + 1) / L
         const pHigh = Math.log(i + 2) / L
         return [x(pLow), x(pHigh)] as [number, number]
     }
 
-    const max_bin = d3.max(bins.map((d) => d.count)) ?? 0
+    const max_bin =
+        d3.max(
+            series.flatMap((s) => s.bins.map((d) => d?.count ?? 0).filter((d) => d > 0))
+        ) ?? 0
 
     const count_y = d3.scaleLinear().domain([0, max_bin]).range([height, 0])
 
@@ -79,21 +107,35 @@ export function fsrsCalibrationGraph(svg: SVGElement, bins: LossBin[]) {
         .style("stroke", "currentColor")
         .text(i18n("predicted"))
 
-    let data = bins.map(
-        (d, i) =>
+    function normalizedData(bins: LossBin[]) {
+        return bins.map((d, i) =>
             // Converted to proportions
             <CalibrationBinData>{
                 bin: { real: d.real / d.count, predicted: d.predicted / d.count, count: d.count },
                 index: i,
             }
+        )
+    }
+
+    const lineData = series.map((s) => ({ ...s, data: normalizedData(s.bins) }))
+    const countBars = lineData.flatMap((s) =>
+        s.data
+            .filter((d): d is CalibrationBinData => !!d)
+            .map((d) => ({ ...d, color: s.color }))
     )
+    const hoverData: CalibrationHoverBinData[] = Array.from({ length: binCount }, (_, index) => ({
+        index,
+        series: lineData
+            .map((s) => ({ label: s.label, datum: s.data[index] }))
+            .filter((d): d is { label: string; datum: CalibrationBinData } => !!d.datum),
+    }))
 
     axis.append("g")
         .selectAll("g")
-        .data(data.filter((d) => d))
+        .data(countBars)
         .join("rect")
-        .attr("fill", "blue")
-        .attr("opacity", 0.5)
+        .attr("fill", (d) => d.color)
+        .attr("opacity", lineData.length > 1 ? 0.3 : 0.5)
         .attr("height", (d) => height - count_y(d.bin.count))
         .attr("width", (d) => binWidth(d.index)[1] - binWidth(d.index)[0])
         .attr("x", (d) => binWidth(d.index)[0])
@@ -120,24 +162,54 @@ export function fsrsCalibrationGraph(svg: SVGElement, bins: LossBin[]) {
         )
 
     d3.select(svg)
-        .append("path")
-        .datum(data)
+        .selectAll("path.calibration-series")
+        .data(lineData)
+        .join("path")
+        .attr("class", "calibration-series")
         .attr("fill", "none")
-        .attr("stroke", "steelblue")
+        .attr("stroke", (d) => d.color)
         .attr("stroke-width", 1.5)
         .style("pointer-events", "none")
-        .attr(
-            "d",
+        .attr("d", (d) =>
             d3
                 .line<CalibrationBinData>()
                 .defined((d) => !!d)
                 .x((d) => x(d.bin.predicted))
-                .y((d) => y(d.bin.real))
+                .y((d) => y(d.bin.real))(d.data)
         )
+
+    if (lineData.length > 0) {
+        const legend = axis
+            .append("g")
+            .attr("transform", `translate(${width - 130}, 8)`)
+            .style("font-size", "11px")
+
+        const legendItems = legend
+            .selectAll("g")
+            .data(lineData)
+            .join("g")
+            .attr("transform", (_d, i) => `translate(0, ${i * 16})`)
+
+        legendItems
+            .append("line")
+            .attr("x1", 0)
+            .attr("x2", 18)
+            .attr("y1", 0)
+            .attr("y2", 0)
+            .attr("stroke", (d) => d.color)
+            .attr("stroke-width", 2)
+
+        legendItems
+            .append("text")
+            .attr("x", 24)
+            .attr("y", 4)
+            .style("fill", "currentColor")
+            .text((d) => d.label)
+    }
 
     axis.append("g")
         .selectAll("g")
-        .data(data.filter((a) => a))
+        .data(hoverData.filter((d) => d.series.length > 0))
         .join("rect")
         .attr("class", "hover-bar")
         .attr("height", height)
@@ -145,16 +217,28 @@ export function fsrsCalibrationGraph(svg: SVGElement, bins: LossBin[]) {
         .attr("x", (d) => binWidth(d.index)[0])
         .attr("y", 0)
         .on("mouseover", (e: MouseEvent, d) => {
-            const value_string = (d.bin.real * 100).toFixed(1)
+            const primary = d.series[0]
+            const lines =
+                d.series.length === 1
+                    ? [
+                          `${i18n("predicted")} ${(primary.datum.bin.predicted * 100).toFixed(
+                              1
+                          )}%:`,
+                          `${i18n("actual")}: ${(primary.datum.bin.real * 100).toFixed(1)}%`,
+                          `${i18n("count")}: ${primary.datum.bin.count}`,
+                      ]
+                    : d.series.flatMap(({ label, datum }) => [
+                          `${label}: ${(datum.bin.predicted * 100).toFixed(1)}% ${i18n(
+                              "predicted"
+                          )}`,
+                          `${i18n("actual")}: ${(datum.bin.real * 100).toFixed(1)}%, ${i18n(
+                              "count"
+                          )}: ${datum.bin.count}`,
+                      ])
             tooltip.set({
                 x: tooltipX(e),
                 y: e.pageY,
-                // Todo: i18n
-                text: [
-                    `${i18n("predicted")} ${(d.bin.predicted * 100).toFixed(1)}%:`,
-                    `${i18n("actual")}: ${value_string}%`,
-                    `${i18n("count")}: ${d.bin.count}`,
-                ],
+                text: lines,
             })
         })
 

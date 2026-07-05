@@ -6,8 +6,9 @@ This document describes how time-distribution data is computed for the Time cate
 
 - Revlog and card data are processed in [`src/ts/revlogGraphs.ts`](/Users/jschoreels/workspace/Anki-Search-Stats-Extended/src/ts/revlogGraphs.ts).
 - FSRS replay state is processed in [`src/ts/MemorisedBar.ts`](/Users/jschoreels/workspace/Anki-Search-Stats-Extended/src/ts/MemorisedBar.ts).
-- Deck FSRS presets are read from `SSEother.deck_configs` and `SSEother.deck_config_ids`.
-- FSRS parameters are selected with [`selectTsFsrsParams`](/Users/jschoreels/workspace/Anki-Search-Stats-Extended/src/ts/fsrsParams.ts), which follows Anki's selected `fsrsVersion` first (FSRS7/6/5/4) and only falls back when that version's params are unusable.
+- FSRS replay uses resolved card presets from `/_anki/fsrsPresetData` when available. Presets are requested only for cards present in the loaded revlogs.
+- Deck FSRS presets are still read from `SSEother.deck_configs` and `SSEother.deck_config_ids` as the fallback path.
+- Resolved preset parameters are used directly. Deck fallback parameters are selected with [`selectTsFsrsParams`](/Users/jschoreels/workspace/Anki-Search-Stats-Extended/src/ts/fsrsParams.ts), which follows Anki's selected `fsrsVersion` first (FSRS7/6/5/4) and only falls back when that version's params are unusable.
 
 ## Existing Time Graph Fields
 
