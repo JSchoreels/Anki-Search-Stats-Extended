@@ -39,10 +39,13 @@ source.
       `revlog.type` 0-4). Rescheduled rows do not have RWKV review-time
       retrievability. With a role-aware table, skipped rows are silent because
       the held-out cache rows define the graph sample.
-    - In legacy mode, if persisted values are unavailable or incomplete for the
-      requested eligible calibration samples, it returns no data. The add-on
-      does not recompute RWKV review retrievability by replaying scheduler
-      history.
+    - When no role-aware RWKV calibration rows are available, the add-on calls
+      Anki's `aqt.rwkv_scheduler.ensure_rwkv_calibration_data(mw)` API when that
+      API exists, then retries the cache read. The API is a no-op when current
+      data is already complete and otherwise runs Anki's calibration-only
+      historical replay while preserving active reviewer state.
+    - Older Anki versions without the API retain the legacy read-only fallback:
+      incomplete persisted values return no RWKV calibration data.
     - Expected values are probabilities in the `[0, 1]` range keyed by
       `revlog.id`.
 - FSRS review retrievability data is read from Anki through the
@@ -113,9 +116,8 @@ Anki-side producers should store pre-answer predictions for the same
   `fsrs_optimization`, including `final_fit` and `validation_fold` rows.
 - FSRS answer handling writes `search_stats_fsrs_review_retrievability` with
   source `fsrs_review` and role `post_optimization`.
-- RWKV state-cache build/update writes
-  `search_stats_rwkv_review_retrievability` with source
-  `rwkv_state_cache_build` and role `final_fit`.
+- RWKV state-cache build/update maintains recurrent review state without
+  generating historical calibration rows.
 - RWKV calibration training/recompute writes
   `search_stats_rwkv_review_retrievability` with sources
   `rwkv_calibration_train` or `rwkv_calibration_recompute`, role `final_fit`
@@ -167,13 +169,21 @@ RWKV mode reuses the same eligible review samples identified by
 then requests RWKV probabilities for those sample `revlog.id` values from
 `/_anki/rwkvReviewRetrievability`. With a role-aware RWKV cache table, the graph
 uses the sparse held-out rows returned by that endpoint; train/final-fit rows
-are intentionally excluded. Selecting RWKV does not rerun the RWKV scheduler
-replay and does not affect the other FSRS graphs.
+are intentionally excluded. On the first cache miss, adapted Anki builds may
+run one calibration-only RWKV replay through the public ensure API. Later graph
+loads reuse the persisted result, and active reviewer state is restored after
+generation.
 
 Both mode overlays the FSRS and RWKV calibration lines on the same graph. The
 FSRS line is blue, the RWKV line is green, and the perfect-calibration reference
 line remains orange. Review-count volume bars use the same source colors and
 overlap in combined mode.
+
+Each populated calibration bucket includes a 95% card-level bootstrap confidence
+interval for observed retention. Reviews are first aggregated by card and bucket,
+then cards are sampled with replacement for 500 deterministic bootstrap iterations.
+This preserves the dependence between repeated reviews of the same card while
+keeping the graph stable across redraws.
 
 For legacy collections without role-aware RWKV cache columns, the endpoint
 checks for these `revlog` columns, in order:
@@ -193,11 +203,12 @@ requested eligible sample values, RWKV mode shows a no-data message. Non-answer
 sample rows are skipped before the completeness check and shown as warnings
 instead. In role-aware mode, missing requested ids are expected when they belong
 to the train split or rows RWKV does not score, so they are ignored silently.
-The add-on deliberately avoids recomputing missing RWKV values, so state-cache
-bugs or missing persisted state remain visible instead of being hidden by a slow
-replay fallback. FSRS mode remains available and unchanged. If an older client
-omits explicit sample IDs, the endpoint falls back to the previous current
-search/date-range targeting behavior, but still only reads persisted values.
+On adapted Anki builds, the add-on asks Anki to generate missing role-aware RWKV
+calibration data once, then retries the requested sample IDs. On older builds
+without the ensure API, FSRS mode remains available and missing RWKV data still
+produces the no-data result. If an older client omits explicit sample IDs, the
+endpoint falls back to the previous current search/date-range targeting
+behavior.
 
 ## FSRS7 Support
 

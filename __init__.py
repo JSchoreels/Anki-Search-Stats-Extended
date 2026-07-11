@@ -548,6 +548,24 @@ def _read_rwkv_calibration_retrievability_cache(
     """)
 
 
+def _ensure_rwkv_calibration_data() -> bool:
+    """Ask adapted Anki builds to lazily generate missing RWKV history data."""
+
+    try:
+        from aqt import rwkv_scheduler
+    except ImportError:
+        return False
+
+    ensure = getattr(rwkv_scheduler, "ensure_rwkv_calibration_data", None)
+    if not callable(ensure):
+        return False
+    try:
+        return bool(ensure(mw))
+    except Exception as error:
+        print(f"Search Stats Extended: RWKV calibration generation failed: {error}")
+        return False
+
+
 def _rwkv_retrievability_column():
     revlog_columns = {row[1] for row in mw.col.db.all("PRAGMA table_info(revlog)")}
     return next(
@@ -636,6 +654,12 @@ def rwkv_review_retrievability() -> bytes:
         day_range,
         requested_review_ids,
     )
+    if not role_aware_rows and _ensure_rwkv_calibration_data():
+        role_aware_rows = _read_rwkv_calibration_retrievability_cache(
+            cids,
+            day_range,
+            requested_review_ids,
+        )
     using_role_aware_cache = role_aware_rows is not None
 
     warnings = []

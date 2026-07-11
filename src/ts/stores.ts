@@ -199,9 +199,13 @@ derived(
                 $searchLimit,
                 samples.map((sample) => sample.revlogId)
             )
+            const effectivePredictions =
+                Object.keys(predictionsByRevlogId).length > 0
+                    ? predictionsByRevlogId
+                    : $memorised_stats.fsrs_calibration_predictions_by_revlog_id
             return {
                 column,
-                bins: buildCalibrationBins(samples, predictionsByRevlogId),
+                bins: buildCalibrationBins(samples, effectivePredictions),
                 warnings,
             }
         }).then(set)

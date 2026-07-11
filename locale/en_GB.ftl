@@ -354,6 +354,7 @@ calibration-source-rwkv = RWKV
 calibration-source-both = Both
 calibration-legend-fsrs = Actual FSRS R
 calibration-legend-rwkv = Actual RWKV R
+calibration-confidence-interval = Card bootstrap 95% CI: {$lower}%–{$upper}%
 calibration-no-data = Not enough eligible review history to draw calibration yet.
 rwkv-calibration-no-data = No complete persisted RWKV review retrievability state was found for this search and date range.
 fsrs-calibration-help = This compares the average retention the selected source predicts you should have on cards (Perfect/orange line) to the retention you actually have (Actual/blue line).

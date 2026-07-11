@@ -11,6 +11,10 @@ import {
     generatorParameters,
 } from "ts-fsrs"
 import type { LossBar } from "./bar"
+import {
+    cardBootstrapConfidenceIntervals,
+    type CalibrationBootstrapObservation,
+} from "./calibrationBootstrap"
 import type { DeckConfig, ResolvedFsrsPreset } from "./config"
 import { paramsForTsFsrs, selectResolvedFsrsPresetParams, selectTsFsrsParams } from "./fsrsParams"
 import { type Buckets, dayFromMs, emptyBuckets, IDify, rollover_ms, today } from "./revlogGraphs"
@@ -25,10 +29,12 @@ export interface LossBin {
     real: number
     predicted: number
     count: number
+    confidenceInterval?: [number, number]
 }
 
 export type CalibrationSample = {
     revlogId: number
+    cardId: number
     actual: number
 }
 
@@ -72,9 +78,27 @@ export function buildCalibrationBins(
     predictionsByRevlogId: Record<number, number>
 ) {
     const bins = <LossBin[]>Array(CALIBRATION_BIN_COUNT)
+    const observations: CalibrationBootstrapObservation[] = []
 
     for (const sample of samples) {
-        addCalibrationSample(bins, predictionsByRevlogId[sample.revlogId], sample.actual)
+        const predicted = predictionsByRevlogId[sample.revlogId]
+        if (addCalibrationSample(bins, predicted, sample.actual)) {
+            observations.push({
+                cardId: sample.cardId,
+                bin: calibrationBinIndex(predicted),
+                actual: sample.actual,
+            })
+        }
+    }
+
+    const confidenceIntervals = cardBootstrapConfidenceIntervals(
+        observations,
+        CALIBRATION_BIN_COUNT
+    )
+    for (let bin = 0; bin < bins.length; bin++) {
+        if (bins[bin] && confidenceIntervals[bin]) {
+            bins[bin].confidenceInterval = confidenceIntervals[bin]
+        }
     }
 
     return bins
@@ -683,7 +707,11 @@ export async function getMemorisedDays(
 
                     // Calibration graph
                     if (!excludedRevlogIds.has(revlog.id)) {
-                        calibration_samples.push({ revlogId: revlog.id, actual: y })
+                        calibration_samples.push({
+                            revlogId: revlog.id,
+                            cardId: revlog.cid,
+                            actual: y,
+                        })
                         fsrs_calibration_predictions_by_revlog_id[revlog.id] = p
                         addCalibrationSample(calibration, p, y)
                         /* log.push({

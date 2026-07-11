@@ -111,13 +111,23 @@ export function fsrsCalibrationGraph(svg: SVGElement, input: LossBin[] | Calibra
         return bins.map((d, i) =>
             // Converted to proportions
             <CalibrationBinData>{
-                bin: { real: d.real / d.count, predicted: d.predicted / d.count, count: d.count },
+                bin: {
+                    real: d.real / d.count,
+                    predicted: d.predicted / d.count,
+                    count: d.count,
+                    confidenceInterval: d.confidenceInterval,
+                },
                 index: i,
             }
         )
     }
 
     const lineData = series.map((s) => ({ ...s, data: normalizedData(s.bins) }))
+    const pointData = lineData.flatMap((s) =>
+        s.data
+            .filter((d): d is CalibrationBinData => !!d)
+            .map((d) => ({ ...d, color: s.color }))
+    )
     const countBars = lineData.flatMap((s) =>
         s.data
             .filter((d): d is CalibrationBinData => !!d)
@@ -178,6 +188,42 @@ export function fsrsCalibrationGraph(svg: SVGElement, input: LossBin[] | Calibra
                 .y((d) => y(d.bin.real))(d.data)
         )
 
+    const confidenceIntervals = axis
+        .append("g")
+        .attr("class", "calibration-confidence-intervals")
+        .selectAll("g")
+        .data(pointData.filter((d) => !!d.bin.confidenceInterval))
+        .join("g")
+        .attr("transform", (d) => `translate(${x(d.bin.predicted)}, 0)`)
+        .attr("stroke", (d) => d.color)
+        .attr("stroke-width", 1.25)
+
+    confidenceIntervals
+        .append("line")
+        .attr("y1", (d) => y(d.bin.confidenceInterval![0]))
+        .attr("y2", (d) => y(d.bin.confidenceInterval![1]))
+
+    confidenceIntervals
+        .append("line")
+        .attr("x1", -3)
+        .attr("x2", 3)
+        .attr("y1", (d) => y(d.bin.confidenceInterval![0]))
+        .attr("y2", (d) => y(d.bin.confidenceInterval![0]))
+
+    confidenceIntervals
+        .append("line")
+        .attr("x1", -3)
+        .attr("x2", 3)
+        .attr("y1", (d) => y(d.bin.confidenceInterval![1]))
+        .attr("y2", (d) => y(d.bin.confidenceInterval![1]))
+
+    confidenceIntervals
+        .append("circle")
+        .attr("cy", (d) => y(d.bin.real))
+        .attr("r", 2.5)
+        .attr("fill", (d) => d.color)
+        .attr("stroke", "none")
+
     if (lineData.length > 0) {
         const legend = axis
             .append("g")
@@ -225,6 +271,18 @@ export function fsrsCalibrationGraph(svg: SVGElement, input: LossBin[] | Calibra
                               1
                           )}%:`,
                           `${i18n("actual")}: ${(primary.datum.bin.real * 100).toFixed(1)}%`,
+                          ...(primary.datum.bin.confidenceInterval
+                              ? [
+                                    i18n("calibration-confidence-interval", {
+                                        lower: (
+                                            primary.datum.bin.confidenceInterval[0] * 100
+                                        ).toFixed(1),
+                                        upper: (
+                                            primary.datum.bin.confidenceInterval[1] * 100
+                                        ).toFixed(1),
+                                    }),
+                                ]
+                              : []),
                           `${i18n("count")}: ${primary.datum.bin.count}`,
                       ]
                     : d.series.flatMap(({ label, datum }) => [
@@ -234,6 +292,14 @@ export function fsrsCalibrationGraph(svg: SVGElement, input: LossBin[] | Calibra
                           `${i18n("actual")}: ${(datum.bin.real * 100).toFixed(1)}%, ${i18n(
                               "count"
                           )}: ${datum.bin.count}`,
+                          ...(datum.bin.confidenceInterval
+                              ? [
+                                    i18n("calibration-confidence-interval", {
+                                        lower: (datum.bin.confidenceInterval[0] * 100).toFixed(1),
+                                        upper: (datum.bin.confidenceInterval[1] * 100).toFixed(1),
+                                    }),
+                                ]
+                              : []),
                       ])
             tooltip.set({
                 x: tooltipX(e),

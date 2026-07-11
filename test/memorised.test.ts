@@ -386,7 +386,9 @@ test("Calibration samples can be reused with alternate review-time predictions",
     })
     const rwkvEntry = rwkvBins.find((entry) => !!entry && entry.count > 0)
 
-    expect(stats.calibration_samples).toEqual([{ revlogId: revlogs[1].id, actual: 1 }])
+    expect(stats.calibration_samples).toEqual([
+        { revlogId: revlogs[1].id, cardId: revlogs[1].cid, actual: 1 },
+    ])
     expect(stats.fsrs_calibration_predictions_by_revlog_id[revlogs[1].id]).toBeGreaterThan(0)
     expect(rwkvEntry).toBeTruthy()
     expect(rwkvEntry!.count).toBe(1)
@@ -397,9 +399,9 @@ test("Calibration samples can be reused with alternate review-time predictions",
 test("Alternate calibration bins ignore missing and invalid predictions", () => {
     const bins = buildCalibrationBins(
         [
-            { revlogId: 1, actual: 1 },
-            { revlogId: 2, actual: 0 },
-            { revlogId: 3, actual: 1 },
+            { revlogId: 1, cardId: 1, actual: 1 },
+            { revlogId: 2, cardId: 2, actual: 0 },
+            { revlogId: 3, cardId: 3, actual: 1 },
         ],
         {
             1: 0.25,
