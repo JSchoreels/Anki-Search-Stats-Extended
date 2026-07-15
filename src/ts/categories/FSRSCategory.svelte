@@ -7,6 +7,7 @@
     import MemorisedBar from "../MemorisedBar.svelte"
     import MemorisedGraphContainer from "../MemorisedGraphContainer.svelte"
     import FsrsCalibration from "../FSRSCalibration.svelte"
+    import UMPlus from "../UMPlus.svelte"
     import ForgettingCurve from "../ForgettingCurve.svelte"
     import TimeMachineScroll from "../TimeMachineScroll.svelte"
     import { i18n, i18n_bundle, i18n_pattern } from "../i18n"
@@ -27,6 +28,7 @@
     import type { PieDatum } from "../pie"
     import _ from "lodash"
     import * as d3 from "d3"
+    import { buildUmPlusData } from "../umPlusData"
 
     $: truncated = $searchLimit !== 0
     $: realScroll = -Math.abs($scroll)
@@ -135,6 +137,18 @@
             : $calibrationMode === "rwkv"
               ? ($rwkvCalibrationStats?.warnings ?? [])
               : ($fsrsCalibrationStats?.warnings ?? [])
+    $: umPlusData = buildUmPlusData(
+        $memorised_stats?.calibration_samples ?? [],
+        $fsrsCalibrationStats?.predictionsByRevlogId ?? {},
+        $rwkvCalibrationStats?.predictionsByRevlogId ?? {}
+    )
+    $: umPlusLoading = !!$memorised_stats && (!$fsrsCalibrationStats || !$rwkvCalibrationStats)
+    $: umPlusWarnings = Array.from(
+        new Set([
+            ...($fsrsCalibrationStats?.warnings ?? []),
+            ...($rwkvCalibrationStats?.warnings ?? []),
+        ])
+    )
 </script>
 
 <GraphCategory hidden_title="FSRS" config_name="fsrs">
@@ -196,6 +210,28 @@
         <p>
             {i18n("fsrs-calibration-help")}
         </p>
+    </MemorisedGraphContainer>
+    <MemorisedGraphContainer>
+        <h1 slot="title">{i18n("um-plus")}</h1>
+        <div slot="graph" class="calibration-panel">
+            {#if umPlusWarnings.length > 0}
+                <Warning always>{umPlusWarnings.join(" ")}</Warning>
+            {/if}
+            {#if umPlusLoading}
+                <div class="calibration-message">{i18n("loading")}</div>
+            {:else if umPlusData.count > 0}
+                <UMPlus data={umPlusData} />
+            {:else}
+                <div class="calibration-message">{i18n("um-plus-no-data")}</div>
+            {/if}
+        </div>
+        <ul class="um-plus-help">
+            <li>{i18n("um-plus-help-error")}</li>
+            <li>{i18n("um-plus-help-direction")}</li>
+            <li>{i18n("um-plus-help-volume")}</li>
+            <li>{i18n("um-plus-help-scores")}</li>
+            <li>{i18n("um-plus-help-small-buckets")}</li>
+        </ul>
     </MemorisedGraphContainer>
     <MemorisedGraphContainer>
         <h1 slot="title">{i18n("stability-time-machine")}</h1>
@@ -293,5 +329,10 @@
         justify-content: center;
         color: var(--fg-faint);
         text-align: center;
+    }
+
+    .um-plus-help {
+        margin-top: 1em;
+        font-size: small;
     }
 </style>

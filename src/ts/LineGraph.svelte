@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { renderLineChart } from "./LineGraph"
+    import { renderLineChart, type LineChartSeries } from "./LineGraph"
     import { type DrawnTrend, type TrendLine } from "./trend"
     import {
         loadPinnedTrendRanges,
@@ -11,6 +11,7 @@
 
     export let label: string
     export let data: number[]
+    export let series: LineChartSeries[] | undefined = undefined
     export let trend_data: DrawnTrend[] = []
     export let current_trend: TrendLine = undefined
     export let removeTrend: (id: number) => void = () => {}
@@ -50,6 +51,7 @@
             onPinnedRangesChange: (ranges) => {
                 void queuePersistPinnedRanges(trendPersistenceKey, ranges, true)
             },
+            series,
         })
     }
 </script>

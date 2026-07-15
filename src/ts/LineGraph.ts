@@ -14,11 +14,13 @@ import {
 export function gridLines(
     svg: d3.Selection<SVGGElement, unknown, null, undefined>,
     xTicks: number[],
-    yTicks: number[]
+    yTicks: number[],
+    bounds: Pick<ReturnType<typeof defaultGraphBounds>, "width" | "height"> = defaultGraphBounds()
 ) {
-    const { width, height } = defaultGraphBounds()
+    const { width, height } = bounds
 
     svg.append("g")
+        .attr("class", "grid-lines-x")
         .selectAll("line")
         .data(xTicks)
         .join("line")
@@ -30,6 +32,7 @@ export function gridLines(
         .style("opacity", 0.05)
 
     svg.append("g")
+        .attr("class", "grid-lines-y")
         .selectAll("line")
         .data(yTicks)
         .join("line")
@@ -42,6 +45,12 @@ export function gridLines(
 }
 
 type LineChartPoint = { value: number; date: Date; day: number }
+
+export type LineChartSeries = {
+    label: string
+    data: number[]
+    color: string
+}
 
 export function visibleTrendRangeFromLinePoints(points: Pick<LineChartPoint, "day">[]) {
     if (!points.length) {
@@ -66,12 +75,14 @@ export function renderLineChart(
         onControllerReady = () => {},
         initialPinnedTrends = [],
         onPinnedRangesChange = () => {},
+        series = undefined,
     }: {
         onTrendsChange?: (trends: DrawnTrend[]) => void
         onPreviewTrendChange?: (trend: TrendLine) => void
         onControllerReady?: (controller: TrendSelectionController) => void
         initialPinnedTrends?: TrendRange[]
         onPinnedRangesChange?: (ranges: TrendRange[]) => void
+        series?: LineChartSeries[]
     } = {}
 ) {
     if (!svg) {
@@ -90,16 +101,25 @@ export function renderLineChart(
     clearChart(svg)
     const { width, height } = defaultGraphBounds()
 
-    const first_non_zero_index = values.findIndex((v) => v)
+    const chartSeries =
+        series && series.length > 0 ? series : [{ label, data: values, color: "steelblue" }]
+    const first_non_zero_indexes = chartSeries
+        .map((item) => item.data.findIndex((value) => value))
+        .filter((index) => index >= 0)
+    const first_non_zero_index = d3.min(first_non_zero_indexes) ?? -1
     const start_index = first_non_zero_index === -1 ? 0 : first_non_zero_index
 
-    const date_values = Array.from(values)
-        .slice(start_index)
-        .map((v, i) => ({
-            value: v ?? 0,
-            date: new Date((start_index + i) * day_ms),
-            day: start_index + i,
-        }))
+    const seriesData = chartSeries.map((item) => ({
+        ...item,
+        points: Array.from(item.data)
+            .slice(start_index)
+            .map((value, index) => ({
+                value: value ?? 0,
+                date: new Date((start_index + index) * day_ms),
+                day: start_index + index,
+            })),
+    }))
+    const date_values = seriesData.find((item) => item.points.length > 0)?.points ?? []
 
     if (!date_values.length) {
         onTrendsChange([])
@@ -114,12 +134,13 @@ export function renderLineChart(
         return
     }
 
-    const xMin = d3.min(date_values.map((d) => d.date))!
-    const xMax = d3.max(date_values.map((d) => d.date))!
+    const allPoints = seriesData.flatMap((item) => item.points)
+    const xMin = d3.min(allPoints.map((d) => d.date))!
+    const xMax = d3.max(allPoints.map((d) => d.date))!
 
     const x = d3.scaleTime().domain([xMin, xMax]).range([0, width])
 
-    const yMax = d3.max(values) || 0
+    const yMax = d3.max(allPoints.map((point) => point.value)) || 0
 
     const y = d3.scaleLinear().domain([yMax, 0]).range([0, height]).nice()
 
@@ -138,25 +159,65 @@ export function renderLineChart(
         .call(d3.axisBottom(x).ticks(7))
 
     d3.select(svg)
-        .append("path")
-        .datum(date_values)
+        .selectAll("path.line-series")
+        .data(seriesData)
+        .join("path")
+        .attr("class", "line-series")
         .attr("fill", "none")
-        .attr("stroke", "steelblue")
+        .attr("stroke", (item) => item.color)
         .attr("stroke-width", 1.5)
         .style("pointer-events", "none")
-        .attr(
-            "d",
+        .attr("d", (item) =>
             d3
                 .line<LineChartPoint>()
+                .defined((point) => Number.isFinite(point.value))
                 .x((d) => x(d.date))
-                .y((d) => y(d.value))
+                .y((d) => y(d.value))(item.points)
         )
 
-    const bar_width = width / date_values.length + 1
+    if (seriesData.length > 1) {
+        const legend = axis
+            .append("g")
+            .attr("transform", `translate(${Math.max(0, width - 130)}, 8)`)
+            .style("font-size", "11px")
+        const items = legend
+            .selectAll("g")
+            .data(seriesData)
+            .join("g")
+            .attr("transform", (_item, index) => `translate(0, ${index * 16})`)
+        items
+            .append("line")
+            .attr("x1", 0)
+            .attr("x2", 16)
+            .attr("y1", 0)
+            .attr("y2", 0)
+            .attr("stroke", (item) => item.color)
+            .attr("stroke-width", 2)
+        items
+            .append("text")
+            .attr("x", 22)
+            .attr("y", 3)
+            .attr("fill", "currentColor")
+            .text((item) => item.label)
+    }
+
+    const lastDay = d3.max(allPoints.map((point) => point.day)) ?? start_index
+    const hoverData = Array.from({ length: lastDay - start_index + 1 }, (_, index) => {
+        const day = start_index + index
+        return {
+            day,
+            date: new Date(day * day_ms),
+            values: seriesData.map((item) => ({
+                label: item.label,
+                value: item.data[day],
+            })),
+        }
+    })
+    const bar_width = width / hoverData.length + 1
     const hoverBars = axis
         .append("g")
-        .selectAll<SVGRectElement, LineChartPoint>("rect")
-        .data(date_values.filter((a) => a))
+        .selectAll<SVGRectElement, (typeof hoverData)[number]>("rect")
+        .data(hoverData)
         .join("rect")
         .attr("class", "hover-bar")
         .attr("height", height)
@@ -164,11 +225,19 @@ export function renderLineChart(
         .attr("x", (d, i) => x(d.date)! - (i > 0 ? bar_width / 2 : 0))
         .attr("y", 0)
         .on("mouseover", (e: MouseEvent, d) => {
-            const value_string = d.value > 10 ? d.value.toFixed(0) : d.value.toPrecision(2)
             tooltip.set({
                 x: tooltipX(e),
                 y: e.pageY,
-                text: [`${d.date.toLocaleDateString()}:`, `${label}: ${value_string}`],
+                text: [
+                    `${d.date.toLocaleDateString()}:`,
+                    ...d.values
+                        .filter((item) => Number.isFinite(item.value))
+                        .map((item) => {
+                            const value = item.value
+                            const rendered = value > 10 ? value.toFixed(0) : value.toPrecision(2)
+                            return `${item.label}: ${rendered}`
+                        }),
+                ],
             })
         })
 

@@ -289,6 +289,37 @@ export async function getRwkvReviewRetrievability(
     return getReviewRetrievability("rwkvReviewRetrievability", cids, day_range, revlogIds)
 }
 
+export type RwkvMemorisedHistoryProgress = {
+    phase: "idle" | "loading" | "computing" | "complete" | "cancelled" | "failed" | "unavailable"
+    current: number
+    total: number
+    firstDay?: number | null
+    completedThroughDay?: number | null
+    retrievabilityByDay?: number[]
+    noteRetrievabilityByDay?: number[]
+    cardCountByDay?: number[]
+    done: boolean
+    error?: string | null
+}
+
+export async function startRwkvMemorisedHistory(cids: number[]) {
+    return (await endpoint(
+        "startRwkvMemorisedHistory",
+        JSON.stringify({ cids })
+    )) as RwkvMemorisedHistoryProgress
+}
+
+export async function getRwkvMemorisedHistoryProgress(cids: number[]) {
+    return (await endpoint(
+        "rwkvMemorisedHistoryProgress",
+        JSON.stringify({ cids })
+    )) as RwkvMemorisedHistoryProgress
+}
+
+export async function cancelRwkvMemorisedHistory() {
+    await endpoint("cancelRwkvMemorisedHistory", "{}", false)
+}
+
 export async function getFsrsReviewRetrievability(
     cids: number[],
     day_range: number,

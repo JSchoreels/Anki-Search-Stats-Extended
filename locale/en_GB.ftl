@@ -344,6 +344,15 @@ memorised-truncated-warning =
 
     This graph re-simulates your review history, leaving the beginning out can greatly
     affect the results.
+memorised-source = Memorised source
+memorised-source-fsrs = FSRS
+memorised-source-rwkv = RWKV
+memorised-source-both = Both
+memorised-rwkv-progress = Computing RWKV history: {$current} / {$total} predictions — {$percent}%
+memorised-rwkv-progress-label = RWKV Memorised history progress
+memorised-rwkv-saving-checkpoint = Saving resumable RWKV checkpoint…
+memorised-rwkv-stability-unavailable = Retrievability & Stability is FSRS-only. The FSRS series is shown for this view.
+cancel = Cancel
 
 fsrs-calibration = FSRS Calibration
 rwkv-calibration = RWKV Calibration
@@ -358,6 +367,22 @@ calibration-confidence-interval = Card bootstrap 95% CI: {$lower}%–{$upper}%
 calibration-no-data = Not enough eligible review history to draw calibration yet.
 rwkv-calibration-no-data = No complete persisted RWKV review retrievability state was found for this search and date range.
 fsrs-calibration-help = This compares the average retention the selected source predicts you should have on cards (Perfect/orange line) to the retention you actually have (Actual/blue line).
+um-plus = FSRS vs RWKV UM+
+um-plus-x-axis = Difference in predicted p(recall): FSRS minus RWKV
+um-plus-y-axis = B-W Metric
+um-plus-volume-axis = Paired reviews
+um-plus-legend = {$model}, UM+={$score}, slope={$slope}
+um-plus-slope-unavailable = n/a
+um-plus-show-small-buckets = Show Small Buckets (<200 reviews)
+um-plus-tooltip-disagreement = FSRS − RWKV disagreement: {$value}
+um-plus-tooltip-error = {$model} prediction error: {$value}
+um-plus-tooltip-volume = Paired FSRS/RWKV reviews: {$count} ({$percent}% of paired reviews)
+um-plus-no-data = No reviews have both an eligible FSRS prediction and an eligible RWKV prediction in this search and date range.
+um-plus-help-error = Closer to 0% is better: above zero means a model overestimated recall, while below zero means it underestimated it.
+um-plus-help-direction = Right of center, FSRS predicted higher recall than RWKV; left of center, RWKV predicted higher.
+um-plus-help-volume = Larger bubbles and bars mean more reviews.
+um-plus-help-scores = Lower UM+ and a slope closer to zero are better.
+um-plus-help-small-buckets = Buckets under 200 reviews are hidden unless “Show Small Buckets” is enabled.
 forgetting-curve = First Long-term Forgetting Curve
 forgetting-curve-help =
     Compares the observed rate of recall against fitted FSRS forgetting curves which are grouped by the card's first rating.

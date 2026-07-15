@@ -11,6 +11,12 @@ export function defaultGraphBounds() {
     }
 }
 
+export function comparisonGraphBounds() {
+    const bounds = defaultGraphBounds()
+    const height = Math.min(Math.round(bounds.height * 1.3), bounds.width * 0.75)
+    return { ...bounds, height }
+}
+
 export function clearChart(svg: SVGElement) {
     d3.select(svg).selectAll("*").remove()
 }

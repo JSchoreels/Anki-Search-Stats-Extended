@@ -16,8 +16,9 @@ source.
 - Optional RWKV review retrievability data is read from Anki through the
   `/_anki/rwkvReviewRetrievability` endpoint in
   [`__init__.py`](/Users/jschoreels/workspace/Anki-Search-Stats-Extended/__init__.py).
-    - The endpoint is called only after the user selects RWKV as the calibration
-      source.
+    - The endpoint is called automatically for the FSRS-vs-RWKV UM+ comparison.
+      The calibration source selector controls the ordinary calibration graph's
+      display and does not gate UM+ data loading.
     - The frontend sends the exact `revlog.id` values used by the calibration
       samples, so RWKV persisted-value checks are limited to reviews that can
       affect the graph.
@@ -178,6 +179,55 @@ Both mode overlays the FSRS and RWKV calibration lines on the same graph. The
 FSRS line is blue, the RWKV line is green, and the perfect-calibration reference
 line remains orange. Review-count volume bars use the same source colors and
 overlap in combined mode.
+
+## FSRS vs RWKV UM+
+
+The UM+ graph follows the calibration graph and automatically loads the same raw,
+review-time FSRS and RWKV predictions. It is independent of the calibration
+source selector, so it can load while the ordinary calibration graph displays
+FSRS, RWKV, or Both. When current RWKV calibration data is absent, opening the
+statistics page may therefore trigger the supported RWKV calibration-data
+generation path described above.
+
+Only review ids with eligible predictions from both models are included. Reviews
+are grouped into 41 fixed bins by signed prediction disagreement:
+
+`FSRS p(recall) - RWKV p(recall)`
+
+Buckets with fewer than 200 paired reviews are hidden by default. The **Show
+Small Buckets (<200 reviews)** toggle reveals them. Any line segment touching a
+small bucket is dotted and less opaque; its points and volume bar are also less
+opaque. The displayed UM+ scores continue to use every eligible bucket, including
+small hidden buckets. Bubble percentages also remain relative to the full paired
+sample.
+
+The x-axis is limited to the remaining visible disagreement range. Its lower
+bound is rounded down and its upper bound rounded up to the next 10 percentage
+points. When all visible bins have the same rounded disagreement, the domain
+expands by one 10-point step so the graph remains readable.
+The y-axis similarly covers only the currently visible FSRS and RWKV prediction
+errors, rounded outward to 10-percentage-point boundaries. Zero always remains
+inside the plot as the perfect-prediction reference. Both axes use tick
+increments of 10 percentage points.
+
+For every populated disagreement bin, the graph plots each model's mean
+prediction error (`predicted p(recall) - actual recall`). A curve closer to zero
+is better for that class of disagreement. Both model curves show a point for each
+populated bucket. Their point areas use the same paired-review count and are
+proportional to that bucket's share of all paired reviews. A neutral background
+bar also shows each bucket's paired-review count against the graph's right axis.
+The displayed UM+ value is the paired-review-count-weighted RMSE of the populated
+bins' mean prediction errors.
+
+The legend also shows a linear-regression slope for each model. It is fitted to
+the currently visible bucket means using paired-review counts as weights. A
+slope closer to zero means the model's prediction error changes less as FSRS and
+RWKV disagree, while a slope near `+1` or `-1` indicates that the model tends to
+absorb the disagreement as prediction error. The slope is shown as `n/a` when
+the visible buckets do not contain enough disagreement variation for a fit.
+
+Because both models use the same reviews in every bin, their plotted errors obey
+`FSRS error - RWKV error = disagreement`, apart from floating-point rounding.
 
 Each populated calibration bucket includes a 95% card-level bootstrap confidence
 interval for observed retention. Reviews are first aggregated by card and bucket,

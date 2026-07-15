@@ -1,5 +1,5 @@
 import * as d3 from "d3"
-import { defaultGraphBounds } from "./graph"
+import { comparisonGraphBounds } from "./graph"
 import { i18n } from "./i18n"
 import { gridLines } from "./LineGraph"
 import type { LossBin } from "./MemorisedBar"
@@ -21,7 +21,7 @@ function isCalibrationSeries(input: LossBin[] | CalibrationSeries[]): input is C
 export function fsrsCalibrationGraph(svg: SVGElement, input: LossBin[] | CalibrationSeries[]) {
     d3.select(svg).selectAll("*").remove()
 
-    const { width, height } = defaultGraphBounds()
+    const { width, height } = comparisonGraphBounds()
     const xTicks = 10
 
     interface CalibrationBinData {
@@ -53,9 +53,7 @@ export function fsrsCalibrationGraph(svg: SVGElement, input: LossBin[] | Calibra
     }
 
     const max_bin =
-        d3.max(
-            series.flatMap((s) => s.bins.map((d) => d?.count ?? 0).filter((d) => d > 0))
-        ) ?? 0
+        d3.max(series.flatMap((s) => s.bins.map((d) => d?.count ?? 0).filter((d) => d > 0))) ?? 0
 
     const count_y = d3.scaleLinear().domain([0, max_bin]).range([height, 0])
 
@@ -66,6 +64,7 @@ export function fsrsCalibrationGraph(svg: SVGElement, input: LossBin[] | Calibra
 
     const leftAxis = axis
         .append("g")
+        .attr("class", "calibration-y-axis")
         .call(d3.axisLeft(y).tickFormat(percentify))
         .attr("opacity", 0.5)
 
@@ -80,6 +79,7 @@ export function fsrsCalibrationGraph(svg: SVGElement, input: LossBin[] | Calibra
 
     const rightAxis = axis
         .append("g")
+        .attr("class", "calibration-volume-axis")
         .attr("transform", `translate(${width}, 0)`)
         .attr("opacity", 0.5)
         .call(d3.axisRight(count_y))
@@ -95,6 +95,7 @@ export function fsrsCalibrationGraph(svg: SVGElement, input: LossBin[] | Calibra
 
     const bottomAxis = axis
         .append("g")
+        .attr("class", "calibration-x-axis")
         .attr("transform", `translate(0, ${height})`)
         .attr("opacity", 0.5)
         .call(d3.axisBottom(x).tickFormat(percentify).ticks(xTicks))
@@ -108,30 +109,27 @@ export function fsrsCalibrationGraph(svg: SVGElement, input: LossBin[] | Calibra
         .text(i18n("predicted"))
 
     function normalizedData(bins: LossBin[]) {
-        return bins.map((d, i) =>
-            // Converted to proportions
-            <CalibrationBinData>{
-                bin: {
-                    real: d.real / d.count,
-                    predicted: d.predicted / d.count,
-                    count: d.count,
-                    confidenceInterval: d.confidenceInterval,
-                },
-                index: i,
-            }
+        return bins.map(
+            (d, i) =>
+                // Converted to proportions
+                <CalibrationBinData>{
+                    bin: {
+                        real: d.real / d.count,
+                        predicted: d.predicted / d.count,
+                        count: d.count,
+                        confidenceInterval: d.confidenceInterval,
+                    },
+                    index: i,
+                }
         )
     }
 
     const lineData = series.map((s) => ({ ...s, data: normalizedData(s.bins) }))
     const pointData = lineData.flatMap((s) =>
-        s.data
-            .filter((d): d is CalibrationBinData => !!d)
-            .map((d) => ({ ...d, color: s.color }))
+        s.data.filter((d): d is CalibrationBinData => !!d).map((d) => ({ ...d, color: s.color }))
     )
     const countBars = lineData.flatMap((s) =>
-        s.data
-            .filter((d): d is CalibrationBinData => !!d)
-            .map((d) => ({ ...d, color: s.color }))
+        s.data.filter((d): d is CalibrationBinData => !!d).map((d) => ({ ...d, color: s.color }))
     )
     const hoverData: CalibrationHoverBinData[] = Array.from({ length: binCount }, (_, index) => ({
         index,
@@ -312,5 +310,5 @@ export function fsrsCalibrationGraph(svg: SVGElement, input: LossBin[] | Calibra
         tooltipShown.set(false)
     )
 
-    gridLines(axis, x.ticks(xTicks).map(x), y.ticks().map(y))
+    gridLines(axis, x.ticks(xTicks).map(x), y.ticks().map(y), { width, height })
 }

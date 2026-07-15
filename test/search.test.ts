@@ -108,3 +108,50 @@ test("getFsrsReviewRetrievability sends calibration revlog ids", async () => {
         jest.resetModules()
     }
 })
+
+test("RWKV Memorised endpoints send the selected card ids", async () => {
+    const originalFetch = global.fetch
+    const progress = {
+        phase: "computing",
+        current: 10,
+        total: 100,
+        done: false,
+    }
+    const fetchMock = jest.fn().mockResolvedValue({
+        ok: true,
+        text: async () => JSON.stringify(progress),
+    })
+
+    jest.resetModules()
+    global.fetch = fetchMock as typeof fetch
+    try {
+        const {
+            cancelRwkvMemorisedHistory,
+            getRwkvMemorisedHistoryProgress,
+            startRwkvMemorisedHistory,
+        } = await import("../src/ts/search")
+
+        await expect(startRwkvMemorisedHistory([10, 11])).resolves.toEqual(progress)
+        await expect(getRwkvMemorisedHistoryProgress([10, 11])).resolves.toEqual(progress)
+        await cancelRwkvMemorisedHistory()
+
+        expect(fetchMock).toHaveBeenNthCalledWith(
+            1,
+            "/_anki/startRwkvMemorisedHistory",
+            expect.objectContaining({ body: JSON.stringify({ cids: [10, 11] }) })
+        )
+        expect(fetchMock).toHaveBeenNthCalledWith(
+            2,
+            "/_anki/rwkvMemorisedHistoryProgress",
+            expect.objectContaining({ body: JSON.stringify({ cids: [10, 11] }) })
+        )
+        expect(fetchMock).toHaveBeenNthCalledWith(
+            3,
+            "/_anki/cancelRwkvMemorisedHistory",
+            expect.objectContaining({ body: "{}" })
+        )
+    } finally {
+        global.fetch = originalFetch
+        jest.resetModules()
+    }
+})

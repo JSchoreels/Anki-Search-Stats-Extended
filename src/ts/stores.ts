@@ -3,15 +3,18 @@ import { calculateCardDataPies } from "./CardDataPies"
 import { DEFAULT_ORDER, type SSEconfig, type SSEother } from "./config"
 import { buildCalibrationBins, getMemorisedDays } from "./MemorisedBar"
 import type { GraphsRequest, GraphsResponse } from "./proto/anki/stats_pb"
-import { calculateRevlogStats } from "./revlogGraphs"
+import { calculateRevlogStats, today } from "./revlogGraphs"
 import {
+    cancelRwkvMemorisedHistory,
     catchErrors,
     getCardData,
     getFsrsPresetData,
     getFsrsReviewRetrievability,
     getRevlogs,
+    getRwkvMemorisedHistoryProgress,
     getRwkvReviewRetrievability,
     saveConfigValue,
+    startRwkvMemorisedHistory,
     uniqueRevlogCids,
     type CardData,
     type Revlog,
@@ -34,6 +37,8 @@ export let autoMemorisedStats = writable(SSEconfig.autoMemorisedStats ?? false)
 export let alwaysAllTime = writable(SSEconfig.alwaysAllTime ?? false)
 export type CalibrationMode = "fsrs" | "rwkv" | "both"
 export let calibrationMode = writable<CalibrationMode>("fsrs")
+export type MemorisedMode = "fsrs" | "rwkv" | "both"
+export let memorisedMode = writable<MemorisedMode>("fsrs")
 export let categoryOrder = writable([
     ...(SSEconfig.categoryOrder ?? []).filter((c) => DEFAULT_ORDER.includes(c)),
     ...DEFAULT_ORDER.filter((c) => !(SSEconfig.categoryOrder ?? []).includes(c)),
@@ -170,9 +175,96 @@ derived(
     }
 ).subscribe(memorised_stats.set)
 
+export type RwkvMemorisedStats = {
+    phase: string
+    current: number
+    total: number
+    firstDay: number | null
+    completedThroughDay: number | null
+    retrievabilityDays: number[]
+    noteRetrievabilityDays: number[]
+    totalCards: number[]
+    done: boolean
+    error: string | null
+}
+
+export let rwkvMemorisedStats = writable<RwkvMemorisedStats | null>(null)
+let rwkvMemorisedGeneration = 0
+
+function anchoredRwkvDays(values: number[] | undefined, firstDay: number | null | undefined) {
+    const result: number[] = []
+    if (firstDay === null || firstDay === undefined) {
+        return result
+    }
+    const firstUnixDay = today + (firstDay - SSEother.days_elapsed)
+    for (const [index, value] of (values ?? []).entries()) {
+        result[firstUnixDay + index] = value
+    }
+    return result
+}
+
+derived(
+    [memorisedMode, cids, showFsrsStats],
+    ([$memorisedMode, $cids, $showFsrsStats], set: (value: RwkvMemorisedStats | null) => void) => {
+        const generation = ++rwkvMemorisedGeneration
+        set(null)
+        if ($memorisedMode === "fsrs" || !$cids || !$showFsrsStats) {
+            return
+        }
+
+        catchErrors(async () => {
+            let progress = await startRwkvMemorisedHistory($cids)
+            while (generation === rwkvMemorisedGeneration) {
+                const firstDay = progress.firstDay ?? null
+                set({
+                    phase: progress.phase,
+                    current: progress.current ?? 0,
+                    total: progress.total ?? 0,
+                    firstDay,
+                    completedThroughDay: progress.completedThroughDay ?? null,
+                    retrievabilityDays: anchoredRwkvDays(progress.retrievabilityByDay, firstDay),
+                    noteRetrievabilityDays: anchoredRwkvDays(
+                        progress.noteRetrievabilityByDay,
+                        firstDay
+                    ),
+                    totalCards: anchoredRwkvDays(progress.cardCountByDay, firstDay),
+                    done: progress.done,
+                    error: progress.error ?? null,
+                })
+                if (progress.done) {
+                    return
+                }
+                await new Promise((resolve) => setTimeout(resolve, 500))
+                progress = await getRwkvMemorisedHistoryProgress($cids)
+            }
+        })
+
+        return () => {
+            if (generation === rwkvMemorisedGeneration) {
+                rwkvMemorisedGeneration += 1
+            }
+        }
+    }
+).subscribe(rwkvMemorisedStats.set)
+
+export async function cancelRwkvMemorisedComputation() {
+    rwkvMemorisedGeneration += 1
+    rwkvMemorisedStats.update((stats) =>
+        stats ? { ...stats, phase: "checkpointing", done: false } : stats
+    )
+    try {
+        await cancelRwkvMemorisedHistory()
+    } finally {
+        rwkvMemorisedStats.update((stats) =>
+            stats ? { ...stats, phase: "cancelled", done: true } : stats
+        )
+    }
+}
+
 export type FsrsCalibrationStats = {
     column: string | null
     bins: ReturnType<typeof buildCalibrationBins>
+    predictionsByRevlogId: Record<number, number>
     warnings: string[]
 }
 export let fsrsCalibrationStats = writable<FsrsCalibrationStats | null>(null)
@@ -189,7 +281,7 @@ derived(
 
         const samples = $memorised_stats.calibration_samples ?? []
         if (samples.length === 0) {
-            set({ column: null, bins: [], warnings: [] })
+            set({ column: null, bins: [], predictionsByRevlogId: {}, warnings: [] })
             return
         }
 
@@ -206,6 +298,7 @@ derived(
             return {
                 column,
                 bins: buildCalibrationBins(samples, effectivePredictions),
+                predictionsByRevlogId: effectivePredictions,
                 warnings,
             }
         }).then(set)
@@ -215,27 +308,24 @@ derived(
 export type RwkvCalibrationStats = {
     column: string | null
     bins: ReturnType<typeof buildCalibrationBins>
+    predictionsByRevlogId: Record<number, number>
     warnings: string[]
 }
 export let rwkvCalibrationStats = writable<RwkvCalibrationStats | null>(null)
 derived(
-    [calibrationMode, cids, searchLimit, memorised_stats],
+    [cids, searchLimit, memorised_stats],
     (
-        [$calibrationMode, $cids, $searchLimit, $memorised_stats],
+        [$cids, $searchLimit, $memorised_stats],
         set: (value: RwkvCalibrationStats | null) => void
     ) => {
         set(null)
-        if (
-            ($calibrationMode !== "rwkv" && $calibrationMode !== "both") ||
-            !$cids ||
-            !$memorised_stats
-        ) {
+        if (!$cids || !$memorised_stats) {
             return
         }
 
         const samples = $memorised_stats.calibration_samples ?? []
         if (samples.length === 0) {
-            set({ column: null, bins: [], warnings: [] })
+            set({ column: null, bins: [], predictionsByRevlogId: {}, warnings: [] })
             return
         }
 
@@ -248,6 +338,7 @@ derived(
             return {
                 column,
                 bins: buildCalibrationBins(samples, predictionsByRevlogId),
+                predictionsByRevlogId,
                 warnings,
             }
         }).then(set)

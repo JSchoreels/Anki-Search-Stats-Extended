@@ -1,7 +1,11 @@
 # Injecting js into stats page
+import base64
 import json
 import os
 import os.path
+import sys
+import time
+from array import array
 from pathlib import Path
 
 import orjson
@@ -162,6 +166,11 @@ post_handlers["fsrsPresetData"] = fsrs_preset_data
 REVLOG_COLUMNS = ["id", "cid", "ease", "ivl", "lastIvl", "time", "factor", "type"]
 FSRS_RETRIEVABILITY_CACHE_TABLE = "search_stats_fsrs_review_retrievability"
 RWKV_RETRIEVABILITY_CACHE_TABLE = "search_stats_rwkv_review_retrievability"
+RWKV_MEMORISED_CACHE_META_TABLE = "search_stats_rwkv_memorised_meta"
+RWKV_MEMORISED_CACHE_CARD_TABLE = "search_stats_rwkv_memorised_card"
+RWKV_MEMORISED_CHECKPOINT_META_TABLE = "search_stats_rwkv_memorised_checkpoint_meta"
+RWKV_MEMORISED_CHECKPOINT_CARD_TABLE = "search_stats_rwkv_memorised_checkpoint_card"
+_last_rwkv_memorised_checkpoint_key = None
 RETRIEVABILITY_CACHE_SCHEMA = "retrievability_cache"
 FSRS_CALIBRATION_CACHE_ROLES = ("validation_fold", "post_optimization")
 FSRS_CACHE_ROLES_WITH_SUPPRESSORS = FSRS_CALIBRATION_CACHE_ROLES + ("final_fit",)
@@ -750,6 +759,465 @@ def rwkv_review_retrievability() -> bytes:
 
 
 post_handlers["rwkvReviewRetrievability"] = rwkv_review_retrievability
+
+
+def _ensure_rwkv_memorised_cache_tables():
+    meta_table = _cache_table_name(RWKV_MEMORISED_CACHE_META_TABLE)
+    card_table = _cache_table_name(RWKV_MEMORISED_CACHE_CARD_TABLE)
+    checkpoint_meta_table = _cache_table_name(RWKV_MEMORISED_CHECKPOINT_META_TABLE)
+    checkpoint_card_table = _cache_table_name(RWKV_MEMORISED_CHECKPOINT_CARD_TABLE)
+    mw.col.db.execute(f"""
+        CREATE TABLE IF NOT EXISTS {meta_table} (
+            singleton INTEGER PRIMARY KEY CHECK(singleton = 1),
+            identity TEXT NOT NULL,
+            first_day INTEGER NOT NULL,
+            last_day INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL
+        )
+    """)
+    mw.col.db.execute(f"""
+        CREATE TABLE IF NOT EXISTS {card_table} (
+            card_id INTEGER PRIMARY KEY,
+            note_id INTEGER,
+            start_day INTEGER NOT NULL,
+            predictions BLOB NOT NULL
+        )
+    """)
+    mw.col.db.execute(f"""
+        CREATE TABLE IF NOT EXISTS {checkpoint_meta_table} (
+            singleton INTEGER PRIMARY KEY CHECK(singleton = 1),
+            identity TEXT NOT NULL,
+            first_day INTEGER NOT NULL,
+            last_day INTEGER NOT NULL,
+            completed_day INTEGER NOT NULL,
+            total INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL
+        )
+    """)
+    mw.col.db.execute(f"""
+        CREATE TABLE IF NOT EXISTS {checkpoint_card_table} (
+            card_id INTEGER PRIMARY KEY,
+            note_id INTEGER,
+            start_day INTEGER NOT NULL,
+            predictions TEXT NOT NULL
+        )
+    """)
+
+
+def _rwkv_memorised_scheduler():
+    try:
+        from aqt import rwkv_scheduler
+    except ImportError:
+        return None
+    required = (
+        "rwkv_memorised_history_identity",
+        "start_rwkv_memorised_history",
+        "rwkv_memorised_history_progress",
+        "rwkv_memorised_history_result",
+        "rwkv_memorised_history_checkpoint",
+        "cancel_rwkv_memorised_history",
+        "RwkvMemorisedCardSeries",
+        "RwkvMemorisedHistoryResult",
+    )
+    return (
+        rwkv_scheduler
+        if all(callable(getattr(rwkv_scheduler, name, None)) for name in required)
+        else None
+    )
+
+
+def _rwkv_memorised_cache_metadata():
+    _ensure_rwkv_memorised_cache_tables()
+    table = _cache_table_name(RWKV_MEMORISED_CACHE_META_TABLE)
+    rows = mw.col.db.all(
+        f"SELECT identity, first_day, last_day FROM {table} WHERE singleton = 1"
+    )
+    return rows[0] if rows else None
+
+
+def _rwkv_memorised_cache_is_current(scheduler) -> bool:
+    metadata = _rwkv_memorised_cache_metadata()
+    return bool(metadata and metadata[0] == scheduler.rwkv_memorised_history_identity(mw))
+
+
+def _persist_rwkv_memorised_result(result):
+    global _last_rwkv_memorised_checkpoint_key
+
+    _ensure_rwkv_memorised_cache_tables()
+    meta_table = _cache_table_name(RWKV_MEMORISED_CACHE_META_TABLE)
+    card_table = _cache_table_name(RWKV_MEMORISED_CACHE_CARD_TABLE)
+    checkpoint_meta_table = _cache_table_name(RWKV_MEMORISED_CHECKPOINT_META_TABLE)
+    checkpoint_card_table = _cache_table_name(RWKV_MEMORISED_CHECKPOINT_CARD_TABLE)
+    mw.col.db.execute("SAVEPOINT search_stats_rwkv_memorised_write")
+    try:
+        mw.col.db.execute(f"DELETE FROM {card_table}")
+        mw.col.db.executemany(
+            f"""
+            INSERT INTO {card_table} (card_id, note_id, start_day, predictions)
+            VALUES (?, ?, ?, ?)
+            """,
+            [
+                (
+                    card.card_id,
+                    card.note_id,
+                    card.start_day,
+                    _encode_u16_probabilities(card.values),
+                )
+                for card in result.cards
+            ],
+        )
+        mw.col.db.execute(f"DELETE FROM {meta_table}")
+        mw.col.db.execute(
+            f"""
+            INSERT INTO {meta_table}
+                (singleton, identity, first_day, last_day, updated_at)
+            VALUES (1, ?, ?, ?, ?)
+            """,
+            result.identity,
+            result.first_day,
+            result.last_day,
+            int_time(1000),
+        )
+        mw.col.db.execute(f"DELETE FROM {checkpoint_card_table}")
+        mw.col.db.execute(f"DELETE FROM {checkpoint_meta_table}")
+        mw.col.db.execute("RELEASE SAVEPOINT search_stats_rwkv_memorised_write")
+        _last_rwkv_memorised_checkpoint_key = None
+    except Exception:
+        mw.col.db.execute("ROLLBACK TO SAVEPOINT search_stats_rwkv_memorised_write")
+        mw.col.db.execute("RELEASE SAVEPOINT search_stats_rwkv_memorised_write")
+        raise
+
+
+def _encode_u16_probabilities(raw: bytes) -> str:
+    return base64.b64encode(raw).decode("ascii")
+
+
+def _u16_probability_bytes(raw: bytes | str) -> bytes:
+    return base64.b64decode(raw.encode("ascii")) if isinstance(raw, str) else raw
+
+
+def _u16_probabilities(raw: bytes | str):
+    values = array("H")
+    values.frombytes(_u16_probability_bytes(raw))
+    if sys.byteorder != "little":
+        values.byteswap()
+    return values
+
+
+def _rwkv_memorised_checkpoint_metadata():
+    _ensure_rwkv_memorised_cache_tables()
+    table = _cache_table_name(RWKV_MEMORISED_CHECKPOINT_META_TABLE)
+    rows = mw.col.db.all(f"""
+        SELECT identity, first_day, last_day, completed_day, total
+        FROM {table}
+        WHERE singleton = 1
+    """)
+    return rows[0] if rows else None
+
+
+def _delete_rwkv_memorised_checkpoint():
+    global _last_rwkv_memorised_checkpoint_key
+
+    _ensure_rwkv_memorised_cache_tables()
+    meta_table = _cache_table_name(RWKV_MEMORISED_CHECKPOINT_META_TABLE)
+    card_table = _cache_table_name(RWKV_MEMORISED_CHECKPOINT_CARD_TABLE)
+    mw.col.db.execute("SAVEPOINT search_stats_rwkv_memorised_checkpoint_delete")
+    try:
+        mw.col.db.execute(f"DELETE FROM {card_table}")
+        mw.col.db.execute(f"DELETE FROM {meta_table}")
+        mw.col.db.execute(
+            "RELEASE SAVEPOINT search_stats_rwkv_memorised_checkpoint_delete"
+        )
+        _last_rwkv_memorised_checkpoint_key = None
+    except Exception:
+        mw.col.db.execute(
+            "ROLLBACK TO SAVEPOINT search_stats_rwkv_memorised_checkpoint_delete"
+        )
+        mw.col.db.execute(
+            "RELEASE SAVEPOINT search_stats_rwkv_memorised_checkpoint_delete"
+        )
+        raise
+
+
+def _persist_rwkv_memorised_checkpoint(result):
+    global _last_rwkv_memorised_checkpoint_key
+
+    if result.complete or result.completed_through_day is None:
+        return
+    key = (result.identity, result.completed_through_day)
+    if key == _last_rwkv_memorised_checkpoint_key:
+        return
+    metadata = _rwkv_memorised_checkpoint_metadata()
+    if (
+        metadata is not None
+        and metadata[0] == result.identity
+        and metadata[3] >= result.completed_through_day
+    ):
+        return
+
+    meta_table = _cache_table_name(RWKV_MEMORISED_CHECKPOINT_META_TABLE)
+    card_table = _cache_table_name(RWKV_MEMORISED_CHECKPOINT_CARD_TABLE)
+    mw.col.db.execute("SAVEPOINT search_stats_rwkv_memorised_checkpoint_write")
+    try:
+        mw.col.db.execute(f"DELETE FROM {card_table}")
+        mw.col.db.executemany(
+            f"""
+            INSERT INTO {card_table} (card_id, note_id, start_day, predictions)
+            VALUES (?, ?, ?, ?)
+            """,
+            [
+                (
+                    card.card_id,
+                    card.note_id,
+                    card.start_day,
+                    _encode_u16_probabilities(card.values),
+                )
+                for card in result.cards
+            ],
+        )
+        mw.col.db.execute(f"DELETE FROM {meta_table}")
+        mw.col.db.execute(
+            f"""
+            INSERT INTO {meta_table}
+                (singleton, identity, first_day, last_day, completed_day, total,
+                 updated_at)
+            VALUES (1, ?, ?, ?, ?, ?, ?)
+            """,
+            result.identity,
+            result.first_day,
+            result.last_day,
+            result.completed_through_day,
+            result.total,
+            int_time(1000),
+        )
+        mw.col.db.execute(
+            "RELEASE SAVEPOINT search_stats_rwkv_memorised_checkpoint_write"
+        )
+        _last_rwkv_memorised_checkpoint_key = key
+    except Exception:
+        mw.col.db.execute(
+            "ROLLBACK TO SAVEPOINT search_stats_rwkv_memorised_checkpoint_write"
+        )
+        mw.col.db.execute(
+            "RELEASE SAVEPOINT search_stats_rwkv_memorised_checkpoint_write"
+        )
+        raise
+
+
+def _load_rwkv_memorised_checkpoint(scheduler):
+    metadata = _rwkv_memorised_checkpoint_metadata()
+    if metadata is None:
+        return None
+    identity, first_day, last_day, completed_day, total = metadata
+    if identity != scheduler.rwkv_memorised_history_identity(mw):
+        _delete_rwkv_memorised_checkpoint()
+        return None
+
+    table = _cache_table_name(RWKV_MEMORISED_CHECKPOINT_CARD_TABLE)
+    rows = mw.col.db.all(f"""
+        SELECT card_id, note_id, start_day, predictions
+        FROM {table}
+        ORDER BY card_id
+    """)
+    return scheduler.RwkvMemorisedHistoryResult(
+        identity=identity,
+        first_day=first_day,
+        last_day=last_day,
+        cards=tuple(
+            scheduler.RwkvMemorisedCardSeries(
+                card_id=card_id,
+                note_id=note_id,
+                start_day=start_day,
+                values=_u16_probability_bytes(predictions),
+            )
+            for card_id, note_id, start_day, predictions in rows
+        ),
+        completed_through_day=completed_day,
+        total=total,
+        complete=False,
+    )
+
+
+def _load_rwkv_memorised_cache(scheduler):
+    metadata = _rwkv_memorised_cache_metadata()
+    if metadata is None:
+        return None
+    identity, first_day, last_day = metadata
+    table = _cache_table_name(RWKV_MEMORISED_CACHE_CARD_TABLE)
+    rows = mw.col.db.all(f"""
+        SELECT card_id, note_id, start_day, predictions
+        FROM {table}
+        ORDER BY card_id
+    """)
+    cards = tuple(
+        scheduler.RwkvMemorisedCardSeries(
+            card_id=card_id,
+            note_id=note_id,
+            start_day=start_day,
+            values=_u16_probability_bytes(predictions),
+        )
+        for card_id, note_id, start_day, predictions in rows
+    )
+    return scheduler.RwkvMemorisedHistoryResult(
+        identity=identity,
+        first_day=first_day,
+        last_day=last_day,
+        cards=cards,
+        completed_through_day=last_day,
+        total=sum(len(card.values) // 2 for card in cards),
+        complete=True,
+    )
+
+
+def _aggregate_rwkv_memorised_cache(cids: list[int]):
+    metadata = _rwkv_memorised_cache_metadata()
+    if metadata is None:
+        return None
+    _, first_day, last_day = metadata
+    length = max(0, last_day - first_day + 1)
+    retrievability = [0.0] * length
+    note_retrievability = [0.0] * length
+    card_count = [0] * length
+    if not cids or length == 0:
+        return {
+            "phase": "complete",
+            "current": 0,
+            "total": 0,
+            "firstDay": first_day,
+            "completedThroughDay": last_day,
+            "retrievabilityByDay": retrievability,
+            "noteRetrievabilityByDay": note_retrievability,
+            "cardCountByDay": card_count,
+            "done": True,
+        }
+
+    cards = ",".join(str(cid) for cid in cids)
+    table = _cache_table_name(RWKV_MEMORISED_CACHE_CARD_TABLE)
+    rows = mw.col.db.all(f"""
+        SELECT card_id, note_id, start_day, predictions
+        FROM {table}
+        WHERE card_id IN ({cards})
+        ORDER BY card_id
+    """)
+    note_counts = {}
+    for _, note_id, _, _ in rows:
+        if isinstance(note_id, int):
+            note_counts[note_id] = note_counts.get(note_id, 0) + 1
+
+    total = 0
+    for _, note_id, start_day, raw in rows:
+        values = _u16_probabilities(raw)
+        note_count = note_counts.get(note_id, 0)
+        offset = start_day - first_day
+        for index, encoded in enumerate(values):
+            day_index = offset + index
+            if not 0 <= day_index < length:
+                continue
+            prediction = encoded / 65_535
+            retrievability[day_index] += prediction
+            card_count[day_index] += 1
+            if note_count:
+                note_retrievability[day_index] += prediction / note_count
+            total += 1
+
+    return {
+        "phase": "complete",
+        "current": total,
+        "total": total,
+        "firstDay": first_day,
+        "completedThroughDay": last_day,
+        "retrievabilityByDay": retrievability,
+        "noteRetrievabilityByDay": note_retrievability,
+        "cardCountByDay": card_count,
+        "done": True,
+    }
+
+
+def _rwkv_memorised_request_cids():
+    req = orjson.loads(request.data or b"{}")
+    return _positive_ints(req.get("cids", []))
+
+
+def start_rwkv_memorised_history() -> bytes:
+    cids = _rwkv_memorised_request_cids()
+    scheduler = _rwkv_memorised_scheduler()
+    if scheduler is None:
+        return Response(
+            orjson.dumps(
+                {
+                    "phase": "unavailable",
+                    "done": True,
+                    "error": "This Anki build does not provide RWKV Memorised history.",
+                }
+            )
+        )
+    if _rwkv_memorised_cache_is_current(scheduler):
+        return Response(orjson.dumps(_aggregate_rwkv_memorised_cache(cids)))
+    resume = _load_rwkv_memorised_checkpoint(scheduler)
+    if resume is None:
+        resume = _load_rwkv_memorised_cache(scheduler)
+    scheduler.start_rwkv_memorised_history(mw, cids, resume)
+    return Response(orjson.dumps(scheduler.rwkv_memorised_history_progress()))
+
+
+post_handlers["startRwkvMemorisedHistory"] = start_rwkv_memorised_history
+
+
+def rwkv_memorised_history_progress() -> bytes:
+    cids = _rwkv_memorised_request_cids()
+    scheduler = _rwkv_memorised_scheduler()
+    if scheduler is None:
+        return Response(orjson.dumps({"phase": "unavailable", "done": True}))
+    progress = scheduler.rwkv_memorised_history_progress()
+    if progress.get("phase") == "idle" and _rwkv_memorised_cache_is_current(scheduler):
+        return Response(orjson.dumps(_aggregate_rwkv_memorised_cache(cids)))
+    checkpoint = scheduler.rwkv_memorised_history_checkpoint()
+    if checkpoint is not None:
+        _persist_rwkv_memorised_checkpoint(checkpoint)
+    if progress.get("done") and not progress.get("error"):
+        result = scheduler.rwkv_memorised_history_result()
+        if result is not None:
+            if result.identity != scheduler.rwkv_memorised_history_identity(mw):
+                _delete_rwkv_memorised_checkpoint()
+                scheduler.start_rwkv_memorised_history(mw, cids)
+                return Response(
+                    orjson.dumps(scheduler.rwkv_memorised_history_progress())
+                )
+            if result.complete:
+                _persist_rwkv_memorised_result(result)
+                return Response(orjson.dumps(_aggregate_rwkv_memorised_cache(cids)))
+            _persist_rwkv_memorised_checkpoint(result)
+    return Response(orjson.dumps(progress))
+
+
+post_handlers["rwkvMemorisedHistoryProgress"] = rwkv_memorised_history_progress
+
+
+def cancel_rwkv_memorised_history() -> bytes:
+    scheduler = _rwkv_memorised_scheduler()
+    if scheduler is None:
+        return Response(orjson.dumps({"cancelled": False, "checkpointed": False}))
+
+    scheduler.cancel_rwkv_memorised_history()
+    deadline = time.monotonic() + 10.0
+    while time.monotonic() < deadline:
+        progress = scheduler.rwkv_memorised_history_progress()
+        if progress.get("done"):
+            result = scheduler.rwkv_memorised_history_result()
+            if result is not None and not result.complete:
+                if result.identity == scheduler.rwkv_memorised_history_identity(mw):
+                    _persist_rwkv_memorised_checkpoint(result)
+                    return Response(
+                        orjson.dumps({"cancelled": True, "checkpointed": True})
+                    )
+            return Response(
+                orjson.dumps({"cancelled": True, "checkpointed": False})
+            )
+        time.sleep(0.05)
+    return Response(orjson.dumps({"cancelled": True, "checkpointed": False}))
+
+
+post_handlers["cancelRwkvMemorisedHistory"] = cancel_rwkv_memorised_history
 
 
 def write_config():

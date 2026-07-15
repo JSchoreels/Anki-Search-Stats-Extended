@@ -8,6 +8,7 @@
     import Candlestick from "./Candlestick.svelte"
     import GraphTypeSelector from "./GraphTypeSelector.svelte"
     import { i18n } from "./i18n"
+    import type { LineChartSeries } from "./LineGraph"
     import LineGraph from "./LineGraph.svelte"
     import { binSize, scroll, searchLimit } from "./stores"
     import {
@@ -19,6 +20,7 @@
 
     let type = "total"
     export let data: number[]
+    export let series: LineChartSeries[] | undefined = undefined
     export let label = "value"
     export let up_colour = CANDLESTICK_GREEN
     export let down_colour = CANDLESTICK_RED
@@ -75,20 +77,23 @@
     }
 </script>
 
-<GraphTypeSelector>
-    <label>
-        <input type="radio" value="total" bind:group={type} />
-        {i18n("total")}
-    </label>
-    <label>
-        <input type="radio" value="trend" bind:group={type} />
-        {i18n("trend")}
-    </label>
-</GraphTypeSelector>
+{#if !series || series.length <= 1}
+    <GraphTypeSelector>
+        <label>
+            <input type="radio" value="total" bind:group={type} />
+            {i18n("total")}
+        </label>
+        <label>
+            <input type="radio" value="trend" bind:group={type} />
+            {i18n("trend")}
+        </label>
+    </GraphTypeSelector>
+{/if}
 
-{#if type === "total"}
+{#if type === "total" || (series && series.length > 1)}
     <LineGraph
         data={processed_data}
+        {series}
         {label}
         trendPersistenceKey={`${trendPersistenceKey}:total`}
         bind:trend_data={visibleTrends}

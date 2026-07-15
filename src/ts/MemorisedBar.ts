@@ -12,8 +12,8 @@ import {
 } from "ts-fsrs"
 import type { LossBar } from "./bar"
 import {
-    cardBootstrapConfidenceIntervals,
     type CalibrationBootstrapObservation,
+    cardBootstrapConfidenceIntervals,
 } from "./calibrationBootstrap"
 import type { DeckConfig, ResolvedFsrsPreset } from "./config"
 import { paramsForTsFsrs, selectResolvedFsrsPresetParams, selectTsFsrsParams } from "./fsrsParams"
