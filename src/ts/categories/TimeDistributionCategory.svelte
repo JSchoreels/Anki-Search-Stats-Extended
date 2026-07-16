@@ -1,10 +1,11 @@
 <script lang="ts">
     import type { BarChart } from "../bar"
     import BarScrollable from "../BarScrollable.svelte"
-    import RevlogGraphContainer from "../RevlogGraphContainer.svelte"
-    import IntervalGraph from "../IntervalGraph.svelte"
     import GraphCategory from "../GraphCategory.svelte"
     import { i18n, i18n_pattern } from "../i18n"
+    import IntervalGraph from "../IntervalGraph.svelte"
+    import MemorisedGraphContainer from "../MemorisedGraphContainer.svelte"
+    import RevlogGraphContainer from "../RevlogGraphContainer.svelte"
     import { memorised_stats, pieLast, pieSteps, revlogStats } from "../stores"
 
     enum AverageType {
@@ -183,7 +184,7 @@
             {i18n("time-totals-help")}
         </p>
     </RevlogGraphContainer>
-    <RevlogGraphContainer>
+    <MemorisedGraphContainer>
         <h1 slot="title">{i18n("time-distribution-by-retrievability")}</h1>
         <BarScrollable
             slot="graph"
@@ -212,8 +213,8 @@
             </label>
         </div>
         <p>{i18n("time-distribution-by-retrievability-help")}</p>
-    </RevlogGraphContainer>
-    <RevlogGraphContainer>
+    </MemorisedGraphContainer>
+    <MemorisedGraphContainer>
         <h1 slot="title">{i18n("time-distribution-by-stability")}</h1>
         <BarScrollable
             slot="graph"
@@ -235,7 +236,7 @@
             </label>
         </div>
         <p>{i18n("time-distribution-by-stability-help")}</p>
-    </RevlogGraphContainer>
+    </MemorisedGraphContainer>
     <RevlogGraphContainer>
         <h1 slot="title">{i18n("time-distribution-by-repetitions")}</h1>
         <BarScrollable
@@ -259,7 +260,7 @@
         </div>
         <p>{i18n("time-distribution-by-repetitions-help")}</p>
     </RevlogGraphContainer>
-    <RevlogGraphContainer>
+    <MemorisedGraphContainer>
         <h1 slot="title">{i18n("time-distribution-by-difficulty")}</h1>
         <BarScrollable
             slot="graph"
@@ -282,7 +283,7 @@
             </label>
         </div>
         <p>{i18n("time-distribution-by-difficulty-help")}</p>
-    </RevlogGraphContainer>
+    </MemorisedGraphContainer>
 </GraphCategory>
 
 <style>

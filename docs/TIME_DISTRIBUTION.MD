@@ -10,6 +10,15 @@ This document describes how time-distribution data is computed for the Time cate
 - Deck FSRS presets are still read from `SSEother.deck_configs` and `SSEother.deck_config_ids` as the fallback path.
 - Resolved preset parameters are used directly. Deck fallback parameters are selected with [`selectTsFsrsParams`](/Users/jschoreels/workspace/Anki-Search-Stats-Extended/src/ts/fsrsParams.ts), which follows Anki's selected `fsrsVersion` first (FSRS7/6/5/4) and only falls back when that version's params are unusable.
 
+## Loading Behavior
+
+- Time Distribution, Time Totals, and Time by Repetitions require only revlog statistics.
+- Time by Retrievability, Stability, and Difficulty require the replayed FSRS
+  statistics returned by `getMemorisedDays()`.
+- When automatic FSRS graph loading is disabled, those FSRS-dependent graphs
+  show the standard calculation control. Starting it loads both revlogs and the
+  FSRS replay before rendering the graph.
+
 ## Existing Time Graph Fields
 
 - `revlog_times`: count of cards by total answer time bucket (seconds).
