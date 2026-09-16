@@ -122,6 +122,29 @@ def card_data() -> bytes:
 post_handlers["cardData"] = card_data
 
 
+def current_card_disagreement():
+    from .current_disagreement import current_predictions
+
+    return Response(orjson.dumps(current_predictions(mw, orjson.loads(request.data))))
+
+
+post_handlers["currentCardDisagreement"] = current_card_disagreement
+
+
+def current_disagreement_bridge(self, cmd, _old):
+    if cmd.startswith("currentDisagreementBrowse:"):
+        from .current_disagreement import browse_bucket
+
+        browse_bucket(mw, json.loads(cmd.split(":", 1)[1]))
+        return True
+    return _old(self, cmd)
+
+
+NewDeckStats._on_bridge_cmd = wrap(
+    NewDeckStats._on_bridge_cmd, current_disagreement_bridge, "around"
+)
+
+
 def _fsrs_preset_to_dict(preset):
     return {
         "id": preset.id,

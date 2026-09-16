@@ -1,8 +1,19 @@
 import { get } from "svelte/store"
 import { FSRS5_DEFAULT_DECAY } from "ts-fsrs"
 import type { ResolvedFsrsPreset } from "./config"
+import type { CurrentDisagreementResponse } from "./currentDisagreementData"
 import { realFetch, searchJoin } from "./root"
 import { searchString } from "./stores"
+
+export async function getCurrentCardDisagreement(
+    cids: number[]
+): Promise<CurrentDisagreementResponse> {
+    return endpoint("currentCardDisagreement", JSON.stringify(cids), false)
+}
+
+export function browseCurrentDisagreementCards(cids: number[]) {
+    if (cids.length) window.bridgeCommand(`currentDisagreementBrowse:${JSON.stringify(cids)}`)
+}
 
 export function catchErrors<Return>(func: () => Return): Return {
     try {

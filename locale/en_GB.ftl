@@ -368,6 +368,15 @@ calibration-no-data = Not enough eligible review history to draw calibration yet
 rwkv-calibration-no-data = No complete persisted RWKV review retrievability state was found for this search and date range.
 fsrs-calibration-help = This compares the average retention the selected source predicts you should have on cards (Perfect/orange line) to the retention you actually have (Actual/blue line).
 um-plus = FSRS vs RWKV UM+
+current-disagreement = FSRS vs RWKV current Disagreement
+current-disagreement-x-axis = Current FSRS R − RWKV R
+current-disagreement-bucket = {$lower} to {$upper}: {$count} cards. Click to browse and select.
+current-disagreement-help = Current recall probabilities for cards in this search, grouped into 5-percentage-point buckets centered on multiples of 5%. Negative means RWKV predicts higher recall; positive means FSRS does. Click a bucket to browse and select its cards. Review date limits do not apply. Cards missing either current prediction are excluded.
+current-disagreement-count = {$count} of {$total} cards have paired current predictions.
+current-disagreement-no-data = No cards have both current FSRS and RWKV predictions.
+current-disagreement-unavailable = Current comparison requires the adapted Anki build with RWKV current scoring available.
+current-disagreement-failed = Current predictions could not be loaded. Retry when RWKV is ready; see the Anki log for details.
+current-disagreement-retry = Retry
 um-plus-x-axis = Difference in predicted p(recall): FSRS minus RWKV
 um-plus-y-axis = B-W Metric
 um-plus-volume-axis = Paired reviews
@@ -383,6 +392,19 @@ um-plus-help-direction = Right of center, FSRS predicted higher recall than RWKV
 um-plus-help-volume = Larger bubbles and bars mean more reviews.
 um-plus-help-scores = Lower UM+ and a slope closer to zero are better.
 um-plus-help-small-buckets = Buckets under 200 reviews are hidden unless “Show Small Buckets” is enabled.
+roc = FSRS vs RWKV ROC
+roc-x-axis = False positive rate
+roc-y-axis = True positive rate
+roc-legend = {$model}, AUC={$auc}
+roc-chance-legend = Chance, AUC=0.5000
+roc-auc-unavailable = n/a
+roc-tooltip-threshold = {$model} threshold ≥ {$threshold}%
+roc-tooltip-tpr = True positive rate: {$value}%
+roc-tooltip-fpr = False positive rate: {$value}%
+roc-no-data = ROC requires paired predictions containing at least one remembered review and one forgotten review.
+roc-help-curve = Each curve plots true positive rate against false positive rate across all prediction thresholds. The orange diagonal is chance performance.
+roc-help-auc = Higher AUC is better: 1.0 perfectly ranks remembered reviews above forgotten reviews, while 0.5 is chance.
+roc-help-sample = Uses the same paired eligible reviews as UM+: Hard, Good, and Easy are positive; Again is negative.
 forgetting-curve = First Long-term Forgetting Curve
 forgetting-curve-help =
     Compares the observed rate of recall against fitted FSRS forgetting curves which are grouped by the card's first rating.

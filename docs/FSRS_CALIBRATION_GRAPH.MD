@@ -180,6 +180,37 @@ FSRS line is blue, the RWKV line is green, and the perfect-calibration reference
 line remains orange. Review-count volume bars use the same source colors and
 overlap in combined mode.
 
+## FSRS vs RWKV current Disagreement
+
+The **FSRS vs RWKV current Disagreement** histogram compares current
+card retrievability rather than review-time predictions. It uses the cards in
+the current statistics search, independently of the review date range and
+historical Memorised calculation. Each card with both valid current probabilities
+belongs to one bucket, rounded to the nearest 5 percentage points of
+`FSRS R - RWKV R` (41 possible centers from -100% to +100%). As in UM+, exact
+halfway values round toward the higher center. All populated buckets are shown;
+there is no minimum card count. Bars show card counts, with bounds in their
+tooltips. Lower bounds are inclusive and upper bounds exclusive, except +100%.
+
+Clicking a bucket opens the browser in Cards mode, searches its exact card IDs,
+and selects all results after saving any pending browser edit. Keyboard users
+can focus a bar and press Enter or Space. Missing scores are excluded, and the
+chart reports paired cards out of all cards in the search.
+
+`/_anki/currentCardDisagreement` returns a transient snapshot. The add-on's
+`current_disagreement.py` adapter uses the adapted Anki scheduler's guarded,
+batched current RWKV statistics scoring path and the Collection API
+`fsrs_current_retrievability()`, with internal stability and fractional elapsed
+days since the last review. Cards without memory state or a last-review timestamp
+are excluded. It adds no persisted cache or direct database operations. The RWKV
+adapter requires the scheduler's state-token and search-score helpers; builds
+without those capabilities show an unavailable message. Pending warm-up is
+polled, errors offer Retry, and results from an obsolete search are discarded.
+
+Package with `npm run build` followed by `./package.sh`; `./copy_to_anki.sh`
+installs that archive into `addons21/1339555413`, preserving Anki-owned metadata,
+configuration and user files. Fully quit and reopen Anki after Python changes.
+
 ## FSRS vs RWKV UM+
 
 The UM+ graph follows the calibration graph and automatically loads the same raw,
@@ -229,11 +260,39 @@ the visible buckets do not contain enough disagreement variation for a fit.
 Because both models use the same reviews in every bin, their plotted errors obey
 `FSRS error - RWKV error = disagreement`, apart from floating-point rounding.
 
+## FSRS vs RWKV ROC and AUC
+
+The **FSRS vs RWKV ROC** graph follows UM+ and uses the same paired, eligible
+review-time predictions. A review is positive when its answer was Hard, Good,
+or Easy and negative when its answer was Again. Reviews missing either model's
+valid probability are excluded, which keeps the comparison on an identical
+sample for FSRS and RWKV.
+
+For each model, reviews are sorted from highest to lowest predicted recall.
+Each distinct prediction becomes a threshold point whose x-coordinate is the
+false positive rate and y-coordinate is the true positive rate. Equal
+predictions are processed together, so ties contribute half credit to AUC. The
+curve begins at `(0, 0)` and ends at `(1, 1)` when both outcome classes are
+present. The graph is unavailable when the paired sample has no remembered or
+no forgotten review.
+
+AUC is calculated with trapezoidal integration over the complete threshold
+curve. `1.0` means every remembered review is ranked above every forgotten
+review; `0.5` matches chance ranking. The orange dashed diagonal shows this
+chance baseline. FSRS uses the same steel-blue color and RWKV the same sea-green
+color as the Calibration and UM+ comparisons. Hover targets are sampled only
+for responsiveness on large histories; the visible curves and AUC still use all
+distinct thresholds.
+
+## Calibration Confidence Intervals
+
 Each populated calibration bucket includes a 95% card-level bootstrap confidence
 interval for observed retention. Reviews are first aggregated by card and bucket,
 then cards are sampled with replacement for 500 deterministic bootstrap iterations.
 This preserves the dependence between repeated reviews of the same card while
 keeping the graph stable across redraws.
+
+## Legacy RWKV Cache Fallback
 
 For legacy collections without role-aware RWKV cache columns, the endpoint
 checks for these `revlog` columns, in order:

@@ -1,5 +1,5 @@
 import * as d3 from "d3"
-import { comparisonGraphBounds } from "./graph"
+import { COMPARISON_REFERENCE_COLOUR, comparisonGraphBounds, FSRS_COMPARISON_COLOUR } from "./graph"
 import { i18n } from "./i18n"
 import { gridLines } from "./LineGraph"
 import type { LossBin } from "./MemorisedBar"
@@ -39,7 +39,13 @@ export function fsrsCalibrationGraph(svg: SVGElement, input: LossBin[] | Calibra
 
     const series = isCalibrationSeries(input)
         ? input
-        : [{ label: i18n("calibration-legend-fsrs"), bins: input, color: "steelblue" }]
+        : [
+              {
+                  label: i18n("calibration-legend-fsrs"),
+                  bins: input,
+                  color: FSRS_COMPARISON_COLOUR,
+              },
+          ]
     const binCount = d3.max(series.map((s) => s.bins.length)) ?? 0
 
     const x = d3.scaleLinear().domain([0, 1]).range([0, width])
@@ -158,7 +164,7 @@ export function fsrsCalibrationGraph(svg: SVGElement, input: LossBin[] | Calibra
         .append("path")
         .datum(diagonalData)
         .attr("fill", "none")
-        .attr("stroke", "orange")
+        .attr("stroke", COMPARISON_REFERENCE_COLOUR)
         .attr("stroke-width", 1.5)
         .style("pointer-events", "none")
         .attr(

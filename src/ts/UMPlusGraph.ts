@@ -1,5 +1,10 @@
 import * as d3 from "d3"
-import { clearChart, comparisonGraphBounds } from "./graph"
+import {
+    clearChart,
+    comparisonGraphBounds,
+    FSRS_COMPARISON_COLOUR,
+    RWKV_COMPARISON_COLOUR,
+} from "./graph"
 import { i18n } from "./i18n"
 import { gridLines } from "./LineGraph"
 import { tooltip, tooltipShown } from "./stores"
@@ -91,14 +96,14 @@ export function renderUmPlusGraph(
     const series: UmPlusSeries[] = [
         {
             model: fsrsModel,
-            color: "steelblue",
+            color: FSRS_COMPARISON_COLOUR,
             score: data.fsrsScore,
             slope: weightedRegressionSlope(visibleBins, (bin) => bin.fsrsError),
             error: (bin) => bin.fsrsError,
         },
         {
             model: rwkvModel,
-            color: "seagreen",
+            color: RWKV_COMPARISON_COLOUR,
             score: data.rwkvScore,
             slope: weightedRegressionSlope(visibleBins, (bin) => bin.rwkvError),
             error: (bin) => bin.rwkvError,

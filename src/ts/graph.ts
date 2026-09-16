@@ -27,3 +27,7 @@ export const LEARN_COLOUR = "#fd8d3c"
 export const RELEARN_COLOUR = "#fb6a4a"
 export const SUSPENDED_COLOUR = "#FFDC41"
 export const NEW_COLOUR = "#6baed6"
+
+export const FSRS_COMPARISON_COLOUR = "steelblue"
+export const RWKV_COMPARISON_COLOUR = "seagreen"
+export const COMPARISON_REFERENCE_COLOUR = "orange"

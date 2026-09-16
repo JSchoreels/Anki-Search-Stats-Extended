@@ -8,6 +8,8 @@
     import MemorisedGraphContainer from "../MemorisedGraphContainer.svelte"
     import FsrsCalibration from "../FSRSCalibration.svelte"
     import UMPlus from "../UMPlus.svelte"
+    import ROC from "../ROC.svelte"
+    import CurrentDisagreement from "../CurrentDisagreement.svelte"
     import ForgettingCurve from "../ForgettingCurve.svelte"
     import TimeMachineScroll from "../TimeMachineScroll.svelte"
     import { i18n, i18n_bundle, i18n_pattern } from "../i18n"
@@ -24,11 +26,17 @@
         revlogStats,
     } from "../stores"
     import { today, day_ms, no_rollover_today } from "../revlogGraphs"
-    import { YOUNG_COLOUR, MATURE_COLOUR } from "../graph"
+    import {
+        FSRS_COMPARISON_COLOUR,
+        MATURE_COLOUR,
+        RWKV_COMPARISON_COLOUR,
+        YOUNG_COLOUR,
+    } from "../graph"
     import type { PieDatum } from "../pie"
     import _ from "lodash"
     import * as d3 from "d3"
     import { buildUmPlusData } from "../umPlusData"
+    import { buildRocData } from "../rocData"
 
     $: truncated = $searchLimit !== 0
     $: realScroll = -Math.abs($scroll)
@@ -102,12 +110,12 @@
                   {
                       label: i18n("calibration-legend-fsrs"),
                       bins: fsrsCalibrationData,
-                      color: "steelblue",
+                      color: FSRS_COMPARISON_COLOUR,
                   },
                   {
                       label: i18n("calibration-legend-rwkv"),
                       bins: rwkvCalibrationData,
-                      color: "green",
+                      color: RWKV_COMPARISON_COLOUR,
                   },
               ]
             : $calibrationMode === "rwkv"
@@ -115,7 +123,7 @@
                     {
                         label: i18n("calibration-legend-rwkv"),
                         bins: rwkvCalibrationData,
-                        color: "green",
+                        color: RWKV_COMPARISON_COLOUR,
                     },
                 ]
               : undefined
@@ -138,6 +146,11 @@
               ? ($rwkvCalibrationStats?.warnings ?? [])
               : ($fsrsCalibrationStats?.warnings ?? [])
     $: umPlusData = buildUmPlusData(
+        $memorised_stats?.calibration_samples ?? [],
+        $fsrsCalibrationStats?.predictionsByRevlogId ?? {},
+        $rwkvCalibrationStats?.predictionsByRevlogId ?? {}
+    )
+    $: rocData = buildRocData(
         $memorised_stats?.calibration_samples ?? [],
         $fsrsCalibrationStats?.predictionsByRevlogId ?? {},
         $rwkvCalibrationStats?.predictionsByRevlogId ?? {}
@@ -233,6 +246,27 @@
             <li>{i18n("um-plus-help-small-buckets")}</li>
         </ul>
     </MemorisedGraphContainer>
+    <MemorisedGraphContainer>
+        <h1 slot="title">{i18n("roc")}</h1>
+        <div slot="graph" class="calibration-panel">
+            {#if umPlusWarnings.length > 0}
+                <Warning always>{umPlusWarnings.join(" ")}</Warning>
+            {/if}
+            {#if umPlusLoading}
+                <div class="calibration-message">{i18n("loading")}</div>
+            {:else if rocData.positiveCount > 0 && rocData.negativeCount > 0}
+                <ROC data={rocData} />
+            {:else}
+                <div class="calibration-message">{i18n("roc-no-data")}</div>
+            {/if}
+        </div>
+        <ul class="um-plus-help">
+            <li>{i18n("roc-help-curve")}</li>
+            <li>{i18n("roc-help-auc")}</li>
+            <li>{i18n("roc-help-sample")}</li>
+        </ul>
+    </MemorisedGraphContainer>
+    <CurrentDisagreement />
     <MemorisedGraphContainer>
         <h1 slot="title">{i18n("stability-time-machine")}</h1>
         <BarScrollable slot="graph" data={stability_time_machine_bar} left_aligned />
