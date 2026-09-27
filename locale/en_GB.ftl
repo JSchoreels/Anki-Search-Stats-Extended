@@ -449,6 +449,29 @@ b-w-matrix = B-W Matrix
 predicted = Predicted
 actual = Actual
 
+rwkv-daily-standardizedGap = RWKV Daily Recall Gap
+rwkv-daily-logLoss = RWKV Daily Surprise
+rwkv-daily-standardizedGap-axis = Standardized gap
+rwkv-daily-logLoss-axis = Bits per review
+rwkv-daily-standardizedGap-value = Standardized gap: {$value}
+rwkv-daily-logLoss-value = Average surprise: {$value} bits per review
+rwkv-daily-actual = Actual R: {$value}%
+rwkv-daily-predicted = Predicted R: {$value}%
+rwkv-daily-count = Eligible reviews: {$count}
+rwkv-daily-gap-unavailable = unavailable (zero predicted variance)
+rwkv-daily-no-data = No eligible RWKV review predictions are available for this search and date range.
+rwkv-daily-standardizedGap-help =
+    Actual recalls minus expected recalls, divided by the expected standard deviation: sum(actual - predicted) / sqrt(sum(predicted × (1 - predicted))).
+    Positive values mean you remembered more than RWKV expected; negative values mean less. Further from zero means a more unexpected day, accounting for review count and prediction confidence.
+    This assumes independent outcomes, so use it as a diagnostic score rather than an exact significance test. The gap is unavailable when predicted variance is zero.
+rwkv-daily-logLoss-help =
+    Average log loss in bits per review: -log2(predicted R) when remembered, or -log2(1 - predicted R) when forgotten.
+    Higher means more surprise, especially for confident mistakes. Surprising successes and failures both contribute instead of cancelling out.
+    This also reflects the uncertainty of the cards reviewed; it is not a pure calibration score.
+rwkv-daily-sample-help =
+    Uses the same eligible review sample as RWKV Calibration, grouped by Anki day. Again counts as forgotten; Hard, Good and Easy count as remembered.
+    Same-day repetitions and excluded calibration reviews are omitted. Only reviews with eligible RWKV predictions are included. Days without eligible predictions remain gaps.
+
 show-question = Show?
 increase-date-range = Increase date range
 

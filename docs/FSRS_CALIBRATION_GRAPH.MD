@@ -211,6 +211,11 @@ Package with `npm run build` followed by `./package.sh`; `./copy_to_anki.sh`
 installs that archive into `addons21/1339555413`, preserving Anki-owned metadata,
 configuration and user files. Fully quit and reopen Anki after Python changes.
 
+The current Disagreement graph is followed by **RWKV Daily Recall Gap** and
+**RWKV Daily Surprise**. These reuse eligible RWKV review predictions without
+requiring paired FSRS predictions. Their calculations, daily grouping, and
+interpretation are documented in [Daily RWKV surprise](RWKV_DAILY_SURPRISE.MD).
+
 ## FSRS vs RWKV UM+
 
 The UM+ graph follows the calibration graph and automatically loads the same raw,

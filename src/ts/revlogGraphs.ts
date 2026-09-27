@@ -12,6 +12,7 @@ import {
 } from "ts-fsrs"
 import type { BarChart, BarDatum } from "./bar"
 import { totalCalc } from "./barHelpers"
+import { type CardData, getCardDecay, type Revlog } from "./cardData"
 import type { DeckConfig } from "./config"
 import {
     averageDecay,
@@ -20,7 +21,6 @@ import {
 } from "./forgettingCurveData"
 import { paramsForTsFsrs, selectTsFsrsParams } from "./fsrsParams"
 import { i18n } from "./i18n"
-import { type CardData, getCardDecay, type Revlog } from "./search"
 
 const rollover = SSEother.rollover ?? 0
 export const rollover_ms = rollover * 60 * 60 * 1000

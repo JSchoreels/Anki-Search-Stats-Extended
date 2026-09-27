@@ -1,5 +1,31 @@
 import { uniqueRevlogCids } from "../src/ts/search"
 
+test("compact presets expand to each card's complete resolved settings", async () => {
+    const originalFetch = global.fetch
+    // Same preset id, distinct card-specific settings must remain distinct.
+    const presets = [
+        { id: "shared", desiredRetention: 0.9 },
+        { id: "shared", desiredRetention: 0.8 },
+    ]
+    jest.resetModules()
+    global.fetch = jest.fn().mockResolvedValue({
+        ok: true,
+        text: async () => JSON.stringify({ presets, cards: { 1: 0, 2: 1, 3: 0 } }),
+    })
+    try {
+        const { getFsrsPresetData } = await import("../src/ts/search")
+        expect(await getFsrsPresetData([1, 2, 3])).toEqual({
+            1: presets[0],
+            2: presets[1],
+            3: presets[0],
+        })
+        expect(await getFsrsPresetData([])).toEqual({})
+    } finally {
+        global.fetch = originalFetch
+        jest.resetModules()
+    }
+})
+
 test("uniqueRevlogCids returns reviewed card ids once in first-seen order", () => {
     expect(
         uniqueRevlogCids([{ cid: 3 }, { cid: 1 }, { cid: 3 }, { cid: 2 }, { cid: 1 }])

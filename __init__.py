@@ -15,6 +15,7 @@ from aqt.stats import NewDeckStats
 
 addon_dir = Path(os.path.dirname(__file__))
 locale_dir = addon_dir / "locale"
+mw.addonManager.setWebExports(__name__, r"stats-worker\.js")
 
 fallback_lang = "en_GB"
 
@@ -52,6 +53,10 @@ def new_refresh(self: NewDeckStats):
 
     prefs = mw.col.get_preferences().scheduling
     other = {
+        "stats_worker_url": (
+            f"/_addons/{mw.addonManager.addonFromModule(__name__)}/stats-worker.js"
+            f"?v={time.time_ns()}"
+        ),
         "rollover": prefs.rollover,
         "learn_ahead_secs": prefs.learn_ahead_secs,
         "selected_deck_id": mw.col.decks.current()["id"],
@@ -70,7 +75,11 @@ def new_refresh(self: NewDeckStats):
         f"const SSEconfig = {json.dumps(config)};"
         f"const SSEother = {json.dumps(other)};"
     )
-    self.form.web.loadFinished.connect(lambda: self.form.web.eval(setVars + innerJs))
+    previous = getattr(self, "_sse_load_callback", None)
+    if previous is not None:
+        self.form.web.loadFinished.disconnect(previous)
+    self._sse_load_callback = lambda: self.form.web.eval(setVars + innerJs)
+    self.form.web.loadFinished.connect(self._sse_load_callback)
 
 
 NewDeckStats.refresh = wrap(NewDeckStats.refresh, new_refresh, "after")
@@ -177,10 +186,22 @@ def _fsrs_preset_to_dict(preset):
 
 def fsrs_preset_data() -> bytes:
     cids = [int(cid) for cid in orjson.loads(request.data)]
-    presets = {
-        str(cid): _fsrs_preset_to_dict(mw.col.fsrs_preset_for_card(cid)) for cid in cids
-    }
-    return Response(orjson.dumps(presets))
+    # Resolve search-matched presets in one native batch before per-card reads.
+    # include_retrievability=False skips preset resolution in Anki's backend.
+    if cids:
+        mw.col.card_memory_metrics(cids, include_retrievability=True)
+    presets = []
+    indices = {}
+    cards = {}
+    for cid in cids:
+        preset = _fsrs_preset_to_dict(mw.col.fsrs_preset_for_card(cid))
+        # A shared preset id can still have card/deck-specific overrides.
+        key = orjson.dumps(preset)
+        if key not in indices:
+            indices[key] = len(presets)
+            presets.append(preset)
+        cards[str(cid)] = indices[key]
+    return Response(orjson.dumps({"presets": presets, "cards": cards}))
 
 
 post_handlers["fsrsPresetData"] = fsrs_preset_data

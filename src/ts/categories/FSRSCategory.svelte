@@ -10,6 +10,7 @@
     import UMPlus from "../UMPlus.svelte"
     import ROC from "../ROC.svelte"
     import CurrentDisagreement from "../CurrentDisagreement.svelte"
+    import RwkvDailyGraph from "../RwkvDailyGraph.svelte"
     import ForgettingCurve from "../ForgettingCurve.svelte"
     import TimeMachineScroll from "../TimeMachineScroll.svelte"
     import { i18n, i18n_bundle, i18n_pattern } from "../i18n"
@@ -37,6 +38,9 @@
     import * as d3 from "d3"
     import { buildUmPlusData } from "../umPlusData"
     import { buildRocData } from "../rocData"
+    import { buildRwkvDailyData, type RwkvDailyMetric } from "../rwkvDailyData"
+
+    const rwkvDailyMetrics: RwkvDailyMetric[] = ["standardizedGap", "logLoss"]
 
     $: truncated = $searchLimit !== 0
     $: realScroll = -Math.abs($scroll)
@@ -156,6 +160,10 @@
         $rwkvCalibrationStats?.predictionsByRevlogId ?? {}
     )
     $: umPlusLoading = !!$memorised_stats && (!$fsrsCalibrationStats || !$rwkvCalibrationStats)
+    $: rwkvDailyData = buildRwkvDailyData(
+        $memorised_stats?.calibration_samples ?? [],
+        $rwkvCalibrationStats?.predictionsByRevlogId ?? {}
+    )
     $: umPlusWarnings = Array.from(
         new Set([
             ...($fsrsCalibrationStats?.warnings ?? []),
@@ -267,6 +275,25 @@
         </ul>
     </MemorisedGraphContainer>
     <CurrentDisagreement />
+    {#each rwkvDailyMetrics as metric}
+        <MemorisedGraphContainer>
+            <h1 slot="title">{i18n(`rwkv-daily-${metric}`)}</h1>
+            <div slot="graph" class="calibration-panel">
+                {#if $rwkvCalibrationStats?.warnings.length}
+                    <Warning always>{$rwkvCalibrationStats.warnings.join(" ")}</Warning>
+                {/if}
+                {#if !$rwkvCalibrationStats}
+                    <div class="calibration-message">{i18n("loading")}</div>
+                {:else if rwkvDailyData.length}
+                    <RwkvDailyGraph data={rwkvDailyData} {metric} />
+                {:else}
+                    <div class="calibration-message">{i18n("rwkv-daily-no-data")}</div>
+                {/if}
+            </div>
+            <p>{i18n(`rwkv-daily-${metric}-help`)}</p>
+            <p>{i18n("rwkv-daily-sample-help")}</p>
+        </MemorisedGraphContainer>
+    {/each}
     <MemorisedGraphContainer>
         <h1 slot="title">{i18n("stability-time-machine")}</h1>
         <BarScrollable slot="graph" data={stability_time_machine_bar} left_aligned />

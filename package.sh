@@ -7,7 +7,7 @@ from zipfile import ZipFile, ZIP_DEFLATED
 
 root = Path.cwd()
 output = root / "searchStatsExtended.ankiaddon"
-files = ["__init__.py", "current_disagreement.py", "stats.min.js", "stats.min.css",
+files = ["__init__.py", "current_disagreement.py", "stats.min.js", "stats-worker.js", "stats.min.css",
          "developers.md", "manifest.json", "config.json", "LICENSE"]
 files += sorted(str(path.relative_to(root)) for path in (root / "locale").glob("*.ftl"))
 for name in files:

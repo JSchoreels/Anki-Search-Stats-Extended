@@ -12,3 +12,5 @@ coverage
 .DS_Store
 
 .idea
+
+stats-worker.js

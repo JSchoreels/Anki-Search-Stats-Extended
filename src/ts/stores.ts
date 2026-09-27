@@ -1,9 +1,10 @@
 import { derived, get, writable, type Readable } from "svelte/store"
 import { calculateCardDataPies } from "./CardDataPies"
 import { DEFAULT_ORDER, type SSEconfig, type SSEother } from "./config"
-import { buildCalibrationBins, getMemorisedDays } from "./MemorisedBar"
+import { latestResult } from "./latestResult"
+import type { buildCalibrationBins, getMemorisedDays } from "./MemorisedBar"
 import type { GraphsRequest, GraphsResponse } from "./proto/anki/stats_pb"
-import { calculateRevlogStats, today } from "./revlogGraphs"
+import { today, type calculateRevlogStats } from "./revlogGraphs"
 import {
     cancelRwkvMemorisedHistory,
     catchErrors,
@@ -19,6 +20,7 @@ import {
     type CardData,
     type Revlog,
 } from "./search"
+import { runStatsTask } from "./statsWorkerClient"
 import type { Tooltip } from "./tooltip"
 
 // Pie chart related
@@ -81,7 +83,6 @@ configSubscribe(alwaysAllTime, ($alwaysAllTime) => saveConfigValue("alwaysAllTim
 
 // Data related
 export let data = writable<null | GraphsResponse>(null)
-export let not_suspended_data = writable<null | GraphsResponse>(null)
 
 export let graphsRequest = writable<null | GraphsRequest>(null)
 export let searchString = derived(graphsRequest, ($graphsRequest) => $graphsRequest?.search ?? null)
@@ -90,6 +91,7 @@ export let searchLimit = derived(
     ([$graphsRequest, $alwaysAllTime]) => ($alwaysAllTime ? 0 : ($graphsRequest?.days ?? 0))
 )
 export let cids = writable<null | number[]>(null)
+export const rwkvStatsGeneration = writable(0)
 
 // Revlog graph specific stores
 export let pieLast = writable(59)
@@ -121,7 +123,7 @@ config.subscribe(($config) =>
 export let card_data: Readable<CardData[] | null> = derived([cids], ([$cids], set) => {
     set(null)
     if ($cids) {
-        catchErrors(() => getCardData($cids ?? [])).then(set)
+        return latestResult(set, () => getCardData($cids))
     }
 })
 
@@ -130,7 +132,7 @@ export let revlogs: Readable<Revlog[] | null> = derived(
     ([$cids, $showRevlogStats, $searchLimit], set) => {
         set(null)
         if ($cids && $showRevlogStats) {
-            catchErrors(() => getRevlogs($cids, $searchLimit)).then(set)
+            return latestResult(set, () => getRevlogs($cids, $searchLimit))
         }
     }
 )
@@ -141,11 +143,11 @@ export let cardDataStats = derived(
         calculateCardDataPies($card_data ?? [], $include_suspended, $zero_inclusive)
 )
 export const revlogStats = writable<ReturnType<typeof calculateRevlogStats> | null>(null)
-derived([revlogs, card_data], ([$revlogs, $card_data]) => {
-    if (!$revlogs || !$card_data) {
-        return null
+derived([revlogs, card_data], ([$revlogs, $card_data], set: typeof revlogStats.set) => {
+    set(null)
+    if ($revlogs && $card_data) {
+        return latestResult(set, (signal) => runStatsTask("revlog", [$revlogs, $card_data], signal))
     }
-    return catchErrors(() => calculateRevlogStats($revlogs, $card_data))
 }).subscribe(revlogStats.set)
 export let last_forget = derived([revlogStats], ([$revlogStats]) => $revlogStats?.last_forget)
 export let memorised_stats = writable<Awaited<ReturnType<typeof getMemorisedDays>> | null>()
@@ -157,20 +159,23 @@ derived(
     ) => {
         set(null)
         if ($revlogs && $card_data && $showFsrsStats && $last_forget) {
-            catchErrors(async () => {
+            return latestResult(set, async (signal) => {
                 const fsrsPresets = await getFsrsPresetData(uniqueRevlogCids($revlogs))
-                const stats = await getMemorisedDays(
-                    $revlogs,
-                    $card_data,
-                    SSEother.deck_configs,
-                    SSEother.deck_config_ids,
-                    $last_forget,
-                    2,
-                    2,
-                    fsrsPresets
+                return runStatsTask(
+                    "memorised",
+                    [
+                        $revlogs,
+                        $card_data,
+                        SSEother.deck_configs,
+                        SSEother.deck_config_ids,
+                        $last_forget,
+                        2,
+                        2,
+                        fsrsPresets,
+                    ],
+                    signal
                 )
-                return stats
-            }).then(set)
+            })
         }
     }
 ).subscribe(memorised_stats.set)
@@ -285,7 +290,7 @@ derived(
             return
         }
 
-        catchErrors(async () => {
+        return latestResult(set, async (signal) => {
             const { column, predictionsByRevlogId, warnings } = await getFsrsReviewRetrievability(
                 $cids,
                 $searchLimit,
@@ -297,11 +302,11 @@ derived(
                     : $memorised_stats.fsrs_calibration_predictions_by_revlog_id
             return {
                 column,
-                bins: buildCalibrationBins(samples, effectivePredictions),
+                bins: await runStatsTask("calibration", [samples, effectivePredictions], signal),
                 predictionsByRevlogId: effectivePredictions,
                 warnings,
             }
-        }).then(set)
+        })
     }
 ).subscribe(fsrsCalibrationStats.set)
 
@@ -313,7 +318,7 @@ export type RwkvCalibrationStats = {
 }
 export let rwkvCalibrationStats = writable<RwkvCalibrationStats | null>(null)
 derived(
-    [cids, searchLimit, memorised_stats],
+    [cids, searchLimit, memorised_stats, rwkvStatsGeneration],
     (
         [$cids, $searchLimit, $memorised_stats],
         set: (value: RwkvCalibrationStats | null) => void
@@ -329,7 +334,7 @@ derived(
             return
         }
 
-        catchErrors(async () => {
+        return latestResult(set, async (signal) => {
             const { column, predictionsByRevlogId, warnings } = await getRwkvReviewRetrievability(
                 $cids,
                 $searchLimit,
@@ -337,10 +342,10 @@ derived(
             )
             return {
                 column,
-                bins: buildCalibrationBins(samples, predictionsByRevlogId),
+                bins: await runStatsTask("calibration", [samples, predictionsByRevlogId], signal),
                 predictionsByRevlogId,
                 warnings,
             }
-        }).then(set)
+        })
     }
 ).subscribe(rwkvCalibrationStats.set)

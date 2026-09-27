@@ -107,6 +107,7 @@ export type ResolvedFsrsPreset = {
 }
 
 export interface SSEother {
+    stats_worker_url: string
     rollover: number
     learn_ahead_secs: number
     selected_deck_id?: number
