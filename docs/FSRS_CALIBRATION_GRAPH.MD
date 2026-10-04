@@ -235,6 +235,30 @@ once in blue in its FSRS interval; the paired-card summary counts it only once.
 Clicking a colored segment, or activating it with Enter or Space, browses and
 selects only the exact cards represented by that segment.
 
+The **Color by RWKV bucket shift from FSRS** toggle replaces the membership
+colors with the signed difference `RWKV bucket index - FSRS bucket index`.
+Green means RWKV assigns a higher bucket, red a lower bucket, and grey the same
+bucket. Both model segments of a disagreeing card use the same shift color.
+Saturation increases through five shades for shifts of 1 to 5 buckets; larger
+shifts keep the strongest shade. Each bar sorts all segments by signed shift
+from bottom to top, regardless of model membership, placing grey between the
+red and green sections. The legend has a separate heading followed by explicit
+rows for −5 through 0 and +1 through +5. It labels the endpoints as −5 or lower
+and +5 or higher.
+
+Segments remain grouped by exact shift and model membership, so tooltips report
+the actual shift (up to ±19) and clicking selects only that group's cards.
+Multiline tooltips also list counts for all eleven color levels (including
+zeros), total cards, and the total where RWKV assigns a higher bucket than FSRS.
+Each summary row shows `this R bucket / whole search`. The bucket counts use the
+union of cards in the hovered bucket, matching the stacked bar: a card is counted
+once within that bucket, but a disagreeing card contributes to both of its model
+buckets across the chart. Whole-search counts include each eligible paired card
+exactly once, using same-bucket agreement plus RWKV membership and excluding the
+duplicate FSRS membership. Bucket boundaries, bar totals, and paired-card counts
+are unchanged.
+The toggle starts off and does not persist a setting or request new predictions.
+
 The Card Retrievability comparison is followed by **RWKV Daily Recall Gap** and
 **RWKV Daily Surprise**. These reuse eligible RWKV review predictions without
 requiring paired FSRS predictions. Their calculations, daily grouping, and
