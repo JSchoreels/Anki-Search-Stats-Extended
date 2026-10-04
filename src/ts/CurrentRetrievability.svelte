@@ -6,6 +6,7 @@
     import {
         CURRENT_RETRIEVABILITY_SERIES,
         CURRENT_RETRIEVABILITY_SHIFT_SERIES,
+        currentRetrievabilityShiftLabel,
         renderCurrentRetrievabilityGraph,
     } from "./CurrentRetrievabilityGraph"
 
@@ -14,6 +15,10 @@
 
     let svg: SVGElement | undefined
     let colorByBucketShift = false
+    const shiftLegendRows = [
+        CURRENT_RETRIEVABILITY_SHIFT_SERIES.filter(({ shift }) => shift <= 0),
+        CURRENT_RETRIEVABILITY_SHIFT_SERIES.filter(({ shift }) => shift > 0),
+    ]
     $: bins = buildCurrentRetrievabilityBins(response?.rows ?? [])
     $: paired = bins.reduce((sum, bin) => sum + bin.both.length + bin.rwkv.length, 0)
     $: if (svg) renderCurrentRetrievabilityGraph(svg, bins, { colorByBucketShift })
@@ -32,24 +37,22 @@
             {i18n("current-retrievability-color-by-shift")}
         </label>
         <svg bind:this={svg}></svg>
-        <div class="legend">
+        <div class="legend" class:shift-legend={colorByBucketShift}>
             {#if colorByBucketShift}
-                <span>{i18n("current-retrievability-shift-legend")}</span>
-                {#each CURRENT_RETRIEVABILITY_SHIFT_SERIES as { shift, color }}
-                    <span>
-                        <span class="swatch" style:background={color}></span>
-                        {#if shift === -5}
-                            {i18n("current-retrievability-shift-lower")}
-                        {:else if shift === 5}
-                            {i18n("current-retrievability-shift-higher")}
-                        {:else}
-                            {shift > 0 ? `+${shift}` : shift}
-                        {/if}
-                    </span>
+                <span class="legend-title">{i18n("current-retrievability-shift-legend")}</span>
+                {#each shiftLegendRows as row}
+                    <div class="legend-row">
+                        {#each row as { shift, color }}
+                            <span class="legend-item">
+                                <span class="swatch" style:background={color}></span>
+                                {currentRetrievabilityShiftLabel(shift)}
+                            </span>
+                        {/each}
+                    </div>
                 {/each}
             {:else}
                 {#each CURRENT_RETRIEVABILITY_SERIES as { key, color }}
-                    <span>
+                    <span class="legend-item">
                         <span class="swatch" style:background={color}></span>
                         {i18n(`current-retrievability-${key}`)}
                     </span>
@@ -83,7 +86,23 @@
         font-size: small;
     }
 
-    .legend > span {
+    .shift-legend {
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+
+    .legend-title {
+        text-align: center;
+    }
+
+    .legend-row {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 1rem;
+    }
+
+    .legend-item {
         display: inline-flex;
         align-items: center;
         gap: 0.4rem;
