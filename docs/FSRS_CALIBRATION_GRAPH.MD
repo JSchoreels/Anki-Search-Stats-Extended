@@ -235,6 +235,18 @@ once in blue in its FSRS interval; the paired-card summary counts it only once.
 Clicking a colored segment, or activating it with Enter or Space, browses and
 selects only the exact cards represented by that segment.
 
+The **Color by RWKV bucket shift from FSRS** toggle replaces the membership
+colors with the signed difference `RWKV bucket index - FSRS bucket index`.
+Green means RWKV assigns a higher bucket, red a lower bucket, and grey the same
+bucket. Both model segments of a disagreeing card use the same shift color.
+Saturation increases through five shades for shifts of 1 to 5 buckets; larger
+shifts keep the strongest shade. The legend labels these endpoints as −5 or
+lower and +5 or higher. Segments remain grouped by exact shift and model
+membership, so tooltips report the actual shift (up to ±19) and clicking selects
+only that group's cards. Bucket boundaries, bar totals, and paired-card counts
+are unchanged. The toggle starts off and does not persist a setting or request
+new predictions.
+
 The Card Retrievability comparison is followed by **RWKV Daily Recall Gap** and
 **RWKV Daily Surprise**. These reuse eligible RWKV review predictions without
 requiring paired FSRS predictions. Their calculations, daily grouping, and

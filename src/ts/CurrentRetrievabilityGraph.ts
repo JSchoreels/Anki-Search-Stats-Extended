@@ -21,9 +21,48 @@ export const CURRENT_RETRIEVABILITY_SERIES: {
     { key: "fsrs", color: FSRS_COMPARISON_COLOUR },
 ]
 
+const MAX_SHIFT_SHADE = 5
+
+export function currentRetrievabilityShiftColor(shift: number): string {
+    if (shift === 0) return "grey"
+    const level = Math.min(Math.abs(shift), MAX_SHIFT_SHADE)
+    return d3.hsl(shift > 0 ? 135 : 0, 0.2 + level * 0.14, 0.85 - level * 0.09).formatHex()
+}
+
+export const CURRENT_RETRIEVABILITY_SHIFT_SERIES = d3
+    .range(-MAX_SHIFT_SHADE, MAX_SHIFT_SHADE + 1)
+    .map((shift) => ({ shift, color: currentRetrievabilityShiftColor(shift) }))
+
+type RetrievabilitySegment = {
+    key: CurrentRetrievabilityMembership
+    color: string
+    shift: number
+    cids: number[]
+}
+
+function retrievabilitySegments(
+    bin: CurrentRetrievabilityBin,
+    colorByBucketShift: boolean
+): RetrievabilitySegment[] {
+    return CURRENT_RETRIEVABILITY_SERIES.flatMap(({ key, color }) => {
+        if (!colorByBucketShift || key === "both") {
+            return [{ key, color, shift: 0, cids: bin[key] }]
+        }
+        return Object.entries(bin.shifts[key])
+            .sort(([a], [b]) => Number(a) - Number(b))
+            .map(([shift, cids]) => ({
+                key,
+                color: currentRetrievabilityShiftColor(Number(shift)),
+                shift: Number(shift),
+                cids,
+            }))
+    })
+}
+
 export function renderCurrentRetrievabilityGraph(
     svg: SVGElement,
-    bins: CurrentRetrievabilityBin[]
+    bins: CurrentRetrievabilityBin[],
+    { colorByBucketShift = false } = {}
 ) {
     clearChart(svg)
     const maxCount = d3.max(bins, (bin) => bin.both.length + bin.rwkv.length + bin.fsrs.length) ?? 0
@@ -63,20 +102,26 @@ export function renderCurrentRetrievabilityGraph(
 
     for (const bin of bins) {
         let cumulative = 0
-        for (const { key, color } of CURRENT_RETRIEVABILITY_SERIES) {
-            const cids = bin[key]
+        for (const { key, color, shift, cids } of retrievabilitySegments(bin, colorByBucketShift)) {
             const base = cumulative
             cumulative += cids.length
             if (!cids.length) continue
-            const label = i18n("current-retrievability-bucket", {
-                lower: d3.format(".0%")(bin.lower),
-                upper: d3.format(".0%")(bin.upper),
-                membership: i18n(`current-retrievability-${key}`),
-                count: cids.length,
-            })
+            const label = i18n(
+                colorByBucketShift
+                    ? "current-retrievability-shift-bucket"
+                    : "current-retrievability-bucket",
+                {
+                    lower: d3.format(".0%")(bin.lower),
+                    upper: d3.format(".0%")(bin.upper),
+                    membership: i18n(`current-retrievability-${key}`),
+                    count: cids.length,
+                    shift: shift > 0 ? `+${shift}` : String(shift),
+                }
+            )
             chart
                 .append("rect")
                 .attr("class", `current-retrievability-bar current-retrievability-${key}`)
+                .attr("data-bucket-shift", colorByBucketShift ? shift : null)
                 .attr("x", x(bin.lower) + 1)
                 .attr("width", Math.max(1, x(bin.upper) - x(bin.lower) - 2))
                 .attr("y", y(cumulative))

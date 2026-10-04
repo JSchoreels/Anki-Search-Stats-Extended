@@ -4,8 +4,12 @@ jest.mock("../src/ts/i18n", () => ({
 }))
 jest.mock("../src/ts/search", () => ({ browseCurrentDisagreementCards: jest.fn() }))
 
+import { hsl } from "d3"
 import { buildCurrentRetrievabilityBins } from "../src/ts/currentRetrievabilityData"
-import { renderCurrentRetrievabilityGraph } from "../src/ts/CurrentRetrievabilityGraph"
+import {
+    currentRetrievabilityShiftColor,
+    renderCurrentRetrievabilityGraph,
+} from "../src/ts/CurrentRetrievabilityGraph"
 import { browseCurrentDisagreementCards } from "../src/ts/search"
 
 test("same-bucket agreement counts once; disagreement retains each model's exact membership", () => {
@@ -114,5 +118,105 @@ test("single cards and endpoint bars render; redraw clears old data and empty se
     expect(svg.querySelectorAll(".current-retrievability-bar")).toHaveLength(1)
     expect(svg.querySelector(".current-retrievability-both")?.getAttribute("fill")).toBe("grey")
     renderCurrentRetrievabilityGraph(svg, buildCurrentRetrievabilityBins([]))
+    expect(svg.children).toHaveLength(0)
+})
+
+test("shift groups use signed bucket differences and retain exact shifts beyond five", () => {
+    const bins = buildCurrentRetrievabilityBins([
+        { cid: 1, fsrs: 0.049, rwkv: 0.05 },
+        { cid: 2, fsrs: 0.05, rwkv: 0.049 },
+        { cid: 3, fsrs: 0.25, rwkv: 0.5 },
+        { cid: 4, fsrs: 0.5, rwkv: 0.25 },
+        { cid: 5, fsrs: 0, rwkv: 1 },
+        { cid: 6, fsrs: 1, rwkv: 0 },
+        { cid: 7, fsrs: 0.951, rwkv: 1 },
+        { cid: 5, fsrs: 0.5, rwkv: 0.75 },
+        { cid: 8, fsrs: -0.1, rwkv: 0.75 },
+    ])
+    expect(bins[0].shifts).toEqual({ rwkv: { [-1]: [2], [-19]: [6] }, fsrs: { 1: [1], 19: [5] } })
+    expect(bins[1].shifts).toEqual({ rwkv: { 1: [1] }, fsrs: { [-1]: [2] } })
+    expect(bins[5].shifts).toEqual({ rwkv: { [-5]: [4] }, fsrs: { 5: [3] } })
+    expect(bins[10].shifts).toEqual({ rwkv: { 5: [3] }, fsrs: { [-5]: [4] } })
+    expect(bins[19].shifts).toEqual({ rwkv: { 19: [5] }, fsrs: { [-19]: [6] } })
+    expect(bins[19].both).toEqual([7])
+})
+
+test("up and down shifts gain saturation through five levels and then keep the strongest shade", () => {
+    expect(currentRetrievabilityShiftColor(0)).toBe("grey")
+    for (const sign of [-1, 1]) {
+        const shades = [1, 2, 3, 4, 5].map((level) => currentRetrievabilityShiftColor(sign * level))
+        expect(new Set(shades).size).toBe(5)
+        shades.slice(1).forEach((shade, index) => {
+            expect(hsl(shade).s).toBeGreaterThan(hsl(shades[index]).s)
+            expect(hsl(shade).l).toBeLessThan(hsl(shades[index]).l)
+        })
+        expect(currentRetrievabilityShiftColor(sign * 6)).toBe(shades[4])
+        expect(currentRetrievabilityShiftColor(sign * 19)).toBe(shades[4])
+    }
+    const green = hsl(currentRetrievabilityShiftColor(5))
+    const red = hsl(currentRetrievabilityShiftColor(-5))
+    expect(green.h).toBeCloseTo(135, 0)
+    expect(red.h).toBe(0)
+})
+
+test("shift coloring preserves bar totals and browses exact shift and model groups at both endpoints", () => {
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg")
+    const bins = buildCurrentRetrievabilityBins([
+        { cid: 1, fsrs: 0.51, rwkv: 0.53 },
+        { cid: 2, fsrs: 0.26, rwkv: 0.51 },
+        { cid: 3, fsrs: 0.46, rwkv: 0.51 },
+        { cid: 4, fsrs: 0.76, rwkv: 0.51 },
+        { cid: 5, fsrs: 0.56, rwkv: 0.51 },
+        { cid: 6, fsrs: 0.51, rwkv: 0.99 },
+        { cid: 7, fsrs: 0, rwkv: 1 },
+        { cid: 8, fsrs: 1, rwkv: 0 },
+    ])
+    const bars = () => [...svg.querySelectorAll<SVGRectElement>(".current-retrievability-bar")]
+    const columnHeights = () => {
+        const heights: Record<string, number> = {}
+        for (const bar of bars()) {
+            const x = bar.getAttribute("x")!
+            heights[x] = (heights[x] ?? 0) + Number(bar.getAttribute("height"))
+        }
+        return heights
+    }
+    renderCurrentRetrievabilityGraph(svg, bins)
+    const originalHeights = columnHeights()
+    renderCurrentRetrievabilityGraph(svg, bins, { colorByBucketShift: true })
+    expect(bars()).toHaveLength(15)
+    for (const [x, height] of Object.entries(columnHeights())) {
+        expect(height).toBeCloseTo(originalHeights[x])
+    }
+    for (const shift of [-19, -5, -1, 1, 5, 9, 19]) {
+        const endpoints = svg.querySelectorAll<SVGRectElement>(`[data-bucket-shift="${shift}"]`)
+        expect(endpoints).toHaveLength(2)
+        expect(endpoints[0].getAttribute("fill")).toBe(currentRetrievabilityShiftColor(shift))
+        expect(endpoints[1].getAttribute("fill")).toBe(endpoints[0].getAttribute("fill"))
+    }
+    const higher = svg.querySelector<SVGRectElement>(
+        '.current-retrievability-rwkv[data-bucket-shift="5"]'
+    )!
+    higher.dispatchEvent(new MouseEvent("click"))
+    expect(browseCurrentDisagreementCards).toHaveBeenLastCalledWith([2])
+    expect(higher.querySelector("title")?.textContent).toContain('"shift":"+5"')
+    expect(higher.getAttribute("aria-label")).toContain("current-retrievability-rwkv")
+    const extreme = svg.querySelector<SVGRectElement>(
+        '.current-retrievability-fsrs[data-bucket-shift="-19"]'
+    )!
+    extreme.dispatchEvent(new KeyboardEvent("keydown", { key: " " }))
+    expect(browseCurrentDisagreementCards).toHaveBeenLastCalledWith([8])
+    expect(extreme.querySelector("title")?.textContent).toContain('"shift":"-19"')
+    expect(svg.querySelector('[data-bucket-shift="0"]')?.getAttribute("fill")).toBe("grey")
+    expect(svg.innerHTML).not.toMatch(/NaN|Infinity/)
+
+    renderCurrentRetrievabilityGraph(svg, bins, { colorByBucketShift: false })
+    expect(columnHeights()).toEqual(originalHeights)
+    expect(svg.querySelectorAll("[data-bucket-shift]")).toHaveLength(0)
+    expect(new Set(bars().map((bar) => bar.getAttribute("fill")))).toEqual(
+        new Set(["grey", "seagreen", "steelblue"])
+    )
+    renderCurrentRetrievabilityGraph(svg, buildCurrentRetrievabilityBins([]), {
+        colorByBucketShift: true,
+    })
     expect(svg.children).toHaveLength(0)
 })

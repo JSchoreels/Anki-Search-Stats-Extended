@@ -6,6 +6,7 @@ export type CurrentRetrievabilityBin = {
     index: number
     lower: number
     upper: number
+    shifts: Record<Exclude<CurrentRetrievabilityMembership, "both">, Record<number, number[]>>
 } & Record<CurrentRetrievabilityMembership, number[]>
 
 export function buildCurrentRetrievabilityBins(
@@ -18,6 +19,7 @@ export function buildCurrentRetrievabilityBins(
         both: [],
         rwkv: [],
         fsrs: [],
+        shifts: { rwkv: {}, fsrs: {} },
     }))
     for (const { cid, fsrs, rwkv } of validCurrentPredictions(rows)) {
         const fsrsIndex = Math.min(BUCKET_COUNT - 1, Math.floor(fsrs * BUCKET_COUNT))
@@ -27,6 +29,11 @@ export function buildCurrentRetrievabilityBins(
         } else {
             bins[rwkvIndex].rwkv.push(cid)
             bins[fsrsIndex].fsrs.push(cid)
+            const shift = rwkvIndex - fsrsIndex
+            const rwkvCards = (bins[rwkvIndex].shifts.rwkv[shift] ??= [])
+            const fsrsCards = (bins[fsrsIndex].shifts.fsrs[shift] ??= [])
+            rwkvCards.push(cid)
+            fsrsCards.push(cid)
         }
     }
     return bins

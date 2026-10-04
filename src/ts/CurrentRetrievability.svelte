@@ -5,6 +5,7 @@
     import { buildCurrentRetrievabilityBins } from "./currentRetrievabilityData"
     import {
         CURRENT_RETRIEVABILITY_SERIES,
+        CURRENT_RETRIEVABILITY_SHIFT_SERIES,
         renderCurrentRetrievabilityGraph,
     } from "./CurrentRetrievabilityGraph"
 
@@ -12,9 +13,10 @@
     export let retry: () => void
 
     let svg: SVGElement | undefined
+    let colorByBucketShift = false
     $: bins = buildCurrentRetrievabilityBins(response?.rows ?? [])
     $: paired = bins.reduce((sum, bin) => sum + bin.both.length + bin.rwkv.length, 0)
-    $: if (svg) renderCurrentRetrievabilityGraph(svg, bins)
+    $: if (svg) renderCurrentRetrievabilityGraph(svg, bins, { colorByBucketShift })
 </script>
 
 <GraphContainer>
@@ -25,14 +27,34 @@
         <p>{i18n(`current-disagreement-${response.status}`)}</p>
         <button on:click={retry}>{i18n("current-disagreement-retry")}</button>
     {:else if paired}
+        <label class="shift-toggle">
+            <input type="checkbox" bind:checked={colorByBucketShift} />
+            {i18n("current-retrievability-color-by-shift")}
+        </label>
         <svg bind:this={svg}></svg>
         <div class="legend">
-            {#each CURRENT_RETRIEVABILITY_SERIES as { key, color }}
-                <span>
-                    <span class="swatch" style:background={color}></span>
-                    {i18n(`current-retrievability-${key}`)}
-                </span>
-            {/each}
+            {#if colorByBucketShift}
+                <span>{i18n("current-retrievability-shift-legend")}</span>
+                {#each CURRENT_RETRIEVABILITY_SHIFT_SERIES as { shift, color }}
+                    <span>
+                        <span class="swatch" style:background={color}></span>
+                        {#if shift === -5}
+                            {i18n("current-retrievability-shift-lower")}
+                        {:else if shift === 5}
+                            {i18n("current-retrievability-shift-higher")}
+                        {:else}
+                            {shift > 0 ? `+${shift}` : shift}
+                        {/if}
+                    </span>
+                {/each}
+            {:else}
+                {#each CURRENT_RETRIEVABILITY_SERIES as { key, color }}
+                    <span>
+                        <span class="swatch" style:background={color}></span>
+                        {i18n(`current-retrievability-${key}`)}
+                    </span>
+                {/each}
+            {/if}
         </div>
     {:else}
         <p>{i18n("current-disagreement-no-data")}</p>
@@ -40,10 +62,19 @@
     {#if response?.status === "ready"}
         <p>{i18n("current-disagreement-count", { count: paired, total: response.total })}</p>
     {/if}
-    <p>{i18n("current-retrievability-help")}</p>
+    <p>
+        {i18n(
+            colorByBucketShift ? "current-retrievability-shift-help" : "current-retrievability-help"
+        )}
+    </p>
 </GraphContainer>
 
 <style lang="scss">
+    .shift-toggle {
+        align-self: flex-start;
+        font-size: small;
+    }
+
     .legend {
         display: flex;
         flex-wrap: wrap;
