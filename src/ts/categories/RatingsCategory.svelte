@@ -9,6 +9,7 @@
     import { binSize, scroll, searchLimit, revlogStats } from "../stores"
     import { today, easeBarChart, type RevlogBuckets } from "../revlogGraphs"
     import _ from "lodash"
+    import { retention_trend } from "../trend"
 
     $: limit = -1 - $searchLimit
     let normalize_ease = false
@@ -21,8 +22,6 @@
     let stabilityBinSize = 2
     let repetitionsBinSize = 1
     let difficultyBinSize = 1
-
-    let retention_trend = (values: number[]) => (_.sum(values) == 0 ? 0 : 1 - values[3])
 
     function retrievabilityBucketLabeler(label: string, width = 1) {
         const raw = Number(label)

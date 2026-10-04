@@ -13,6 +13,7 @@
     import { browserSearchCids } from "../search"
     import _ from "lodash"
     import * as d3 from "d3"
+    import { retention_trend } from "../trend"
 
     $: truncated = $searchLimit !== 0
     let normalize_ease = false
@@ -28,8 +29,6 @@
     }
 
     let reps_metric = RepsMetric.STABILITY
-
-    let retention_trend = (values: number[]) => (_.sum(values) == 0 ? 0 : 1 - values[3])
 
     let granularity_power = 1
     const domain: [number, number] = [0.05, 1]

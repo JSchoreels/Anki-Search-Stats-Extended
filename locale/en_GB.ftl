@@ -366,7 +366,7 @@ calibration-legend-rwkv = Actual RWKV R
 calibration-confidence-interval = Card bootstrap 95% CI: {$lower}%–{$upper}%
 calibration-no-data = Not enough eligible review history to draw calibration yet.
 rwkv-calibration-no-data = No complete persisted RWKV review retrievability state was found for this search and date range.
-fsrs-calibration-help = This compares the average retention the selected source predicts you should have on cards (Perfect/orange line) to the retention you actually have (Actual/blue line).
+fsrs-calibration-help = This compares the average retrievability the selected source predicts you should have on cards (Perfect/orange line) to the retrievability you actually have (Actual/blue line).
 um-plus = FSRS vs RWKV UM+
 current-disagreement = FSRS vs RWKV current Disagreement
 current-disagreement-x-axis = Current FSRS R − RWKV R
@@ -529,6 +529,11 @@ card-count-time-machine-help =
     Learn and re-learn count for the end of the day, and not for learning steps greater than 1 day.
     e.g. You failed to finish the learning steps that day.
 
+card-count-time-machine-bar-help =
+    Shows your card type counts for a given date as a bar graph.
+
+    Click the legend to hide or show a card type.
+
 starts-at = Starts at
 first-added = First Added
 first-review = First Review
@@ -558,6 +563,7 @@ daily-hourly-breakdown-help =
 days = Days
 today = Today
 
+introduced-average-per-day = {$value} average for shown period
 burden-per-day = {$value} burden per {$n ->
         [one] day
         *[many] {$n} days
@@ -628,6 +634,7 @@ credits-Jarrett-Ye = Jarrett Ye: {memorised}, {forgetting-curve} and {first-shor
 credits-Ishiko = Ishiko: {memorised} graph
 credits-Rener-Crisostomo = Renêr Crisostomo: Brazilian translation
 credits-user1823 = user1823: Performance improvements
+credits-mikael = mikael2123: {load-trend} fix for cram reviews
 
 support = Support the Addon
 like-on-ankiweb = Like on AnkiWeb 👍
@@ -641,7 +648,7 @@ bad-graph = Bad Graphs
 # This tables description and help will most likely change or become a bad graph
 leech-detector = Lapse Odds (Experimental)
 leech-detector-help =
-    A clickable graph! The degree to which cards number of lapses deviate from what was expected based on their retention.
+    A clickable graph! The degree to which cards number of lapses deviate from what was expected based on their retrievability.
     The higher the value, the less likely the cards are to have that number of lapses.
     The formula for calculating this may change in the future.
 

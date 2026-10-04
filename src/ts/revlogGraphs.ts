@@ -406,6 +406,14 @@ export function IDify<T extends { id: number }>(array: T[]) {
     return id_data
 }
 
+function isForget(revlog?: Revlog) {
+    return revlog && revlog.factor == 0 && revlog.type == 4
+}
+
+function isCram(revlog?: Revlog) {
+    return revlog && revlog.factor == 0 && revlog.type == 3
+}
+
 export function calculateRevlogStats(
     revlogData: Revlog[],
     cardData: CardData[],
@@ -447,6 +455,7 @@ export function calculateRevlogStats(
     let suspended_active_cards_mature_by_day: number[] = emptyArray(0)
 
     let intervals: number[][] = []
+    let burden: number[] = []
 
     let day_initial_ease: number[][] = emptyArray(initialEase())
     let day_initial_reintroduced_ease: number[][] = emptyArray(initialEase())
@@ -575,7 +584,7 @@ export function calculateRevlogStats(
         } else {
             incrementAllEase("learn")
         }
-        if (revlog.factor == 0 && revlog.type == 4) {
+        if (isForget(revlog)) {
             introduced.delete(revlog.cid)
             forgotten.add(revlog.cid)
             last_forget[revlog.cid] = revlog.id
@@ -678,6 +687,12 @@ export function calculateRevlogStats(
         }
     }
 
+    const first_day = revlogData.length ? dayFromMs(revlogData[0].id) : end
+    for (let i = first_day; i < end; i++) {
+        burden[i] = 0
+        intervals[i] = []
+    }
+
     // "reduceRight" Used here to iterate backwards, never returns true
     revlogData.reduceRight((_p, revlog) => {
         const day = dayFromMs(revlog.id)
@@ -686,8 +701,14 @@ export function calculateRevlogStats(
         const next_review = last_cids[revlog.cid]
         // If the card is still learning, use the card data
         let ivl = next_review ? revlog.ivl : card.type != 3 && card.type != 1 ? card.ivl : 0
+        // Filtered/cram reviews don't reschedule the card, so make them transparent:
+        // return WITHOUT updating last_cids, so the previous review's interval spans
+        // across the cram day instead of the cram injecting a 0-interval segment.
+        if (isCram(revlog)) {
+            return undefined
+        }
         // Ignore "forgets"
-        if ((revlog.factor == 0 && revlog.type == 4) || (!next_review && card.queue == 0)) {
+        if (isForget(revlog) || (!next_review && card.queue == 0)) {
             last_cids[revlog.cid] = revlog
             return undefined
         }
@@ -701,6 +722,9 @@ export function calculateRevlogStats(
         if (isCurrentSuspendedSegment) {
             ivl = -1
         }
+
+        // load/burden
+        const is_load = !isForget(next_review) && ivl != -1
 
         let to = next_review ? dayFromMs(next_review.id) : end + 1
 
@@ -719,20 +743,16 @@ export function calculateRevlogStats(
             if (ivl == 0 && (revlog.type == 0 || (!next_review && card.type == 1))) {
                 intervals[intervalDay][-2] = (intervals[intervalDay][-2] ?? 0) + 1
             }
+
+            if (is_load) {
+                burden[intervalDay] = (burden[intervalDay] ?? 0) + (ivl > 0 ? 1 / ivl : 1)
+            }
         }
 
         last_cids[revlog.cid] = revlog
 
         return undefined
     }, undefined)
-
-    const burden = Array.from(intervals).map((v) => {
-        if (!v) {
-            return 0
-        } else {
-            return _.sum(v.map((val, ivl) => val / (ivl || 1))) ?? 0
-        }
-    })
 
     // Calculate current load by introduction day
     for (const card of cardData) {
@@ -837,16 +857,14 @@ export function formatRetention(value: number) {
 export function easeBarChart(
     eases: number[][],
     offset = today,
-    normalize = false,
+    normalise = false,
     columnLabeler: BarChart["columnLabeler"] = undefined
 ): BarChart {
     return {
         row_colours: EASE_COLOURS,
         row_labels: EASE_LABELS,
         data: Array.from(eases).map((data, label) => {
-            const sum = _.sum(data)
             let values = [...(data ?? [0, 0, 0, 0])].reverse()
-            values = normalize ? values.map((a) => a / sum) : values
             return {
                 values,
                 label: (label - offset).toString(),
@@ -855,6 +873,8 @@ export function easeBarChart(
         tick_spacing: 5,
         reverse_legend: true,
         columnLabeler,
-        extraStats: normalize ? retentionStats : totalCalc,
+        extraStats: normalise ? retentionStats : totalCalc,
+        hidden_rows: new Set(),
+        normalise: normalise,
     }
 }

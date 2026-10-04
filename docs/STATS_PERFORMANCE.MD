@@ -27,3 +27,7 @@ and continues to read rebuilt JavaScript/CSS from disk. `npm run build` produces
 both `stats.min.js` and `stats-worker.js`; packaging and installation must include
 both. The worker is served by Anki's add-on media endpoint on the same origin.
 After installing Python changes, fully quit and reopen Anki.
+
+Both JavaScript bundles target Chrome 77 for Anki's Qt5 webview. Review-history
+day initialization starts at the first review timestamp, rather than the card
+creation ID, and skips initialization when history is empty.

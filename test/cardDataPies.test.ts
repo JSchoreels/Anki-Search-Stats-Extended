@@ -56,6 +56,24 @@ beforeEach(() => {
     SSEother.days_elapsed = 0
 })
 
+test("future due retrievability totals include only eligible review cards", () => {
+    const stats = calculateCardDataPies(
+        [
+            reviewCard(),
+            reviewCard({ id: 2, type: 1 }),
+            reviewCard({ id: 3, type: 3 }),
+            reviewCard({ id: 4, queue: -1 }),
+            reviewCard({ id: 5, data: "{}" }),
+            reviewCard({ id: 6, due: 8 }),
+        ],
+        false,
+        false
+    )
+    expect(stats.target_R_day_totals[7]).toBe(1)
+    expect(stats.target_R_day_totals[8]).toBe(1)
+    expect(stats.target_R_days[7]).toBeCloseTo(forgetting_curve(0.1, 7, 12), 6)
+})
+
 test("future due retention uses selected FSRS7 deck model", () => {
     const stats = calculateCardDataPies(
         [reviewCard()],

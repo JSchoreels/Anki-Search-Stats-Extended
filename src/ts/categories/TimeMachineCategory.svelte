@@ -7,9 +7,9 @@
     import Warning from "../Warning.svelte"
     import TimeMachineScroll from "../TimeMachineScroll.svelte"
     import { i18n, i18n_bundle } from "../i18n"
-    import { barStringLabeler, barHourLabeler, type BarChart } from "../bar"
+    import { barStringLabeler, barHourLabeler, type BarChart, barDateLabeler } from "../bar"
     import type { PieDatum } from "../pie"
-    import { scroll, searchLimit, revlogStats, data } from "../stores"
+    import { scroll, searchLimit, revlogStats, data, binSize, graph_mode } from "../stores"
     import { today, no_rollover_today } from "../revlogGraphs"
     import {
         LEARN_COLOUR,
@@ -20,24 +20,40 @@
         YOUNG_COLOUR,
     } from "../graph"
     import _ from "lodash"
+    import GraphTypeSelector from "../GraphTypeSelector.svelte"
+    import { buildTimeMachineCardData } from "../timeMachineData"
 
     $: addedCards = $data?.added?.added ?? {}
 
     $: truncated = $searchLimit !== 0
     $: realScroll = -Math.abs($scroll)
 
-    $: time_machine_intervals = ($revlogStats?.intervals ?? [])[today + realScroll] ?? []
-    $: time_machine_intra_day = time_machine_intervals[0] || 0
-    $: time_machine_learn = time_machine_intervals[-2] || 0
-    $: time_machine_young = _.sum(time_machine_intervals.slice(1, 21)) || 0
-    $: time_machine_mature = _.sum(time_machine_intervals.slice(21)) || 0
-    $: time_machine_suspended = time_machine_intervals[-1] ?? 0
-    $: time_machine_added = Object.entries(addedCards).reduce(
-        (p, [i, v]) => p + (+i <= realScroll ? v : 0),
-        0
+    $: time_machine_data = buildTimeMachineCardData(
+        $revlogStats?.intervals ?? [],
+        addedCards,
+        today
     )
 
-    $: total_intervals = time_machine_mature + time_machine_young + time_machine_intra_day
+    $: time_machine_intervals = ($revlogStats?.intervals ?? [])[today + realScroll] ?? []
+
+    $: time_machine_stats = time_machine_data[today + realScroll]?.values ?? []
+    $: time_machine_relearn = time_machine_stats[3] ?? 0
+    $: time_machine_learn = time_machine_stats[2] ?? 0
+    $: time_machine_young = time_machine_stats[1] ?? 0
+    $: time_machine_mature = time_machine_stats[0] ?? 0
+    $: time_machine_suspended = time_machine_stats[4] ?? 0
+    $: time_machine_new = time_machine_stats[5] ?? 0
+
+    $: total_intervals =
+        time_machine_mature + time_machine_young + time_machine_learn + time_machine_relearn
+    $: time_machine_added =
+        time_machine_mature +
+        time_machine_young +
+        time_machine_learn +
+        time_machine_relearn +
+        time_machine_suspended +
+        time_machine_new
+
     $: intervals_mean =
         ($revlogStats?.intervals ?? [])[today + realScroll]?.reduce((p, c, i) => p + c * i, 0) /
             total_intervals || 0
@@ -46,6 +62,10 @@
 
     function minIndex(vals: Record<number, any>) {
         return _.min(Object.keys(vals).map((k) => parseInt(k))) ?? 0
+    }
+
+    function barLabel(i: number) {
+        return (i - today).toString()
     }
 
     $: review_leftmost = minIndex($revlogStats?.intervals ?? {}) - today
@@ -77,7 +97,7 @@
         },
         {
             label: i18n("relearning-count"),
-            value: time_machine_intra_day - time_machine_learn,
+            value: time_machine_relearn,
             colour: RELEARN_COLOUR,
         },
         {
@@ -87,18 +107,42 @@
         },
         {
             label: i18n("new-count"),
-            value:
-                time_machine_added -
-                time_machine_young -
-                time_machine_mature -
-                time_machine_intra_day -
-                time_machine_suspended,
+            value: time_machine_new,
             colour: NEW_COLOUR,
         },
     ]
 
-    let time_machine_bar: BarChart
+    let normalise = false
     $: time_machine_bar = {
+        row_labels: [
+            i18n("mature-count"),
+            i18n("young-count"),
+            i18n("learning-count"),
+            i18n("relearning-count"),
+            i18n("suspended"),
+            i18n("new-count"),
+        ],
+
+        row_colours: [
+            MATURE_COLOUR,
+            YOUNG_COLOUR,
+            LEARN_COLOUR,
+            RELEARN_COLOUR,
+            SUSPENDED_COLOUR,
+            NEW_COLOUR,
+        ],
+
+        data: time_machine_data.map((d, i) => d ?? { values: [], label: barLabel(i) }),
+        tick_spacing: 5,
+        columnLabeler: barDateLabeler,
+        hidden_rows: new Set<number>(),
+        normalise,
+    }
+
+    $: limit = -1 - $searchLimit
+
+    let time_machine_interval_bar: BarChart
+    $: time_machine_interval_bar = {
         row_colours: ["#70AFD6"],
         row_labels: [i18n("cards")],
         data: Array.from(time_machine_intervals).map((v, i) => ({
@@ -135,43 +179,69 @@
     <RevlogGraphContainer>
         <h1 slot="title">{i18n("card-count-time-machine")}</h1>
         <svelte:fragment slot="graph">
-            <Pie
-                data={time_machine_pie}
-                legend_left={i18n("card-type")}
-                legend_right={i18n("amount")}
-                percentage
-            ></Pie>
-            <TimeMachineScroll min={time_machine_min} />
-            <div>
-                {i18n("starts-at")}
-                <br />
+            <GraphTypeSelector>
                 <label>
-                    <input type="radio" bind:group={left_bound_at} value="Added" />
-                    {i18n("first-added")}
+                    <input type="radio" bind:group={$graph_mode} value="Pie" />
+                    {i18n("pie")}
                 </label>
                 <label>
-                    <input type="radio" bind:group={left_bound_at} value="Review" />
-                    {i18n("first-review")}
+                    <input type="radio" bind:group={$graph_mode} value="Bar" />
+                    {i18n("bar")}
                 </label>
+            </GraphTypeSelector>
+            {#if $graph_mode == "Bar"}
+                <BarScrollable
+                    data={time_machine_bar}
+                    bins={30}
+                    bind:binSize={$binSize}
+                    bind:offset={$scroll}
+                    {limit}
+                    average
+                />
                 <label>
-                    <input
-                        type="radio"
-                        bind:group={left_bound_at}
-                        value="Custom"
-                        on:click={() => {
-                            if (time_machine_min) {
-                                custom_leftmost = time_machine_min
-                            }
-                        }}
-                    />
-                    {i18n("custom")}
+                    <input type="checkbox" bind:checked={normalise} />
+                    {i18n("as-ratio")}
                 </label>
-                {#if left_bound_at == "Custom"}
-                    <input type="number" bind:value={custom_leftmost} />
-                {/if}
-            </div>
-            <span>{i18n("x-total-cards", { val: time_machine_added })}</span>
+            {:else}
+                <Pie
+                    data={time_machine_pie}
+                    legend_left={i18n("card-type")}
+                    legend_right={i18n("amount")}
+                    percentage
+                ></Pie>
+                <TimeMachineScroll min={time_machine_min} />
+                <div>
+                    {i18n("starts-at")}
+                    <br />
+                    <label>
+                        <input type="radio" bind:group={left_bound_at} value="Added" />
+                        {i18n("first-added")}
+                    </label>
+                    <label>
+                        <input type="radio" bind:group={left_bound_at} value="Review" />
+                        {i18n("first-review")}
+                    </label>
+                    <label>
+                        <input
+                            type="radio"
+                            bind:group={left_bound_at}
+                            value="Custom"
+                            on:click={() => {
+                                if (time_machine_min) {
+                                    custom_leftmost = time_machine_min
+                                }
+                            }}
+                        />
+                        {i18n("custom")}
+                    </label>
+                    {#if left_bound_at == "Custom"}
+                        <input type="number" bind:value={custom_leftmost} />
+                    {/if}
+                </div>
+                <span>{i18n("x-total-cards", { val: time_machine_added })}</span>
+            {/if}
         </svelte:fragment>
+        <p>{i18n("card-count-time-machine-bar-help")}</p>
         <p>{i18n("card-count-time-machine-help")}</p>
         {#if truncated}
             <Warning>{i18n("generic-truncated-warning")}</Warning>
@@ -180,7 +250,7 @@
     <RevlogGraphContainer>
         <h1 slot="title">{i18n("review-interval-time-machine")}</h1>
         <svelte:fragment slot="graph">
-            <BarScrollable data={time_machine_bar} left_aligned />
+            <BarScrollable data={time_machine_interval_bar} left_aligned />
             <TimeMachineScroll min={time_machine_min} />
             <span>{i18n("x-total-cards", { val: total_intervals })}</span>
             <span>

@@ -19,3 +19,10 @@ For each review card with FSRS stability in `card.data.s`, the graph resolves th
 `selectTsFsrsParams()` follows Anki's selected `fsrsVersion` first. When `fsrsVersion` selects FSRS7, the graph uses the 34-parameter FSRS7 model through `ts-fsrs`.
 
 If deck config data is unavailable, the graph keeps the older per-card `card.data.decay` path.
+
+## Bucket totals
+
+`target_R_day_totals` counts the same eligible review cards as `target_R_days`.
+Learning/relearning cards and cards without FSRS stability are excluded from
+both sides of the pass/fail split. Percentage mode uses these paired totals,
+rather than Anki's Future Due counts, which can also contain learning cards.
