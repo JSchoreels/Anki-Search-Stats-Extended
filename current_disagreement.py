@@ -2,7 +2,6 @@
 
 import logging
 import math
-import time
 from types import SimpleNamespace
 
 logger = logging.getLogger(__name__)
@@ -27,7 +26,7 @@ def current_predictions(mw, cids):
     )
     if not all(callable(getattr(scheduler, name, None)) for name in required):
         return {**empty, "status": "unavailable"}
-    if not callable(getattr(mw.col, "fsrs_current_retrievability", None)):
+    if not callable(getattr(mw.col, "card_memory_metrics", None)):
         return {**empty, "status": "unavailable"}
 
     reviewer = getattr(mw, "reviewer", None) or SimpleNamespace(mw=mw)
@@ -45,26 +44,24 @@ def current_predictions(mw, cids):
         if result is None:
             return {**empty, "status": "unavailable"}
 
-        now = time.time()
         selected = set(cids)
+        rwkv_scores = {
+            cid: rwkv
+            for cid, rwkv in result.scores
+            if cid in selected and valid_probability(rwkv)
+        }
         rows = []
-        for cid, rwkv in result.scores:
-            if cid not in selected or not valid_probability(rwkv):
+        # The backend uses the complete stored FSRS state and resolved preset,
+        # matching Anki's native chart (including both FSRS-7 stability traces).
+        for metrics in mw.col.card_memory_metrics(
+            list(rwkv_scores), include_retrievability=True
+        ):
+            if not metrics.HasField("fsrs_retrievability"):
                 continue
-            card = mw.col.get_card(cid)
-            state = card.memory_state
-            if state is None or card.last_review_time is None or card.type == 0:
-                continue
-            stability = (
-                state.stability_internal
-                if state.HasField("stability_internal")
-                else state.stability
-            )
-            fsrs = mw.col.fsrs_current_retrievability(
-                cid, stability, max(0, now - card.last_review_time) / 86400
-            )
+            cid = metrics.card_id
+            fsrs = metrics.fsrs_retrievability
             if valid_probability(fsrs):
-                rows.append({"cid": cid, "fsrs": fsrs, "rwkv": rwkv})
+                rows.append({"cid": cid, "fsrs": fsrs, "rwkv": rwkv_scores[cid]})
         if not scheduler._reviewer_backend_prediction_state_token_is_current(token):
             return {**empty, "status": "pending"}
         return {**empty, "rows": rows}
