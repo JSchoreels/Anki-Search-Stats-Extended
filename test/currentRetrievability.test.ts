@@ -8,9 +8,15 @@ import { hsl } from "d3"
 import { buildCurrentRetrievabilityBins } from "../src/ts/currentRetrievabilityData"
 import {
     currentRetrievabilityShiftColor,
+    currentRetrievabilityShiftLabel,
     renderCurrentRetrievabilityGraph,
 } from "../src/ts/CurrentRetrievabilityGraph"
 import { browseCurrentDisagreementCards } from "../src/ts/search"
+
+function segmentArguments(segment: Element) {
+    const line = segment.querySelector("title")!.textContent!.split("\n")[0]
+    return JSON.parse(line.slice(line.indexOf("{")))
+}
 
 test("same-bucket agreement counts once; disagreement retains each model's exact membership", () => {
     const bins = buildCurrentRetrievabilityBins([
@@ -61,45 +67,49 @@ test("invalid pairs and duplicate cards do not inflate agreement or disagreement
     expect(bins.flatMap((bin) => [...bin.rwkv, ...bin.fsrs])).toEqual([])
 })
 
-test("grey, green and blue segments stack with accurate heights and browse only their members", () => {
-    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg")
-    renderCurrentRetrievabilityGraph(
-        svg,
-        buildCurrentRetrievabilityBins([
-            { cid: 1, fsrs: 0.71, rwkv: 0.74 },
-            { cid: 2, fsrs: 0.72, rwkv: 0.91 },
-            { cid: 3, fsrs: 0.92, rwkv: 0.73 },
-            { cid: 4, fsrs: 0.71, rwkv: 0.72 },
-        ])
-    )
-    const bars = [...svg.querySelectorAll<SVGRectElement>(".current-retrievability-bar")]
-    expect(bars).toHaveLength(5)
-    expect(bars.slice(0, 3).map((bar) => bar.getAttribute("fill"))).toEqual([
-        "grey",
-        "seagreen",
-        "steelblue",
-    ])
-    const height = (bar: SVGRectElement) => Number(bar.getAttribute("height"))
-    const top = (bar: SVGRectElement) => Number(bar.getAttribute("y"))
-    expect(height(bars[0])).toBeCloseTo(2 * height(bars[1]))
-    expect(height(bars[1])).toBeCloseTo(height(bars[2]))
-    expect(top(bars[0])).toBeCloseTo(top(bars[1]) + height(bars[1]))
-    expect(top(bars[1])).toBeCloseTo(top(bars[2]) + height(bars[2]))
-    expect(new Set(bars.slice(0, 3).map((bar) => bar.getAttribute("x"))).size).toBe(1)
-    bars[0].dispatchEvent(new MouseEvent("click"))
-    expect(browseCurrentDisagreementCards).toHaveBeenLastCalledWith([1, 4])
-    bars[1].dispatchEvent(new KeyboardEvent("keydown", { key: "Enter" }))
-    expect(browseCurrentDisagreementCards).toHaveBeenLastCalledWith([3])
-    bars[2].dispatchEvent(new KeyboardEvent("keydown", { key: " " }))
-    expect(browseCurrentDisagreementCards).toHaveBeenLastCalledWith([2])
-    bars[3].dispatchEvent(new MouseEvent("click"))
-    expect(browseCurrentDisagreementCards).toHaveBeenLastCalledWith([2])
-    expect(bars[0].getAttribute("role")).toBe("button")
-    expect(bars[0].getAttribute("tabindex")).toBe("0")
-    expect(bars[0].getAttribute("aria-label")).toContain('"lower":"70%"')
-    expect(bars[0].querySelector("title")?.textContent).toContain('"count":2')
-    expect(svg.innerHTML).not.toMatch(/NaN|Infinity/)
-})
+test.each([
+    { model: "fsrs" as const, color: "steelblue", nearCard: 2, farCard: 3 },
+    { model: "rwkv" as const, color: "seagreen", nearCard: 3, farCard: 2 },
+])(
+    "$model grouping stacks only its own cards and browses exact members",
+    ({ model, color, nearCard, farCard }) => {
+        const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg")
+        renderCurrentRetrievabilityGraph(
+            svg,
+            buildCurrentRetrievabilityBins([
+                { cid: 1, fsrs: 0.71, rwkv: 0.74 },
+                { cid: 2, fsrs: 0.72, rwkv: 0.91 },
+                { cid: 3, fsrs: 0.92, rwkv: 0.73 },
+                { cid: 4, fsrs: 0.71, rwkv: 0.72 },
+            ]),
+            { model }
+        )
+        const bars = [...svg.querySelectorAll<SVGRectElement>(".current-retrievability-bar")]
+        expect(bars).toHaveLength(3)
+        expect(bars.map((bar) => bar.getAttribute("fill"))).toEqual(["grey", color, color])
+        const height = (bar: SVGRectElement) => Number(bar.getAttribute("height"))
+        const top = (bar: SVGRectElement) => Number(bar.getAttribute("y"))
+        expect(height(bars[0])).toBeCloseTo(2 * height(bars[1]))
+        expect(height(bars[1])).toBeCloseTo(height(bars[2]))
+        expect(top(bars[0])).toBeCloseTo(top(bars[1]) + height(bars[1]))
+        expect(new Set(bars.slice(0, 2).map((bar) => bar.getAttribute("x"))).size).toBe(1)
+        expect(Number(bars[2].getAttribute("x"))).toBeGreaterThan(Number(bars[1].getAttribute("x")))
+        bars[0].dispatchEvent(new MouseEvent("click"))
+        expect(browseCurrentDisagreementCards).toHaveBeenLastCalledWith([1, 4])
+        bars[1].dispatchEvent(new KeyboardEvent("keydown", { key: "Enter" }))
+        expect(browseCurrentDisagreementCards).toHaveBeenLastCalledWith([nearCard])
+        bars[2].dispatchEvent(new KeyboardEvent("keydown", { key: " " }))
+        expect(browseCurrentDisagreementCards).toHaveBeenLastCalledWith([farCard])
+        expect(svg.querySelector(".current-retrievability-x-axis")?.textContent).toContain(
+            model.toUpperCase()
+        )
+        expect(bars[0].getAttribute("role")).toBe("button")
+        expect(bars[0].getAttribute("tabindex")).toBe("0")
+        expect(bars[0].getAttribute("aria-label")).toContain('"lower":"70%"')
+        expect(bars[0].querySelector("title")?.textContent).toContain('"count":2')
+        expect(svg.innerHTML).not.toMatch(/NaN|Infinity/)
+    }
+)
 
 test("single cards and endpoint bars render; redraw clears old data and empty searches", () => {
     const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg")
@@ -108,8 +118,19 @@ test("single cards and endpoint bars render; redraw clears old data and empty se
         buildCurrentRetrievabilityBins([{ cid: 1, fsrs: 0, rwkv: 1 }])
     )
     const bars = [...svg.querySelectorAll(".current-retrievability-bar")]
-    expect(bars).toHaveLength(2)
-    expect(bars.map((bar) => bar.getAttribute("fill"))).toEqual(["steelblue", "seagreen"])
+    expect(bars).toHaveLength(1)
+    expect(bars[0].getAttribute("fill")).toBe("steelblue")
+    expect(bars[0].getAttribute("x")).toBe("1")
+    renderCurrentRetrievabilityGraph(
+        svg,
+        buildCurrentRetrievabilityBins([{ cid: 1, fsrs: 0, rwkv: 1 }]),
+        { model: "rwkv" }
+    )
+    expect(svg.querySelectorAll(".current-retrievability-bar")).toHaveLength(1)
+    expect(svg.querySelector(".current-retrievability-bar")?.getAttribute("fill")).toBe("seagreen")
+    expect(
+        Number(svg.querySelector(".current-retrievability-bar")?.getAttribute("x"))
+    ).toBeGreaterThan(500)
     expect(svg.innerHTML).not.toMatch(/NaN|Infinity/)
     renderCurrentRetrievabilityGraph(
         svg,
@@ -183,29 +204,28 @@ test("shift coloring preserves bar totals and browses exact shift and model grou
     renderCurrentRetrievabilityGraph(svg, bins)
     const originalHeights = columnHeights()
     renderCurrentRetrievabilityGraph(svg, bins, { colorByBucketShift: true })
-    expect(bars()).toHaveLength(15)
+    expect(bars()).toHaveLength(8)
     for (const [x, height] of Object.entries(columnHeights())) {
         expect(height).toBeCloseTo(originalHeights[x])
     }
     for (const shift of [-19, -5, -1, 1, 5, 9, 19]) {
         const endpoints = svg.querySelectorAll<SVGRectElement>(`[data-bucket-shift="${shift}"]`)
-        expect(endpoints).toHaveLength(2)
+        expect(endpoints).toHaveLength(1)
         expect(endpoints[0].getAttribute("fill")).toBe(currentRetrievabilityShiftColor(shift))
-        expect(endpoints[1].getAttribute("fill")).toBe(endpoints[0].getAttribute("fill"))
     }
     const higher = svg.querySelector<SVGRectElement>(
-        '.current-retrievability-rwkv[data-bucket-shift="5"]'
+        '.current-retrievability-fsrs[data-bucket-shift="5"]'
     )!
     higher.dispatchEvent(new MouseEvent("click"))
     expect(browseCurrentDisagreementCards).toHaveBeenLastCalledWith([2])
-    expect(higher.querySelector("title")?.textContent).toContain('"shift":"+5"')
-    expect(higher.getAttribute("aria-label")).toContain("current-retrievability-rwkv")
+    expect(segmentArguments(higher).shift).toBe('current-retrievability-shift-up {"count":5}')
+    expect(higher.getAttribute("aria-label")).toContain("current-retrievability-fsrs")
     const extreme = svg.querySelector<SVGRectElement>(
         '.current-retrievability-fsrs[data-bucket-shift="-19"]'
     )!
     extreme.dispatchEvent(new KeyboardEvent("keydown", { key: " " }))
     expect(browseCurrentDisagreementCards).toHaveBeenLastCalledWith([8])
-    expect(extreme.querySelector("title")?.textContent).toContain('"shift":"-19"')
+    expect(segmentArguments(extreme).shift).toBe('current-retrievability-shift-down {"count":19}')
     expect(svg.querySelector('[data-bucket-shift="0"]')?.getAttribute("fill")).toBe("grey")
     expect(svg.innerHTML).not.toMatch(/NaN|Infinity/)
 
@@ -213,7 +233,7 @@ test("shift coloring preserves bar totals and browses exact shift and model grou
     expect(columnHeights()).toEqual(originalHeights)
     expect(svg.querySelectorAll("[data-bucket-shift]")).toHaveLength(0)
     expect(new Set(bars().map((bar) => bar.getAttribute("fill")))).toEqual(
-        new Set(["grey", "seagreen", "steelblue"])
+        new Set(["grey", "steelblue"])
     )
     renderCurrentRetrievabilityGraph(svg, buildCurrentRetrievabilityBins([]), {
         colorByBucketShift: true,
@@ -255,7 +275,7 @@ test("every column stacks negative shifts, agreement, and positive shifts in one
         bars.some((bar) => bar.classList.contains("current-retrievability-both"))
     )!
     expect(centralColumn.map((bar) => Number(bar.getAttribute("data-bucket-shift")))).toEqual([
-        -5, -2, -1, 0, 1, 1, 5, 9,
+        -2, 0, 1, 9,
     ])
     const fsrsPlusOne = centralColumn.find(
         (bar) =>
@@ -292,27 +312,91 @@ test("multiline hover summaries show bucket and deduplicated whole-search counts
     const label = segment.querySelector("title")!.textContent!
     const lines = label.split("\n")
     expect(lines).toHaveLength(15)
-    expect(lines[0]).toContain('"shift":"+9"')
+    expect(segmentArguments(segment).shift).toBe('current-retrievability-shift-up {"count":9}')
     expect(lines[0]).toContain('"count":1')
     expect(lines[1]).toBe("current-retrievability-shift-counts {}")
     expect(
         lines.slice(2, 13).map((line) => JSON.parse(line.slice(line.indexOf("{"))).count)
-    ).toEqual([1, 0, 0, 1, 1, 2, 2, 1, 0, 0, 3])
+    ).toEqual([0, 0, 0, 1, 0, 2, 1, 0, 0, 0, 1])
     expect(
         lines.slice(2, 13).map((line) => JSON.parse(line.slice(line.indexOf("{"))).searchCount)
     ).toEqual([1, 0, 0, 1, 1, 2, 2, 1, 0, 0, 4])
-    expect(lines[13]).toBe('current-retrievability-bucket-total {"count":11,"searchCount":12}')
-    expect(lines[14]).toBe('current-retrievability-above-total {"count":6,"searchCount":7}')
+    expect(lines[13]).toBe('current-retrievability-bucket-total {"count":5,"searchCount":12}')
+    expect(lines[14]).toBe('current-retrievability-above-total {"count":2,"searchCount":7}')
     expect(segment.getAttribute("aria-label")).toBe(label)
 
     segment.dispatchEvent(new MouseEvent("click"))
     expect(browseCurrentDisagreementCards).toHaveBeenLastCalledWith([6])
-    const rwkvPlusOne = svg.querySelector<SVGRectElement>(
-        '.current-retrievability-rwkv[data-bucket-shift="1"]'
-    )!
-    expect(rwkvPlusOne.querySelector("title")!.textContent!.split("\n").slice(1)).toEqual(
+    const fsrsPlusOne = [
+        ...svg.querySelectorAll<SVGRectElement>(
+            '.current-retrievability-fsrs[data-bucket-shift="1"]'
+        ),
+    ].find((bar) => bar.getAttribute("x") === segment.getAttribute("x"))!
+    expect(fsrsPlusOne.querySelector("title")!.textContent!.split("\n").slice(1)).toEqual(
         lines.slice(1)
     )
-    rwkvPlusOne.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter" }))
-    expect(browseCurrentDisagreementCards).toHaveBeenLastCalledWith([3])
+    fsrsPlusOne.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter" }))
+    expect(browseCurrentDisagreementCards).toHaveBeenLastCalledWith([11])
+})
+
+test("switching grouping models places each card once and keeps whole-search shift totals unchanged", () => {
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg")
+    const rows = [
+        { cid: 1, fsrs: 0.51, rwkv: 0.53 },
+        { cid: 2, fsrs: 0.26, rwkv: 0.51 },
+        { cid: 3, fsrs: 0.46, rwkv: 0.51 },
+        { cid: 4, fsrs: 0.76, rwkv: 0.51 },
+        { cid: 5, fsrs: 0.56, rwkv: 0.51 },
+        { cid: 6, fsrs: 0.51, rwkv: 0.99 },
+        { cid: 7, fsrs: 0, rwkv: 1 },
+        { cid: 8, fsrs: 1, rwkv: 0 },
+    ]
+    const bins = buildCurrentRetrievabilityBins(rows)
+    for (const model of ["fsrs", "rwkv"] as const) {
+        const expectedCounts = new Map<string, number>()
+        for (const row of rows) {
+            const lower = `${Math.min(19, Math.floor(row[model] * 20)) * 5}%`
+            expectedCounts.set(lower, (expectedCounts.get(lower) ?? 0) + 1)
+        }
+        for (const colorByBucketShift of [false, true]) {
+            renderCurrentRetrievabilityGraph(svg, bins, { model, colorByBucketShift })
+            const counts = new Map<string, number>()
+            const browsed: number[] = []
+            for (const bar of svg.querySelectorAll(".current-retrievability-bar")) {
+                const { lower, count } = segmentArguments(bar)
+                counts.set(lower, (counts.get(lower) ?? 0) + count)
+                bar.dispatchEvent(new MouseEvent("click"))
+                const calls = jest.mocked(browseCurrentDisagreementCards).mock.calls
+                browsed.push(...calls[calls.length - 1][0])
+            }
+            expect(counts).toEqual(expectedCounts)
+            expect(browsed.sort((a, b) => a - b)).toEqual(rows.map(({ cid }) => cid))
+            if (colorByBucketShift) {
+                const central = svg.querySelector(".current-retrievability-both")!
+                const lines = central.querySelector("title")!.textContent!.split("\n")
+                expect(lines[13]).toBe(
+                    `current-retrievability-bucket-total {"count":${model === "fsrs" ? 2 : 5},"searchCount":8}`
+                )
+                expect(lines[14]).toBe(
+                    `current-retrievability-above-total {"count":${model === "fsrs" ? 1 : 2},"searchCount":4}`
+                )
+            }
+        }
+    }
+})
+
+test("word labels distinguish the same range, direction, capped colors and exact moves", () => {
+    expect(currentRetrievabilityShiftLabel(0)).toBe("current-retrievability-shift-same {}")
+    expect(currentRetrievabilityShiftLabel(-1)).toBe(
+        'current-retrievability-shift-down {"count":1}'
+    )
+    expect(currentRetrievabilityShiftLabel(2)).toBe('current-retrievability-shift-up {"count":2}')
+    expect(currentRetrievabilityShiftLabel(-5)).toBe("current-retrievability-shift-lower {}")
+    expect(currentRetrievabilityShiftLabel(19)).toBe("current-retrievability-shift-higher {}")
+    expect(currentRetrievabilityShiftLabel(5, false)).toBe(
+        'current-retrievability-shift-up {"count":5}'
+    )
+    expect(currentRetrievabilityShiftLabel(-19, false)).toBe(
+        'current-retrievability-shift-down {"count":19}'
+    )
 })

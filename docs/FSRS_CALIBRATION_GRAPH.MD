@@ -218,46 +218,52 @@ Disagreement and shares its transient prediction snapshot, loading state, retry,
 search scope, and paired-card eligibility. It makes no additional prediction
 requests and introduces no persisted data or database operations.
 
-Like Anki's Card Retrievability chart, it uses 20 fixed 5-percentage-point
-intervals from 0% to 100%. Lower bounds are inclusive and upper bounds exclusive,
-except the final interval includes 100%. Within each interval, the stacked bar
-shows:
+**Group cards by: FSRS / RWKV** chooses which model determines each card's bar.
+FSRS is selected initially. Each eligible paired card appears exactly once,
+so the bar counts add up to the compared-card total. Switching models moves cards
+between bars without changing that total. Like Anki's Card Retrievability chart,
+it uses 20 fixed 5-percentage-point intervals from 0% to 100%. Lower bounds are
+inclusive and upper bounds exclusive, except the final interval includes 100%.
+The horizontal axis names the selected model and its **chance of remembering
+today**.
 
-- Grey: cards both models assign to this interval, counted once even if their
-  exact predictions differ.
-- Green: cards RWKV assigns here while FSRS assigns them to another interval.
-- Blue: cards FSRS assigns here while RWKV assigns them to another interval.
+With shift coloring off, each bar has at most two sections:
 
-Grey plus green recovers the RWKV count in the interval; grey plus blue recovers
-the FSRS count. The complete bar counts the union of cards assigned to that
-interval. A disagreeing card contributes once in green in its RWKV interval and
-once in blue in its FSRS interval; the paired-card summary counts it only once.
-Clicking a colored segment, or activating it with Enter or Space, browses and
-selects only the exact cards represented by that segment.
+- Grey: both models assign the card to this interval, even if their exact
+  predictions differ.
+- Blue when grouping by FSRS: FSRS assigns the card here, while RWKV assigns it
+  to another interval.
+- Green when grouping by RWKV: RWKV assigns the card here, while FSRS assigns it
+  to another interval.
 
-The **Color by RWKV bucket shift from FSRS** toggle replaces the membership
-colors with the signed difference `RWKV bucket index - FSRS bucket index`.
-Green means RWKV assigns a higher bucket, red a lower bucket, and grey the same
-bucket. Both model segments of a disagreeing card use the same shift color.
-Saturation increases through five shades for shifts of 1 to 5 buckets; larger
-shifts keep the strongest shade. Each bar sorts all segments by signed shift
-from bottom to top, regardless of model membership, placing grey between the
-red and green sections. The legend has a separate heading followed by explicit
-rows for −5 through 0 and +1 through +5. It labels the endpoints as −5 or lower
-and +5 or higher.
+Only the selected model's disagreement color appears in the legend. Clicking a
+colored segment, or activating it with Enter or Space, browses and selects only
+the exact cards represented by that segment.
 
-Segments remain grouped by exact shift and model membership, so tooltips report
-the actual shift (up to ±19) and clicking selects only that group's cards.
+The **Color by how far RWKV moves each card** toggle colors cards by the signed
+difference `RWKV bucket index - FSRS bucket index`, independently of the grouping
+model. Green means RWKV assigns a higher bucket, red a lower bucket, and grey
+the same bucket. Saturation increases through five shades for shifts of 1 to 5
+buckets; larger shifts keep the strongest shade. Each bar sorts its segments by
+signed shift from bottom to top, placing grey between the red and green sections.
+The legend uses separate rows for lower predictions, the same range, and higher
+predictions. Labels describe direction in words, such as **2 steps lower** or
+**Same range**, instead of signed differences. The endpoints read **5+ steps
+lower** and **5+ steps higher**. A bulleted guide explains the selected grouping
+model, colors, stronger shades, a one-step example (70–75% to 75–80%), and card
+counting.
+
+Segments remain grouped by exact shift, so tooltips report the actual move (up
+to 19 steps higher or lower) and clicking selects only that group's cards.
 Multiline tooltips also list counts for all eleven color levels (including
 zeros), total cards, and the total where RWKV assigns a higher bucket than FSRS.
-Each summary row shows `this R bucket / whole search`. The bucket counts use the
-union of cards in the hovered bucket, matching the stacked bar: a card is counted
-once within that bucket, but a disagreeing card contributes to both of its model
-buckets across the chart. Whole-search counts include each eligible paired card
-exactly once, using same-bucket agreement plus RWKV membership and excluding the
-duplicate FSRS membership. Bucket boundaries, bar totals, and paired-card counts
-are unchanged.
-The toggle starts off and does not persist a setting or request new predictions.
+Each summary row explicitly labels counts **in this bar** and **overall**.
+Local counts use the selected model's assignments and match the stacked bar;
+overall means all eligible paired cards in the search, counting each card once.
+Switching the grouping model updates local counts but leaves overall shift
+counts unchanged. Toggling shift coloring changes neither bar totals nor card
+positions. Both controls are local to this chart; they do not persist settings
+or request new predictions.
 
 The Card Retrievability comparison is followed by **RWKV Daily Recall Gap** and
 **RWKV Daily Surprise**. These reuse eligible RWKV review predictions without
