@@ -7,7 +7,7 @@ import {
     intervalAtRetrievability,
     type S90BatchResolver,
 } from "../src/ts/MemorisedBar"
-import { dayFromMs } from "../src/ts/revlogGraphs"
+import { day_ms, dayFromMs, today } from "../src/ts/revlogGraphs"
 import { Revlog } from "../src/ts/search"
 import { RevlogBuilder } from "./revlogBuilder"
 
@@ -728,4 +728,26 @@ test("Time distribution by retrievability supports same-day and success filters"
     expect(stats.time_by_retrievability_mean_success_only[99]).toBeCloseTo(2, 5)
     expect(stats.time_by_retrievability_mean_exclude_same_day[99]).toBeUndefined()
     expect(stats.time_by_retrievability_mean_success_only_exclude_same_day[99]).toBeUndefined()
+})
+
+test("historical stability includes the latest review day and days through today", async () => {
+    const builder = new RevlogBuilder()
+    builder.state.id = Date.now() - 2 * day_ms
+    const review = builder.review(1, 3) as Revlog
+    const stats = await getMemorisedDays(
+        [review],
+        [builder.card()] as any,
+        configs as typeof SSEother.deck_configs,
+        mappings,
+        [],
+        2,
+        2,
+        {},
+        async (items) => items.map(() => 12)
+    )
+    for (let day = dayFromMs(review.id); day <= today; day++) {
+        expect(stats.day_means[day]).toBe(12)
+        expect(stats.day_medians[day]).toBe(12)
+        expect(stats.day_young_ratio_s90[day]).toBe(1)
+    }
 })

@@ -38,7 +38,7 @@
         _.min(
             Object.keys(intervals)
                 .filter((k) => k !== undefined)
-                .map(parseInt)
+                .map((key) => Number(key))
         ) ?? 1
 
     $: step = Math.floor((last - min + 1) / steps)

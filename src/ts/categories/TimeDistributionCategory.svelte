@@ -1,4 +1,6 @@
 <script lang="ts">
+    import { aggregateTimeBuckets } from "../timeBucketStats"
+    import { formatRetrievabilityAxis } from "../retrievabilityAxis"
     import type { BarChart } from "../bar"
     import BarScrollable from "../BarScrollable.svelte"
     import GraphCategory from "../GraphCategory.svelte"
@@ -46,6 +48,15 @@
         return width > 1 ? `${start}-${start + width - 1}` : label
     }
 
+    $: statistic = averageType === AverageType.MEAN ? "mean" : "median"
+    $: retrievabilitySamples = retrievabilityExcludeSameDay
+        ? retrievabilitySuccessOnly
+            ? ($memorised_stats?.time_by_retrievability_samples_success_only_exclude_same_day ?? [])
+            : ($memorised_stats?.time_by_retrievability_samples_exclude_same_day ?? [])
+        : retrievabilitySuccessOnly
+          ? ($memorised_stats?.time_by_retrievability_samples_success_only ?? [])
+          : ($memorised_stats?.time_by_retrievability_samples ?? [])
+
     $: retrievabilitySeries = (() => {
         if (averageType === AverageType.MEAN) {
             if (retrievabilityExcludeSameDay && retrievabilitySuccessOnly) {
@@ -80,8 +91,8 @@
     $: retrievabilityTimeBar = {
         row_colours: ["#fcba03"],
         row_labels: [i18n("seconds")],
-        data: Array.from(retrievabilitySeries).map((value, bucket) => ({
-            values: [value ?? 0],
+        data: Array.from({ length: 100 }, (_, bucket) => ({
+            values: [retrievabilitySeries[bucket] ?? 0],
             label: bucket.toString(),
         })),
         tick_spacing: 10,
@@ -189,7 +200,9 @@
         <BarScrollable
             slot="graph"
             data={retrievabilityTimeBar}
-            average
+            extraRender={formatRetrievabilityAxis}
+            aggregateValues={(start, width) =>
+                aggregateTimeBuckets(retrievabilitySamples, start, width, statistic)}
             bind:binSize={retrievabilityBinSize}
             trend
             trend_info={{ pattern: i18n_pattern("average-second-per-retrievability-percent") }}
@@ -219,7 +232,13 @@
         <BarScrollable
             slot="graph"
             data={stabilityTimeBar}
-            average
+            aggregateValues={(start, width) =>
+                aggregateTimeBuckets(
+                    $memorised_stats?.time_by_stability_samples ?? [],
+                    start,
+                    width,
+                    statistic
+                )}
             left_aligned
             bind:binSize={stabilityBinSize}
             trend
@@ -242,7 +261,13 @@
         <BarScrollable
             slot="graph"
             data={repetitionTimeBar}
-            average
+            aggregateValues={(start, width) =>
+                aggregateTimeBuckets(
+                    $revlogStats?.time_by_repetition_samples ?? [],
+                    start,
+                    width,
+                    statistic
+                )}
             left_aligned
             bind:binSize={repetitionBinSize}
             trend
@@ -265,7 +290,13 @@
         <BarScrollable
             slot="graph"
             data={difficultyTimeBar}
-            average
+            aggregateValues={(start, width) =>
+                aggregateTimeBuckets(
+                    $memorised_stats?.time_by_difficulty_samples ?? [],
+                    start,
+                    width,
+                    statistic
+                )}
             left_aligned
             bins={100}
             bind:binSize={difficultyBinSize}

@@ -49,13 +49,14 @@
     export let search: undefined | ((i: number, width: number) => void) = undefined
     export let cumulative = false
     export let asRatio = false
+    export let aggregateValues: undefined | ((start: number, width: number) => number[]) = undefined
 
     $: min = left_aligned ? 0 : 1
     $: absOffset = Math.abs(offset)
     $: requestedOffset = left_aligned ? absOffset + bins * binSize + min : -absOffset
     $: leftmost = requestedOffset - bins * binSize
 
-    $: binSize = binSize > 0 ? binSize : 1
+    $: binSize = Number.isFinite(binSize) && binSize >= 1 ? Math.floor(binSize) : 1
     $: realOffset = left_aligned
         ? leftAlignedBarWindowEnd(leftmost, requestedOffset, binSize, data.data)
         : requestedOffset
@@ -207,7 +208,14 @@
             )
         }
 
-        if (average) {
+        if (aggregateValues) {
+            bars.forEach((bar, index) => {
+                bar.values = aggregateValues!(
+                    absoluteDataIndex(leftmost) + index * binSize,
+                    binSize
+                )
+            })
+        } else if (average) {
             bars.map((bar, i) => {
                 const count = separate_bars
                     .slice(i * binSize, (i + 1) * binSize)

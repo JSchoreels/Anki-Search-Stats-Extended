@@ -6,6 +6,7 @@
     import { i18n } from "./i18n"
     import { card_data } from "./stores"
     import { browserSearchCurrent, type CardData } from "./search"
+    import { dueDayOffset } from "./cardDue"
 
     const maxBar = 30
     let bars: BarDatum[] = []
@@ -18,14 +19,10 @@
             values: [0, 0, 0, 0],
         }))
         for (const card of card_data ?? []) {
-            if (card.queue == -1) {
+            if (card.queue <= 0 || card.type === 0) {
                 continue
             }
-            let due = card.due < 365_000 ? card.due - days_elapsed : 0
-            if (card.queue < -1) {
-                due = 1
-                continue
-            }
+            const due = dueDayOffset(card, days_elapsed)
 
             let type = (
                 {

@@ -9,6 +9,7 @@
     import { binSize, scroll, searchLimit, revlogStats } from "../stores"
     import { today, easeBarChart, type RevlogBuckets } from "../revlogGraphs"
     import _ from "lodash"
+    import { formatRetrievabilityAxis } from "../retrievabilityAxis"
 
     $: limit = -1 - $searchLimit
     let normalize_ease = false
@@ -49,7 +50,7 @@
         return i18n("difficulty-of", { value })
     }
 
-    $: gradeByRetrievabilitySeries = (() => {
+    $: gradeByRetrievabilityBuckets = (() => {
         if (retrievabilityExcludeSameDay && gradeSuccessOnly) {
             return $revlogStats?.grade_by_retrievability_success_only_exclude_same_day ?? []
         }
@@ -61,6 +62,11 @@
         }
         return $revlogStats?.grade_by_retrievability ?? []
     })()
+
+    $: gradeByRetrievabilitySeries = Array.from(
+        { length: 100 },
+        (_, bucket) => gradeByRetrievabilityBuckets[bucket] ?? [0, 0, 0, 0]
+    )
 
     $: gradeByStabilitySeries = gradeSuccessOnly
         ? ($revlogStats?.grade_by_stability_success_only ?? [])
@@ -199,6 +205,7 @@
                 normalize_ease,
                 retrievabilityBucketLabeler
             )}
+            extraRender={formatRetrievabilityAxis}
             average={normalize_ease}
             bind:binSize={retrievabilityBinSize}
         />

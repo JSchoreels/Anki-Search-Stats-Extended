@@ -113,7 +113,7 @@
     let filtered = false
 
     $: hours_begin = no_rollover_today + realScroll - range + 1
-    $: hours_end = no_rollover_today + realScroll + 2
+    $: hours_end = no_rollover_today + realScroll + 1
     $: day_range = filtered
         ? ($revlogStats?.day_filtered_review_hours ?? []).slice(hours_begin, hours_end)
         : ($revlogStats?.day_review_hours ?? []).slice(hours_begin, hours_end)

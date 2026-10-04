@@ -1,9 +1,9 @@
 <script lang="ts">
     import * as _ from "lodash"
-    import { barStringLabeler, type BarChart } from "./bar"
+    import { type BarChart, type ExtraRenderInput } from "./bar"
     import BarScrollable from "./BarScrollable.svelte"
     import { calculateEaseFactors } from "./easeFactor"
-    import { i18n, i18n_pattern } from "./i18n"
+    import { i18n } from "./i18n"
     import { catchErrors } from "./search"
     import { card_data } from "./stores"
     import * as d3 from "d3"
@@ -27,16 +27,26 @@
         row_colours: ["steelblue"],
         data: Array.from(data).map((a, i) => ({
             values: [a ?? 0],
-            label: (i / 100).toFixed(0),
+            label: (i / 100).toFixed(2),
         })),
         tick_spacing: 5,
-        columnLabeler: barStringLabeler(i18n_pattern("factor-of")),
+        columnLabeler: (label, width = 1) =>
+            i18n("stability-multiplied-by", {
+                value: `${(Number(label) / 100).toFixed(2)}–${((Number(label) + width) / 100).toFixed(2)}`,
+            }),
     }
 
     $: max = (d3.quantile(easeFactors, 0.99) ?? 1) * 100
     const bins = 30
-    const offset = 100
-    $: binSize = Math.ceil((max - 100) / bins)
+    $: offset = Math.min(100, Math.floor((d3.min(easeFactors) ?? 1) * 100))
+    $: binSize = Math.max(1, Math.ceil((max - offset) / bins))
+
+    function formatAxis({ svg }: ExtraRenderInput<BarChart>) {
+        svg.select(":scope > g[transform]")
+            .selectAll(".tick text")
+            .text((label) => (Number(label) / 100).toFixed(2))
+    }
 </script>
 
-<BarScrollable data={graph} left_aligned {offset} {bins} {binSize}></BarScrollable>
+<BarScrollable data={graph} left_aligned {offset} {bins} {binSize} extraRender={formatAxis}
+></BarScrollable>

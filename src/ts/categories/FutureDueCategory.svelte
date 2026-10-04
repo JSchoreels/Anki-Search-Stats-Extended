@@ -16,7 +16,7 @@
     $: target_R_days = $cardDataStats.target_R_days
     $: target_R_day_values = target_R_days.map((v, i) => [
         v,
-        ($data?.futureDue?.futureDue[i] || 0) - v,
+        ($cardDataStats.target_R_day_totals[i] ?? 0) - v,
     ])
     $: target_R_days_bar = {
         row_colours: [EASE_COLOURS[1], EASE_COLOURS[3]], // The EASE_COLOURS are in reverse order
@@ -54,7 +54,20 @@
     <GraphContainer>
         <h1>{i18n("future-due-retention")}</h1>
         {#if _.sum(target_R_days) > 0}
-            <BarScrollable data={target_R_days_bar} left_aligned average={normalize}
+            <BarScrollable
+                data={target_R_days_bar}
+                left_aligned
+                aggregateValues={(start, width) => {
+                    const pass = target_R_days
+                        .slice(start, start + width)
+                        .reduce((sum, value) => sum + (value ?? 0), 0)
+                    const count = $cardDataStats.target_R_day_totals
+                        .slice(start, start + width)
+                        .reduce((sum, value) => sum + (value ?? 0), 0)
+                    return normalize && count > 0
+                        ? [pass / count, 1 - pass / count]
+                        : [pass, count - pass]
+                }}
             ></BarScrollable>
         {:else}
             <NoGraph>

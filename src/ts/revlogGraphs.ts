@@ -2,17 +2,16 @@ import _ from "lodash"
 import { FSRS5_DEFAULT_DECAY } from "ts-fsrs"
 import type { BarChart, BarDatum } from "./bar"
 import { totalCalc } from "./barHelpers"
-import { type CardData, getCardDecay, type Revlog } from "./cardData"
-import type { DeckConfig } from "./config"
+import { getCardDecay, type CardData, type Revlog } from "./cardData"
 import {
     averageDecay,
     type ForgettingCurveDecayModel,
     type ForgettingSample,
 } from "./forgettingCurveData"
-import { selectTsFsrsParams } from "./fsrsParams"
 import { elapsedFsrsDays, getFsrs, type FsrsMemoryState } from "./fsrsModel"
-type ReplayCard = FsrsMemoryState & { last_review?: Date }
+import { selectTsFsrsParams } from "./fsrsParams"
 import { i18n } from "./i18n"
+type ReplayCard = FsrsMemoryState & { last_review?: Date }
 
 const rollover = SSEother.rollover ?? 0
 export const rollover_ms = rollover * 60 * 60 * 1000
@@ -46,7 +45,12 @@ export function dayFromDateString(date: string) {
 }
 
 export const today = dayFromMs(Date.now())
-export const no_rollover_today = Math.floor(Date.now() / day_ms)
+export function calendarDayFromMs(ms: number) {
+    const date = new Date(ms)
+    return Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()) / day_ms
+}
+
+export const no_rollover_today = calendarDayFromMs(Date.now())
 const stability_maturity_threshold = 21
 
 function median(values: number[]) {
@@ -444,7 +448,9 @@ export function calculateRevlogStats(
     let repetitionsByCard: Record<number, number> = {}
 
     function incrementEase(ease_array: number[][], day: number, ease: number, amount = 1) {
-        // Doesn't check for negative ease (manual reschedule)
+        if (ease < 0 || ease > 3) {
+            return
+        }
         ease_array[day] = ease_array[day] ? ease_array[day] : initialEase()
         ease_array[day][ease] += amount
     }
@@ -476,8 +482,8 @@ export function calculateRevlogStats(
 
     for (const revlog of revlogData) {
         const day = dayFromMs(revlog.id)
-        const no_rollover_day = Math.floor(revlog.id / day_ms)
-        const hour = Math.floor(((revlog.id - timezone_offset_ms) % day_ms) / (60 * 60 * 1000))
+        const no_rollover_day = calendarDayFromMs(revlog.id)
+        const hour = new Date(revlog.id).getHours()
         const ease = revlog.ease - 1
         const second = Math.round(revlog.time / 1000)
         const card = id_card_data[revlog.cid]
@@ -489,10 +495,9 @@ export function calculateRevlogStats(
             incrementEase(time_ease_seconds[bin], second, ease)
         }
 
-        card_times[revlog.cid] = (card_times[revlog.cid] ?? 0) + revlog.time
-
-        // Check for reschedules
-        if (revlog.time != 0) {
+        // A recorded rating counts as a review even when its answer time is zero.
+        if (revlog.ease > 0) {
+            card_times[revlog.cid] = (card_times[revlog.cid] ?? 0) + revlog.time
             if (revlog.type < 3) {
                 day_review_hours[no_rollover_day] ??= Array(24).fill(0)
                 day_review_hours[no_rollover_day][hour] =
@@ -510,29 +515,31 @@ export function calculateRevlogStats(
             incrementAllEase("all")
         }
 
-        incrementEase(interval_ease, revlog.lastIvl < 0 ? 0 : revlog.lastIvl, ease)
-        if (revlog.lastIvl > 0) {
-            incrementAllEase("not_learn")
-            if (revlog.lastIvl >= 21) {
-                incrementAllEase("mature")
-                if (card) {
-                    const last_sibling = last_siblings[card.nid]
-                    if (last_sibling !== undefined && last_sibling.cid != revlog.cid) {
-                        incrementEase(sibling_time_ease, day - last_sibling.day, ease)
+        if (revlog.ease > 0) {
+            incrementEase(interval_ease, revlog.lastIvl < 0 ? 0 : revlog.lastIvl, ease)
+            if (revlog.lastIvl > 0) {
+                incrementAllEase("not_learn")
+                if (revlog.lastIvl >= 21) {
+                    incrementAllEase("mature")
+                    if (card) {
+                        const last_sibling = last_siblings[card.nid]
+                        if (last_sibling !== undefined && last_sibling.cid != revlog.cid) {
+                            incrementEase(sibling_time_ease, day - last_sibling.day, ease)
+                        }
+                        last_siblings[card.nid] = {
+                            cid: revlog.cid,
+                            day,
+                        }
                     }
-                    last_siblings[card.nid] = {
-                        cid: revlog.cid,
-                        day,
+                } else {
+                    incrementAllEase("young")
+                    if (card) {
+                        last_siblings[card.nid] = undefined
                     }
                 }
             } else {
-                incrementAllEase("young")
-                if (card) {
-                    last_siblings[card.nid] = undefined
-                }
+                incrementAllEase("learn")
             }
-        } else {
-            incrementAllEase("learn")
         }
         if (revlog.factor == 0 && revlog.type == 4) {
             introduced.delete(revlog.cid)
@@ -765,6 +772,7 @@ export function calculateRevlogStats(
         time_by_retrievability_median: retrievabilityTimeStats.medianByBucket,
         time_by_stability_mean: stabilityTimeStats.meanByBucket,
         time_by_stability_median: stabilityTimeStats.medianByBucket,
+        time_by_repetition_samples: timeByRepetitionSamples,
         time_by_repetition_mean: repetitionTimeStats.meanByBucket,
         time_by_repetition_median: repetitionTimeStats.medianByBucket,
         grade_by_retrievability: fsrsReplayStats.gradeByRetrievability,
@@ -805,7 +813,7 @@ export function easeBarChart(
         data: Array.from(eases).map((data, label) => {
             const sum = _.sum(data)
             let values = [...(data ?? [0, 0, 0, 0])].reverse()
-            values = normalize ? values.map((a) => a / sum) : values
+            values = normalize && sum > 0 ? values.map((a) => a / sum) : values
             return {
                 values,
                 label: (label - offset).toString(),

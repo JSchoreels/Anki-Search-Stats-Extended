@@ -736,7 +736,7 @@ export async function getMemorisedDays(
 
     const s90_key_by_card = new Map<number, string>()
     const s90_count_by_key = new Map<string, number>()
-    for (let i = 0; i + 1 < review_days.length; i++) {
+    for (let i = 0; i < review_days.length; i++) {
         const day = review_days[i]
         const events = s90_events_by_day.get(day) ?? []
         for (const event of events) {
@@ -748,7 +748,7 @@ export async function getMemorisedDays(
             incrementCount(s90_count_by_key, event.key, 1)
         }
         const stats = dayStatsFromS90Counts(s90_count_by_key, s90_key_by_card.size)
-        const nextDay = review_days[i + 1]
+        const nextDay = review_days[i + 1] ?? today + 1
         for (let fillDay = day; fillDay < nextDay; fillDay++) {
             day_medians[fillDay] = stats.median
             day_means[fillDay] = stats.mean
@@ -859,6 +859,12 @@ export async function getMemorisedDays(
         calibration,
         calibration_samples,
         fsrs_calibration_predictions_by_revlog_id,
+        time_by_retrievability_samples,
+        time_by_retrievability_samples_exclude_same_day,
+        time_by_retrievability_samples_success_only,
+        time_by_retrievability_samples_success_only_exclude_same_day,
+        time_by_stability_samples,
+        time_by_difficulty_samples,
         time_by_retrievability_mean: retrievabilityTimeStats.meanByBucket,
         time_by_retrievability_median: retrievabilityTimeStats.medianByBucket,
         time_by_retrievability_mean_exclude_same_day:

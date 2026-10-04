@@ -61,11 +61,25 @@ The following arrays are returned by `getMemorisedDays()`:
 ## Time-by-Repetition Semantics
 
 - Repetition buckets are computed per card while iterating revlogs.
-- Each rated review with time (`time > 0 && ease > 0`) increments that card's repetition counter.
-- Bucket key is the repetition number (1 for first rated timed review, 2 for second, etc.).
+- Each rated non-cramming review (`ease > 0`) increments that card's repetition counter, including reviews with zero answer time.
+- Bucket key is the repetition number (1 for the first rated review, 2 for the second, etc.). Only positive answer times contribute time samples.
 - Values stored in buckets are review times in seconds.
 - Mean/median arrays represent answer-time statistics per repetition bucket.
 
 ### Repetition Data Path
 
 - Repetition arrays (`time_by_repetition_mean`, `time_by_repetition_median`) are returned by `calculateRevlogStats()` in `revlogGraphs.ts`.
+
+## Displayed Ranges
+
+Time graphs retain the individual review samples alongside the per-bucket
+mean/median arrays. `BarScrollable.aggregateValues` combines those samples for
+all buckets in each displayed bar before calculating its statistic. It never
+averages bucket means or bucket medians. For example, 100 ten-second reviews
+and one hundred-second review have a combined mean of 1100/101 seconds and a
+median of ten seconds.
+
+Changing the bar width, scroll, success filter, same-day filter, or mean/median
+option recalculates those displayed statistics from the same selected samples.
+Widths use whole source buckets. Retrievability series retain all 100 one-percent
+buckets so sparse/highest-value data cannot shift the axis labels.

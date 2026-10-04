@@ -135,6 +135,7 @@ difficulty-of = Difficulty of {$value}
 stability-of = Stability of {$value}
 retrievability-of = Retrievability of {$value}
 factor-of = Increase of {$value}%
+stability-multiplied-by = Stability multiplied by {$value}
 x-seconds = {$value} Seconds
 # e.g
 # x = Interval
@@ -191,8 +192,8 @@ sxr-heatmap-help =
 
 ease-factors = Stability Increase Factor
 ease-factors-help =
-    For each card, the percentage increase in stability that will occur on a good review.
-    An alternate measure of difficulty.
+    How much a Good review is expected to multiply each card's stability.
+    A factor of 2 means twice the stability.
 
 enlarged = Enlarged
 logarithmic-s = Logarithmic s

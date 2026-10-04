@@ -62,7 +62,9 @@
         <!-- Doing it with fixed indexes this way is kinda risky but it works-->
         {i18n("todays-retention")} = {data[0].value} /
         {data[0].value + data[1].value} =
-        {((100 * data[0].value) / (data[0].value + data[1].value)).toFixed(2)}%
+        {data[0].value + data[1].value > 0
+            ? `${((100 * data[0].value) / (data[0].value + data[1].value)).toFixed(2)}%`
+            : i18n("no-data")}
     </p>
     <small>
         <span>{i18n("passed")} =</span>

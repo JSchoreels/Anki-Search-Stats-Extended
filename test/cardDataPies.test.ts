@@ -2,7 +2,9 @@ import { FSRS5_DEFAULT_DECAY } from "ts-fsrs"
 import { forgettingCurve as forgetting_curve } from "ts-fsrs/models/fsrs-6"
 import { curve, FSRS7_DEFAULT_WEIGHTS } from "ts-fsrs/models/fsrs-7"
 import { calculateCardDataPies } from "../src/ts/CardDataPies"
+import { dueDayOffset } from "../src/ts/cardDue"
 import type { DeckConfig } from "../src/ts/config"
+import { day_ms, dayFromMs, today } from "../src/ts/revlogGraphs"
 import type { CardData } from "../src/ts/search"
 
 const weights6 = [
@@ -52,6 +54,26 @@ function reviewCard(params: Partial<CardData> = {}): CardData {
 
 beforeEach(() => {
     SSEother.days_elapsed = 0
+})
+
+test("future due retrievability totals include only eligible review cards", () => {
+    const stats = calculateCardDataPies(
+        [
+            reviewCard(),
+            reviewCard({ id: 2, type: 1 }),
+            reviewCard({ id: 3, type: 3 }),
+            reviewCard({ id: 4, queue: -1 }),
+            reviewCard({ id: 5, data: "{}" }),
+            reviewCard({ id: 6, due: 8 }),
+        ],
+        false,
+        false,
+        { 1: deckConfig({ fsrsParams7: weights7 }) },
+        { 10: 1 }
+    )
+    expect(stats.target_R_day_totals[7]).toBe(1)
+    expect(stats.target_R_day_totals[8]).toBe(1)
+    expect(stats.target_R_days[7]).toBeCloseTo(curve(weights7, 7, state7).retrievability, 6)
 })
 
 test("future due retention uses selected FSRS7 deck model", () => {
@@ -141,4 +163,16 @@ test("future due retention skips incomplete FSRS-7 state", () => {
         { 10: 1 }
     )
     expect(stats.target_R_days).toEqual([])
+    expect(stats.target_R_day_totals).toEqual([])
+})
+
+test("due dates use a filtered card's original due date", () => {
+    expect(dueDayOffset({ due: 10, odue: 102 } as any, 100)).toBe(2)
+    expect(dueDayOffset({ due: 102, odue: 0 } as any, 100)).toBe(2)
+})
+
+test("Unix due dates are seconds and map to a whole collection day", () => {
+    const due = Math.floor((Date.now() + 2 * day_ms) / 1000)
+    expect(dueDayOffset({ due, odue: 0 } as any, 100)).toBe(dayFromMs(due * 1000) - today)
+    expect(dueDayOffset({ due, odue: 0 } as any, 100)).toBe(2)
 })

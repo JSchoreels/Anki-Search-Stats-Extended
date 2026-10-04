@@ -51,3 +51,10 @@ This document describes how stability-related values are computed for FSRS graph
 
 - The stability view intentionally uses `S90`, not raw FSRS stability.
 - It is a current card-data graph, not a replayed review-history graph.
+
+## Historical Coverage
+
+Historical average S90, median S90, and young-card ratio apply the final review
+day's state updates and carry them through today. This also covers searches
+with only one review day; the latest point must not disappear merely because
+there is no subsequent review day.

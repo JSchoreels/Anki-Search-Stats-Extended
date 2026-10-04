@@ -1,5 +1,6 @@
 import { forgettingCurve as forgetting_curve } from "ts-fsrs/models/fsrs-6"
 import { CardType } from "../../anki/ts/lib/tslib/cards"
+import { dueDayOffset } from "./cardDue"
 import { getFsrsForConfig, memoryStateFromCardData } from "./fsrsModel"
 import type { HeatmapData, HeatmapDimension } from "./heatmap"
 import {
@@ -34,8 +35,6 @@ export function create_card_sr_dataset(
         return null
     }
 
-    const day_ms = 1000 * 60 * 60 * 24
-
     let dataset: CardSRDataset | null = null
     for (const card_data_entry of card_data) {
         if (card_data_entry.type !== CardType.Review) {
@@ -53,9 +52,8 @@ export function create_card_sr_dataset(
         // N.B. This is a bit of a fudge. Manual rescheduling can make this wrong.
         //      It is how native Anki does it too though.
         // For filtered cards, use odue (original due) instead of due
-        const real_due = card_data_entry.odue === 0 ? card_data_entry.due : card_data_entry.odue
-        // Handle both day numbers and Unix timestamps for 'due' field
-        const due_days = real_due < 365_000 ? real_due : real_due / day_ms
+        const due_days =
+            collection_today_timestamp + dueDayOffset(card_data_entry, collection_today_timestamp)
         const last_review_days = due_days - card_data_entry.ivl
         const elapsed_days = collection_today_timestamp - last_review_days
 
@@ -138,6 +136,11 @@ function create_dimension(
 
     let nice_min = Math.floor(raw_min / bin_width) * bin_width
     let nice_max = Math.ceil(raw_max / bin_width) * bin_width
+
+    if (nice_max === nice_min) {
+        nice_min = is_logarithmic ? nice_min - bin_width : Math.max(0, nice_min - bin_width)
+        nice_max = nice_min + bin_width
+    }
 
     const bin_count = Math.round((nice_max - nice_min) / bin_width)
 
