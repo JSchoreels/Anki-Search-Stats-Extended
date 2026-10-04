@@ -200,9 +200,16 @@ chart reports paired cards out of all cards in the search.
 `/_anki/currentCardDisagreement` returns a transient snapshot. The add-on's
 `current_disagreement.py` adapter uses the adapted Anki scheduler's guarded,
 batched current RWKV statistics scoring path and the Collection API
-`fsrs_current_retrievability()`, with internal stability and fractional elapsed
-days since the last review. Cards without memory state or a last-review timestamp
-are excluded. It adds no persisted cache or direct database operations. The RWKV
+`card_memory_metrics(..., include_retrievability=True)`. The backend computes R
+from the complete stored memory state, resolved preset and fractional elapsed
+days, using the same curve as Anki's native Card Retrievability chart. For FSRS-7,
+this includes slow and fast stability and the card's difficulty. The scalar
+`fsrs_current_retrievability()` compatibility helper assumes equal stability
+traces and difficulty 5, so it must not be used for these current-card charts.
+Cards without a valid backend FSRS R or RWKV R are excluded; the backend resolves
+missing last-review timestamps from review history without updating cards.
+Builds without the full-state metrics API show an unavailable message.
+It adds no persisted cache or direct database operations. The RWKV
 adapter requires the scheduler's state-token and search-score helpers; builds
 without those capabilities show an unavailable message. Pending warm-up is
 polled, errors offer Retry, and results from an obsolete search are discarded.
@@ -218,12 +225,21 @@ Disagreement and shares its transient prediction snapshot, loading state, retry,
 search scope, and paired-card eligibility. It makes no additional prediction
 requests and introduces no persisted data or database operations.
 
+Anki's native Card Retrievability graph counts each model's available predictions
+independently. This comparison includes only cards with valid predictions from
+both models, so per-model counts can be lower here. For the same cards and
+snapshot time, FSRS uses the native graph's full-state curve; a difference due to
+missing paired predictions is distinct from using a different calculation.
+
 **Group cards by: FSRS / RWKV** chooses which model determines each card's bar.
 FSRS is selected initially. Each eligible paired card appears exactly once,
 so the bar counts add up to the compared-card total. Switching models moves cards
 between bars without changing that total. Like Anki's Card Retrievability chart,
 it uses 20 fixed 5-percentage-point intervals from 0% to 100%. Lower bounds are
 inclusive and upper bounds exclusive, except the final interval includes 100%.
+Percentage conversion uses Anki's float32 rounding before binning, so values
+such as the float32 representation of 95% (`0.949999988`) enter 95–100%, matching
+the native graph rather than slipping into the previous interval.
 The horizontal axis names the selected model and its **chance of remembering
 today**.
 

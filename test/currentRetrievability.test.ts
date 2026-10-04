@@ -67,6 +67,20 @@ test("invalid pairs and duplicate cards do not inflate agreement or disagreement
     expect(bins.flatMap((bin) => [...bin.rwkv, ...bin.fsrs])).toEqual([])
 })
 
+test("float32 predictions at percentage boundaries match Anki's native histogram", () => {
+    const bins = buildCurrentRetrievabilityBins([
+        { cid: 1, fsrs: Math.fround(0.95), rwkv: Math.fround(0.9) },
+        { cid: 2, fsrs: Math.fround(0.7), rwkv: Math.fround(0.95) },
+        { cid: 3, fsrs: Math.fround(0.95), rwkv: 1 },
+        { cid: 4, fsrs: 0.94999, rwkv: 0.94999 },
+    ])
+    expect(Math.fround(0.95)).toBeLessThan(0.95)
+    expect(bins[19]).toMatchObject({ both: [3], fsrs: [1], rwkv: [2] })
+    expect(bins[19].shifts).toEqual({ fsrs: { [-1]: [1] }, rwkv: { 5: [2] } })
+    expect(bins[18]).toMatchObject({ both: [4], fsrs: [], rwkv: [1] })
+    expect(bins[14].fsrs).toEqual([2])
+})
+
 test.each([
     { model: "fsrs" as const, color: "steelblue", nearCard: 2, farCard: 3 },
     { model: "rwkv" as const, color: "seagreen", nearCard: 3, farCard: 2 },
