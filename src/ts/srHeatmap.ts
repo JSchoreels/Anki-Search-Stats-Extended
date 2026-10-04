@@ -1,15 +1,6 @@
-import { forgettingCurve as forgetting_curve } from "ts-fsrs/models/fsrs-6"
 import { CardType } from "../../anki/ts/lib/tslib/cards"
-import { dueDayOffset } from "./cardDue"
-import { getFsrsForConfig, memoryStateFromCardData } from "./fsrsModel"
 import type { HeatmapData, HeatmapDimension } from "./heatmap"
-import {
-    getDecay,
-    getExtraDataFromCard,
-    getFsrsInternalStabilityFromExtraData,
-    getFsrsS90FromExtraData,
-    type CardData,
-} from "./search"
+import { getExtraDataFromCard, getFsrsS90FromExtraData, type CardData } from "./search"
 
 export interface CardSRData {
     r: number
@@ -28,9 +19,9 @@ export interface CardSRDataset {
 
 export function create_card_sr_dataset(
     card_data: CardData[] | null,
-    collection_today_timestamp: number
+    retrievability: Record<number, number> | null
 ): CardSRDataset | null {
-    if (card_data === null) {
+    if (card_data === null || retrievability === null) {
         // We have not been given any card data
         return null
     }
@@ -49,45 +40,17 @@ export function create_card_sr_dataset(
             continue
         }
 
-        // N.B. This is a bit of a fudge. Manual rescheduling can make this wrong.
-        //      It is how native Anki does it too though.
-        // For filtered cards, use odue (original due) instead of due
-        const due_days =
-            collection_today_timestamp + dueDayOffset(card_data_entry, collection_today_timestamp)
-        const last_review_days = due_days - card_data_entry.ivl
-        const elapsed_days = collection_today_timestamp - last_review_days
-
         const s = getFsrsS90FromExtraData(extra_data)
-        const internalStability = getFsrsInternalStabilityFromExtraData(extra_data)
-        if (s === undefined || internalStability === undefined) {
-            continue
-        }
-        const configId = SSEother.deck_config_ids?.[card_data_entry.odid || card_data_entry.did]
-        const config = configId === undefined ? undefined : SSEother.deck_configs?.[configId]
-        let r: number
-        if (config) {
-            const model = getFsrsForConfig(config)
-            const state = memoryStateFromCardData(model, extra_data)
-            if (!state) continue
-            r = model.retrievability(state, elapsed_days)
-        } else {
-            if (extra_data.s_fast !== undefined) continue
-            r = forgetting_curve(getDecay(extra_data), elapsed_days, internalStability)
-        }
-
-        if (!Number.isFinite(r) || !Number.isFinite(s) || r < 0 || r > 1 || s <= 0) {
-            console.warn("Skipping card with invalid r or s:", {
-                card_id: card_data_entry.id,
-                r,
-                s,
-                elapsed_days,
-                decay: getDecay(extra_data),
-                due: card_data_entry.due,
-                due_days,
-                ivl: card_data_entry.ivl,
-                last_review_days,
-                collection_today: collection_today_timestamp,
-            })
+        const r = retrievability[card_data_entry.id]
+        if (
+            s === undefined ||
+            !Number.isFinite(s) ||
+            s <= 0 ||
+            r === undefined ||
+            !Number.isFinite(r) ||
+            r < 0 ||
+            r > 1
+        ) {
             continue
         }
 

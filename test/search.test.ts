@@ -10,16 +10,16 @@ test("compact presets expand to each card's complete resolved settings", async (
     jest.resetModules()
     global.fetch = jest.fn().mockResolvedValue({
         ok: true,
-        text: async () => JSON.stringify({ presets, cards: { 1: 0, 2: 1, 3: 0 } }),
+        text: async () =>
+            JSON.stringify({ presets, cards: { 1: 0, 2: 1, 3: 0 }, retrievability: { 1: 0.87 } }),
     })
     try {
         const { getFsrsPresetData } = await import("../src/ts/search")
         expect(await getFsrsPresetData([1, 2, 3])).toEqual({
-            1: presets[0],
-            2: presets[1],
-            3: presets[0],
+            presetsByCard: { 1: presets[0], 2: presets[1], 3: presets[0] },
+            retrievability: { 1: 0.87 },
         })
-        expect(await getFsrsPresetData([])).toEqual({})
+        expect(await getFsrsPresetData([])).toEqual({ presetsByCard: {}, retrievability: {} })
     } finally {
         global.fetch = originalFetch
         jest.resetModules()

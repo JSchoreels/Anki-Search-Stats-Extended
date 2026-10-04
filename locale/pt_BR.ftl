@@ -293,22 +293,21 @@ ratings-help =
 
 memorised = Memorizados
 memorised-help =
-    Uma estimativa do FSRS de quantos cartões você sabia em um determinado momento.
-    Isso depende dos parâmetros atuais do FSRS e usará os padrões se nenhum for encontrado (mesmo se você estiver usando SM-2).
-    Este gráfico não funcionará corretamente com um histórico de revisão incompleto e não respeitará "Ignorar revisões antes de".
-    No FSRS, cada cartão tem uma porcentagem de chance de ser lembrado, conhecida como recuperabilidade.
-    Esta é uma soma dessas porcentagens ao longo do tempo.
+    Uma estimativa do FSRS de quantos cartões você lembra, usando a configuração atual de cada cartão.
+    Os pontos anteriores mostram o fim de cada dia do Anki; o ponto de hoje mostra o momento atual.
+    O gráfico respeita "Ignorar revisões antes de". Se o histórico de aprendizado estiver incompleto, estima o estado inicial usando a retenção histórica e o primeiro intervalo disponível.
+    A soma das chances de lembrar cada cartão fornece o número estimado de cartões lembrados.
 memorised-truncated-warning =
-    É altamente recomendável que você use "todo histórico" para este gráfico.
+    Use "todo histórico" para obter a visão mais completa.
+    O estado inicial é estimado quando falta o histórico de aprendizado. Alterações anteriores nas configurações não podem ser recuperadas do histórico de revisões.
 
-    Este gráfico ressimula seu histórico de revisões, omitir o início pode
-    afetar muito os resultados.
 fsrs-calibration = Calibração FSRS
 fsrs-calibration-help = Isso compara a retenção média que o FSRS prevê que você deveria ter nos cartões (linha Perfeita/laranja) com a retenção que você realmente tem (linha Real/azul).
 forgetting-curve = Curva de esquecimento da primeira revisão de longo prazo
 forgetting-curve-help =
     Compare a recordação observada com a curva de esquecimento ajustada do FSRS, agrupada pela primeira avaliação do cartão.
     Revisões no mesmo dia são excluídas; apenas uma revisão por dia é utilizada e o tamanho dos pontos indica o número de amostras em cada intervalo.
+    Cada configuração é ajustada separadamente. As previsões são combinadas proporcionalmente ao número de amostras de revisão.
 first-short-term-forgetting-curve = Primeira curva de esquecimento de curto prazo
 first-short-term-forgetting-curve-help =
     Mostra a recordação em revisões do mesmo dia dentro de 12 horas da primeira avaliação. Usa agrupamento adaptativo para agrupar revisões de forma inteligente (até 20 grupos, mínimo 50 amostras por grupo) enquanto preserva o tempo preciso. Os valores de estabilidade de memória são exibidos em minutos e podem variar até 24 horas.
@@ -537,3 +536,6 @@ interval-per-repetition = {$value} de intervalo por {$n ->
         [one] repetição
         *[many] {$n} repetições
     }
+
+forgetting-curve-multiple-presets = Várias configurações
+forgetting-curve-legend-mixed = {$rating}: estabilidade média ajustada {$stability} {$unit} · {$presets} configurações · {$count} revisões

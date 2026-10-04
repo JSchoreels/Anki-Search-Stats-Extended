@@ -1,7 +1,7 @@
 import * as d3 from "d3"
 import * as _ from "lodash"
 import {
-    forgettingCurveWithModel,
+    createSeriesPredictor,
     type ForgettingCurveDecayModel,
     type ForgettingCurveSeries,
 } from "./forgettingCurveData"
@@ -107,15 +107,14 @@ export function renderForgettingCurve(
             const rightmost = x.domain()[1]
             const step = rightmost / numPoints
 
+            const predict = createSeriesPredictor(
+                seriesEntry,
+                options.decayModel,
+                options.daysPerUnit
+            )
             const predicted = _.range(0, rightmost, step).map((delta) => ({
                 delta,
-                recall: forgettingCurveWithModel(
-                    options.decayModel,
-                    delta,
-                    seriesEntry.stability!,
-                    seriesEntry.rating,
-                    options.daysPerUnit
-                ),
+                recall: predict(delta),
             }))
 
             container

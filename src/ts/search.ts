@@ -115,15 +115,27 @@ export async function getCardData(cids: number[]) {
 
 export async function getFsrsPresetData(cids: number[]) {
     if (cids.length === 0) {
-        return {}
+        return { presetsByCard: {}, retrievability: {} } as FsrsPresetData
     }
-    const { presets, cards } = (await endpoint("fsrsPresetData", JSON.stringify(cids))) as {
+    const { presets, cards, retrievability } = (await endpoint(
+        "fsrsPresetData",
+        JSON.stringify(cids)
+    )) as {
         presets: ResolvedFsrsPreset[]
         cards: Record<number, number>
+        retrievability: Record<number, number>
     }
-    return Object.fromEntries(
-        Object.entries(cards).map(([cid, index]) => [cid, presets[index]])
-    ) as Record<number, ResolvedFsrsPreset>
+    return {
+        presetsByCard: Object.fromEntries(
+            Object.entries(cards).map(([cid, index]) => [cid, presets[index]])
+        ),
+        retrievability,
+    }
+}
+
+export interface FsrsPresetData {
+    presetsByCard: Record<number, ResolvedFsrsPreset>
+    retrievability: Record<number, number>
 }
 
 export async function saveConfigValue(key: string, value: any) {

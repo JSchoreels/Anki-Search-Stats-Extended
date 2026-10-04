@@ -1,27 +1,45 @@
 # Forgetting Curve Data Path
 
-This document describes how long-term and short-term forgetting curve models are sourced.
+## Model and sample rules
 
-## Source Data
+Review/card data is processed in `src/ts/revlogGraphs.ts`. Each card uses its
+Anki-resolved FSRS preset from `fsrsPresetData`, including deck/card overrides
+and the original home deck for filtered cards. Isolated calculation callers
+without resolved presets use their supplied deck configuration; cards without
+a configuration use their own decay value. A selected parent deck does not
+replace subdeck presets.
 
-- Review/card data is processed in [`src/ts/revlogGraphs.ts`](/Users/jschoreels/workspace/Anki-Search-Stats-Extended/src/ts/revlogGraphs.ts).
-- Deck FSRS parameters are selected with [`src/ts/fsrsParams.ts`](/Users/jschoreels/workspace/Anki-Search-Stats-Extended/src/ts/fsrsParams.ts).
-- Selected deck context is injected as `SSEother.selected_deck_id` in [`__init__.py`](/Users/jschoreels/workspace/Anki-Search-Stats-Extended/__init__.py).
+The long-term model (`forgetting_curve_long_term_model`) covers long-term sample
+cards. The short-term model (`forgetting_curve_short_term_model`) also covers
+cards that have only short-term samples. Single-preset searches retain the
+scalar/parameter-array model representation. Mixed searches return distinct
+models plus a card-to-model index. Parameter arrays are never averaged, and
+minority model versions are retained.
 
-## Long-term Curve Model
+## Fitting and display
 
-- Output key: `forgetting_curve_long_term_model`
-- Used by the first long-term forgetting curve in [`src/ts/categories/ForgettingCurveCategory.svelte`](/Users/jschoreels/workspace/Anki-Search-Stats-Extended/src/ts/categories/ForgettingCurveCategory.svelte).
-- If `selected_deck_id` resolves to a preset, that preset's FSRS params are used directly for the long-term model.
-- Otherwise, a fallback model is built from deck FSRS parameters for cards present in `forgetting_samples`.
-- The dominant parameter-length group is averaged element-wise and used as the model.
-- Fallback: average `card.data.decay` if no usable parameter group exists.
+For each first-rating series, fit a separate first-review state for each preset
+using that preset's review samples. FSRS-7 preserves its initialized fast/slow
+trace ratio and rating-specific difficulty. Fitting scales both traces together;
+it does not borrow an evolved learned-card state.
 
-FSRS-7 parameter arrays (length `34`) use upstream's dual-trace curve. Each rating's fitted first-review state uses that rating's initial difficulty and the model's initialized fast/slow stability ratio. Fitting scales both traces together; it does not use the evolved state of an existing learned card.
+The displayed prediction line is the sample-count-weighted mean of those
+independent predictions at each interval. The legend identifies multiple
+presets and labels stability as an average fitted value. RMSE evaluates each
+individual sample against its own preset's fitted prediction, then combines
+squared errors. Observed points retain their existing bin/filter behavior;
+fitting continues to use the original samples, as before.
 
-## Short-term Curve Model
+Short-term samples and displayed fitted stability use minutes. The evaluator
+converts elapsed time and fitted stability to days. Fitting, RMSE and rendering
+share the same model/units. A fixed cohort mixture does not adjust preset
+weights separately at each observed interval; changes in the sampled preset
+mix across intervals can still affect agreement with pooled observed points.
 
-- Output key: `forgetting_curve_decay`
-- The first short-term graph uses the same selected/averaged preset model as the long-term graph, with averaged decay as the fallback.
-- Its samples and displayed fitted stability are in minutes. Model evaluation converts both elapsed time and fitted stability to days, preserving the FSRS-7 first-review trace ratio and rating-specific difficulty.
-- Curve fitting, RMSE calculation, and rendered prediction lines share the same evaluator and time-unit conversion.
+## Performance
+
+Compile each rating's model once per fitting job. Aggregate repeated
+rating/interval observations into count and success sums before evaluating
+binary log loss. This preserves the fitting objective while reducing repeated
+model initialization and evaluation. The bootstrap starting-state cache and
+curve-model grouping are scoped to the current calculation.

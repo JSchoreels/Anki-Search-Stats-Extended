@@ -3,6 +3,7 @@
     import { i18n } from "./i18n"
     import {
         buildForgettingCurve,
+        isPresetCurveModel,
         computeStabilityForSeries,
         type ForgettingCurveDecayModel,
         type ForgettingCurveSeries,
@@ -153,7 +154,8 @@
     }
 
     const decayText = (model: ForgettingCurveDecayModel) => {
-        if (Array.isArray(model)) {
+        if (typeof model !== "number") {
+            if (isPresetCurveModel(model)) return i18n("forgetting-curve-multiple-presets")
             if (model.length === 34) {
                 return `${model[23].toFixed(2)}/${model[24].toFixed(2)}`
             }
@@ -170,7 +172,16 @@
             return ""
         }
         const stability = entry.stability !== null ? entry.stability.toFixed(2) : "—"
-        const decayLabel = decayText(effectiveDecayModel)
+        if ((entry.fits?.length ?? 0) > 1) {
+            return i18n("forgetting-curve-legend-mixed", {
+                rating: labelForRating(entry.rating),
+                stability,
+                unit: isShortTerm ? "min" : "d",
+                presets: entry.fits!.length,
+                count: entry.sampleSize.toLocaleString(),
+            })
+        }
+        const decayLabel = decayText(entry.fits?.[0]?.model ?? effectiveDecayModel)
         const countText = i18n("forgetting-curve-legend-count", {
             count: entry.sampleSize.toLocaleString(),
         })

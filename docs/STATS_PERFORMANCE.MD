@@ -19,11 +19,20 @@ matching cards may change when scores become available.
 FSRS preset loading first prepares the native batch resolver using
 `card_memory_metrics(..., include_retrievability=True)`, then reads resolved
 presets per card. This avoids repeated cold search preparation. The endpoint
-returns `{presets: [...], cards: {cardId: presetIndex}}`, deduplicating complete
-settings rather than preset ids so deck/card overrides remain intact.
+returns `{presets: [...], cards: {cardId: presetIndex}, retrievability: {cardId: R}}`,
+deduplicating complete settings rather than preset ids so deck/card overrides
+remain intact. The returned native R values are reused by the S×R heatmap;
+missing native predictions are omitted. The shared frontend result serves the
+heatmap, review-history aggregation and Memorised replay. It is loaded when
+review-history stats or the miscellaneous graph category need it. Obsolete
+search results are ignored; unrelated category toggles do not reload it.
 
 Each stats window owns one page-load callback. Refresh replaces that callback
 and continues to read rebuilt JavaScript/CSS from disk. `npm run build` produces
 both `stats.min.js` and `stats-worker.js`; packaging and installation must include
 both. The worker is served by Anki's add-on media endpoint on the same origin.
 After installing Python changes, fully quit and reopen Anki.
+
+Precision/performance measurements and reproducible synthetic inputs are in
+[FSRS_ACCURACY_BENCHMARK.MD](FSRS_ACCURACY_BENCHMARK.MD). Runtime measurements
+separate backend metrics/preset resolution from frontend graph processing.

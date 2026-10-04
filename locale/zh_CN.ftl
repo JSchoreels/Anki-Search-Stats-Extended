@@ -296,14 +296,15 @@ ratings-help =
     每日评分比例分布，(1-重来比例)%即当日保留率(shown as " % Correct " in the tooltip)
 
 memorised = 已记忆量
-memorised-help = 
-    FSRS基于当前参数的记忆量估算。
-    使用默认参数或不完整历史记录时可能不准确。
-    
-    记忆可提取性(R)即卡片的记忆成功率累加值。
+memorised-help =
+    根据每张卡片的当前预设，使用 FSRS 估算记住的卡片数量。
+    历史数据点表示 Anki 每天结束时的状态；今天的数据点表示当前时刻。
+    遵循“忽略此日期之前的复习”设置。学习历史不完整时，使用历史记忆率和首个保留的间隔估算初始状态。
+    将每张卡片被记住的概率相加，得到预计记住的卡片数量。
 memorised-truncated-warning =
-    强烈建议使用“全部历史”。
-    该图表重新模拟了您的复习历史，忽略开头部分会显著影响模拟结果。
+    使用“全部历史”可获得更完整的结果。
+    缺少学习历史时，初始状态只能估算。复习记录无法还原过去的预设变更。
+
 
 fsrs-calibration = FSRS Calibration
 fsrs-calibration-help = This compares the average retention FSRS predicts you should have on cards (Perfect/orange line) to the retention you actually have (Actual/blue line).
@@ -311,6 +312,7 @@ forgetting-curve = 首次长期复习遗忘曲线
 forgetting-curve-help =
     按照卡片的首次评价分组，对比实际记忆率与拟合得到的 FSRS 遗忘曲线。
     同日复习会被排除，每天仅使用一次复习；点的大小表示该间隔下参与计算的样本数量。
+    每个预设单独拟合，再按复习样本数量加权合并预测。
 first-short-term-forgetting-curve = 首次短期复习遗忘曲线
 first-short-term-forgetting-curve-help =
     展示首次评分后12小时内的同日复习记忆表现。采用自适应分箱算法智能分组（最多20个箱，每箱至少50个样本），同时保留精确的时间信息。记忆稳定度以分钟为单位显示，范围可达24小时。
@@ -484,3 +486,6 @@ interval-per-repetition = {$value} interval per {$n ->
         [one] repetition
         *[many] {$n} repetitions
     }
+
+forgetting-curve-multiple-presets = 多个预设
+forgetting-curve-legend-mixed = {$rating}：平均拟合稳定性 {$stability} {$unit} · {$presets} 个预设 · {$count} 次复习

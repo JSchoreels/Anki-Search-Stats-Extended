@@ -188,7 +188,7 @@ average-second-per-difficulty = {$value} {$value ->
 
 sxr-heatmap = SxR Heatmap
 sxr-heatmap-help =
-    This graph shows the number of cards which have the given stability and retrievability. The redder the cell, the more cards are in that "bin".
+    Uses Anki’s current FSRS chance of remembering each card and its stability at 90% recall. This graph shows the number of cards which have the given stability and retrievability. The redder the cell, the more cards are in that "bin".
 
 ease-factors = Stability Increase Factor
 ease-factors-help =
@@ -335,16 +335,17 @@ ratings-help =
 
 memorised = Memorised
 memorised-help =
-    An FSRS estimate of how many cards you knew at that given time. This depends on FSRS's current parameters and will use the defaults if none are found (Even if you are using SM-2).
-    This graph will not work properly with an incomplete review history and will not respect "ignore reviews before".
+    An FSRS estimate of how many cards you remember, using each card's current preset.
+    Past points show the end of each Anki day; today's point shows the current time.
+    The graph respects "ignore reviews before" and estimates a starting state when learning history is missing, using historical retention and the first retained interval.
 
-    In FSRS, each card has a percentage chance of being recalled known as retrievability. This is a sum of those percentages over time.
+    Each card has a chance of being remembered. Adding those chances gives the estimated number of remembered cards.
+
 memorised-help2 = Retrievability & Stability multiplies the retrievability of the card by (1-e^(-((8/365)*stability))). The intention here is to see how much knowledge you can maintain in the long term, for example, if you've stopped doing reviews.
 memorised-truncated-warning =
-    It is heavily advised you use "All history" for this graph
+    Use "All history" for the most complete picture.
+    Missing learning history uses an estimated starting state. Past preset changes cannot be recovered from the review history.
 
-    This graph re-simulates your review history, leaving the beginning out can greatly
-    affect the results.
 memorised-source = Memorised source
 memorised-source-fsrs = FSRS
 memorised-source-rwkv = RWKV
@@ -453,6 +454,7 @@ forgetting-curve = First Long-term Forgetting Curve
 forgetting-curve-help =
     Compares the observed rate of recall against fitted FSRS forgetting curves which are grouped by the card's first rating.
     Same-day reviews are excluded, only one review per day is used and point size indicates the number of samples contributing to that interval.
+    Each preset is fitted separately. Searches containing several presets combine their predictions in proportion to the number of review samples.
 first-short-term-forgetting-curve = First Short-term Forgetting Curve
 first-short-term-forgetting-curve-help =
     Visualises recall for same-day reviews within 12 hours of the first rating. Uses adaptive binning to intelligently group reviews (up to 20 bins, minimum 50 samples per bin) while preserving precise timing. Memory stability values are expressed in minutes and can range up to 24 hours.
@@ -468,6 +470,8 @@ forgetting-curve-tooltip-count = Samples: {$count}
 forgetting-curve-legend = {$rating}: Memory stability={$stability}, decay={$decay} ({$count})
 forgetting-curve-legend-short-term = {$rating}: Memory stability={$stability} minutes, decay={$decay} ({$count})
 forgetting-curve-legend-count = n={$count}
+forgetting-curve-multiple-presets = Multiple presets
+forgetting-curve-legend-mixed = {$rating}: average fitted stability {$stability} {$unit} · {$presets} presets · {$count} reviews
 forgetting-curve-bins-selector = Max Bin Count
 forgetting-curve-bin-count = {$count} {$count ->
         [one] bin

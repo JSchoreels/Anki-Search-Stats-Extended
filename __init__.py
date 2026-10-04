@@ -188,8 +188,11 @@ def fsrs_preset_data() -> bytes:
     cids = [int(cid) for cid in orjson.loads(request.data)]
     # Resolve search-matched presets in one native batch before per-card reads.
     # include_retrievability=False skips preset resolution in Anki's backend.
-    if cids:
-        mw.col.card_memory_metrics(cids, include_retrievability=True)
+    metrics = {
+        str(entry.card_id): entry.fsrs_retrievability
+        for entry in mw.col.card_memory_metrics(cids, include_retrievability=True)
+        if entry.HasField("fsrs_retrievability")
+    } if cids else {}
     presets = []
     indices = {}
     cards = {}
@@ -201,7 +204,7 @@ def fsrs_preset_data() -> bytes:
             indices[key] = len(presets)
             presets.append(preset)
         cards[str(cid)] = indices[key]
-    return Response(orjson.dumps({"presets": presets, "cards": cards}))
+    return Response(orjson.dumps({"presets": presets, "cards": cards, "retrievability": metrics}))
 
 
 post_handlers["fsrsPresetData"] = fsrs_preset_data

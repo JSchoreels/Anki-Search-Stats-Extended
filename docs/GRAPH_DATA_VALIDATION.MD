@@ -25,7 +25,7 @@ Its total can be lower than a native single-model histogram.
 | Graph family | Data and checks |
 | --- | --- |
 | FSRS/RWKV current retrievability and disagreement | Supported backend FSRS memory metrics, paired eligibility, native float32 percentage boundaries, unique cards, selected model, shift ordering, tooltip local/search totals |
-| Memorised, average stability, young-card ratio, calibration, loss, lapse odds | Complete FSRS replay state, resolved presets, reset and cram handling, review filters, latest-day coverage, calibration sample eligibility |
+| Memorised, average stability, young-card ratio, calibration, loss, lapse odds | Complete FSRS replay state, resolved presets, historical-retention bridge, UTC cutoff, reset/cram handling, review filters, end-of-day/current-time snapshots, calibration sample eligibility |
 | ROC, UM+, RWKV daily surprise | Paired predictions, tied ROC thresholds, AUC, shared error buckets, sample counts, zero-variance and missing-day handling |
 | Future Due and Future Due Retention | Eligible card type/queue, original due field, timestamp units, full model state, matched pass/fail totals |
 | Interval, lapse, repetition, load | Current-card eligibility, suspended/zero settings, histogram/load totals, numeric interval boundaries |
@@ -33,7 +33,7 @@ Its total can be lower than a native single-model histogram.
 | Time distributions | Time units, review filters, source buckets, weighted means, true medians, redraw after width/statistic changes |
 | Review speed | Native daily counts and times, empty-day denominators |
 | Time Machine and hourly breakdown | Scheduling transitions, current suspended segments, selected history window, local calendar date/hour, exact day range |
-| Stability/retrievability heatmap | Card eligibility, S90 versus internal state, finite probabilities, constant-value dimensions, count conservation |
+| Stability/retrievability heatmap | Native current R, independent FSRS population, card eligibility, S90, finite probabilities, constant-value dimensions, count conservation |
 | Stability increase factor | Full memory state, retention target, valid minimum stability, multiplier axis and tooltip units |
 | Custom charts and Today's Retention | Search-defined populations and metrics; empty retention denominator |
 | Shared rendering/trends | Sparse data, stack/legend order, hidden rows, ratios, cumulative values, trend coordinate ranges and persistence |
@@ -49,15 +49,17 @@ Historical replay uses the loaded history and available presets. Missing history
 or past preset changes can prevent reconstructed values from matching persisted
 current state. Calibration may use cached backend predictions instead of replay.
 
-The S×R heatmap estimates elapsed time from due date minus interval; manual
-rescheduling can make that estimate differ from the authoritative current R used
-by the comparison chart. Some replay distributions use internal stability,
+The S×R heatmap uses the authoritative native current FSRS R for every eligible
+review card. Its population does not require an RWKV prediction. Some replay distributions use internal stability,
 whereas the average stability and current card metrics use S90; these quantities
 can differ under FSRS-7.
 
-The general historical daily axis still captures one timezone offset at load.
-Local hourly grouping uses each review's calendar date and hour. Daily values
-near daylight-saving/rollover boundaries are a remaining verification area.
+Daily axes use local calendar dates with each date's own rollover boundary and
+UTC offset. FSRS Memorised uses historical end-of-day snapshots and today's
+current time, preserving fractional elapsed days in FSRS-7. The RWKV history
+series remains supplied by its native backend. Native cutoff/completeness rules
+and interval-based starting states apply to FSRS replay, but the bridge remains
+an estimate when learning history is missing.
 
 The automated fixtures and browser checks do not establish exact totals for a
 live collection. Compare those totals only after matching the populations and

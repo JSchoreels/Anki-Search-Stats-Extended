@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { other } from "./stores"
+    import { fsrsPresetData } from "./stores"
     import { browserSearch, type CardData } from "./search"
 
     import Heatmap from "./Heatmap.svelte"
@@ -57,7 +57,7 @@
     let s_bin_width_log = $state(DEFAULT_S_BIN_WIDTH_LOG)
 
     const sr_dataset: CardSRDataset | null = $derived(
-        create_card_sr_dataset(cardData, $other.days_elapsed)
+        create_card_sr_dataset(cardData, $fsrsPresetData?.retrievability ?? null)
     )
 
     $effect(() => {

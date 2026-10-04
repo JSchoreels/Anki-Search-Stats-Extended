@@ -3,7 +3,13 @@ import { FSRS5_DEFAULT_DECAY } from "ts-fsrs"
 import { forgettingCurve as forgetting_curve, FSRS6_DEFAULT_WEIGHTS } from "ts-fsrs/models/fsrs-6"
 import { getFsrsForParams } from "./fsrsModel"
 
-export type ForgettingCurveDecayModel = number | readonly number[]
+export type CurveParameters = number | readonly number[]
+export type PresetCurveModel = { models: CurveParameters[]; cards: Record<number, number> }
+export type ForgettingCurveDecayModel = CurveParameters | PresetCurveModel
+export function isPresetCurveModel(model: ForgettingCurveDecayModel): model is PresetCurveModel {
+    return typeof model === "object" && !Array.isArray(model) && "models" in model
+}
+export type FittedCurve = { model: CurveParameters; stability: number; count: number }
 
 export type ForgettingSample = {
     cid: number
@@ -30,6 +36,7 @@ export interface ForgettingCurveSeries {
     rmse: number | null
     sampleSize: number
     points: ForgettingCurvePoint[]
+    fits?: FittedCurve[]
     predicted: { delta: number; recall: number }[]
 }
 
@@ -57,18 +64,13 @@ export interface ForgettingCurveOptions {
     }
 }
 
-export function forgettingCurveWithModel(
-    model: ForgettingCurveDecayModel,
-    elapsedDays: number,
-    stability: number,
-    rating = 3,
-    daysPerUnit = 1
-) {
-    if (typeof model !== "number") {
-        const fsrs = getFsrsForParams(model)
-        const initial = fsrs.nextState(null, 0, rating)
+export function createCurvePredictor(model: CurveParameters, rating = 3, daysPerUnit = 1) {
+    if (typeof model === "number")
+        return (elapsed: number, stability: number) => forgetting_curve(model, elapsed, stability)
+    const fsrs = getFsrsForParams(model)
+    const initial = fsrs.nextState(null, 0, rating)
+    return (elapsed: number, stability: number) => {
         const fittedStability = stability * daysPerUnit
-        // This graph fits the state immediately after the first review, when the trace ratio is known.
         return fsrs.retrievability(
             {
                 ...initial,
@@ -80,10 +82,39 @@ export function forgettingCurveWithModel(
                               (initial.stabilityFast * fittedStability) / initial.stability,
                       }),
             },
-            elapsedDays * daysPerUnit
+            elapsed * daysPerUnit
         )
     }
-    return forgetting_curve(model, elapsedDays, stability)
+}
+
+export function forgettingCurveWithModel(
+    model: CurveParameters,
+    elapsed: number,
+    stability: number,
+    rating = 3,
+    daysPerUnit = 1
+) {
+    return createCurvePredictor(model, rating, daysPerUnit)(elapsed, stability)
+}
+
+export function createSeriesPredictor(
+    entry: ForgettingCurveSeries,
+    model: ForgettingCurveDecayModel,
+    daysPerUnit = 1
+) {
+    const fits =
+        entry.fits ??
+        (isPresetCurveModel(model) || entry.stability === null
+            ? []
+            : [{ model, stability: entry.stability, count: 1 }])
+    const total = fits.reduce((sum, fit) => sum + fit.count, 0)
+    const predictors = fits.map((fit) => ({
+        ...fit,
+        predict: createCurvePredictor(fit.model, entry.rating, daysPerUnit),
+    }))
+    return (elapsed: number) =>
+        predictors.reduce((sum, fit) => sum + fit.predict(elapsed, fit.stability) * fit.count, 0) /
+        total
 }
 
 function filterOutliers(
@@ -337,7 +368,7 @@ export function averageDecay(decayValues: number[]): number {
 export function fitStability(
     samples: ForgettingSample[],
     initial: number,
-    decay: ForgettingCurveDecayModel = FSRS5_DEFAULT_DECAY,
+    decay: CurveParameters = FSRS5_DEFAULT_DECAY,
     minStability: number = ANKI_MIN_FSRS_STABILITY,
     maxStability: number = MAX_STABILITY,
     daysPerUnit = 1
@@ -346,23 +377,44 @@ export function fitStability(
         return null
     }
 
+    // Repeated intervals have the same prediction. Aggregate outcomes once and compile
+    // each rating's model once, preserving the original binary-log-loss objective.
+    const groups = new Map<
+        string,
+        {
+            delta: number
+            success: number
+            count: number
+            predict: ReturnType<typeof createCurvePredictor>
+        }
+    >()
+    const predictors = new Map<number, ReturnType<typeof createCurvePredictor>>()
+    for (const sample of samples) {
+        if (!predictors.has(sample.firstRating))
+            predictors.set(
+                sample.firstRating,
+                createCurvePredictor(decay, sample.firstRating, daysPerUnit)
+            )
+        const key = `${sample.firstRating}:${sample.delta}`
+        const group = groups.get(key) ?? {
+            delta: sample.delta,
+            success: 0,
+            count: 0,
+            predict: predictors.get(sample.firstRating)!,
+        }
+        group.success += sample.recall
+        group.count++
+        groups.set(key, group)
+    }
     const loss = (stability: number) => {
         let total = 0
-        for (const sample of samples) {
-            const prediction = clampProbability(
-                forgettingCurveWithModel(
-                    decay,
-                    sample.delta,
-                    stability,
-                    sample.firstRating,
-                    daysPerUnit
-                )
-            )
-            const recall = sample.recall
-            total += -(recall * Math.log(prediction) + (1 - recall) * Math.log(1 - prediction))
+        for (const group of groups.values()) {
+            const prediction = clampProbability(group.predict(group.delta, stability))
+            total -=
+                group.success * Math.log(prediction) +
+                (group.count - group.success) * Math.log(1 - prediction)
         }
-        total += (Math.abs(stability - initial) * daysPerUnit) / 16
-        return total
+        return total + (Math.abs(stability - initial) * daysPerUnit) / 16
     }
 
     let left = minStability
@@ -404,7 +456,7 @@ export function fitStability(
 export function computeRmse(
     samples: ForgettingSample[],
     stability: number,
-    decay: ForgettingCurveDecayModel = FSRS5_DEFAULT_DECAY,
+    decay: CurveParameters = FSRS5_DEFAULT_DECAY,
     daysPerUnit = 1
 ): number | null {
     if (!samples.length) {
@@ -439,25 +491,43 @@ export function computeStabilityForSeries(
         // Filter original samples by rating
         const ratingSamples = samples.filter((s) => s.firstRating === entry.rating)
 
-        const stability = fitStability(
-            ratingSamples,
-            (typeof decay === "number"
-                ? RATING_DEFAULT_STABILITY[entry.rating]
-                : decay[entry.rating - 1]) / (options.daysPerUnit ?? 1),
-            decay,
-            options.minStability,
-            options.maxStability,
-            options.daysPerUnit
-        )
-
-        const rmse = stability
-            ? computeRmse(ratingSamples, stability, decay, options.daysPerUnit)
-            : null
-
+        const groups = new Map<CurveParameters, ForgettingSample[]>()
+        for (const sample of ratingSamples) {
+            const model = isPresetCurveModel(decay) ? decay.models[decay.cards[sample.cid]] : decay
+            if (model === undefined)
+                throw new Error(`Missing forgetting-curve preset for card ${sample.cid}`)
+            const group = groups.get(model) ?? []
+            group.push(sample)
+            groups.set(model, group)
+        }
+        const fits: FittedCurve[] = []
+        let squaredError = 0
+        for (const [model, group] of groups) {
+            const initial =
+                typeof model === "number"
+                    ? RATING_DEFAULT_STABILITY[entry.rating]
+                    : getFsrsForParams(model).nextState(null, 0, entry.rating).stability
+            const stability = fitStability(
+                group,
+                initial / (options.daysPerUnit ?? 1),
+                model,
+                options.minStability,
+                options.maxStability,
+                options.daysPerUnit
+            )
+            if (stability === null) continue
+            fits.push({ model, stability, count: group.length })
+            const rmse = computeRmse(group, stability, model, options.daysPerUnit)!
+            squaredError += rmse ** 2 * group.length
+        }
+        const count = fits.reduce((sum, fit) => sum + fit.count, 0)
         return {
             ...entry,
-            stability,
-            rmse,
+            fits,
+            stability: count
+                ? fits.reduce((sum, fit) => sum + fit.stability * fit.count, 0) / count
+                : null,
+            rmse: count ? Math.sqrt(squaredError / count) : null,
         }
     })
 }

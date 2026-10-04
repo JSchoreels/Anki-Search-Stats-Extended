@@ -1,47 +1,39 @@
 import _ from "lodash"
 import { FSRS5_DEFAULT_DECAY } from "ts-fsrs"
+import { ankiDayFromMs, ankiDayToMs } from "./ankiDay"
 import type { BarChart, BarDatum } from "./bar"
 import { totalCalc } from "./barHelpers"
 import { getCardDecay, type CardData, type Revlog } from "./cardData"
+import type { ResolvedFsrsPreset } from "./config"
 import {
     averageDecay,
     type ForgettingCurveDecayModel,
     type ForgettingSample,
 } from "./forgettingCurveData"
-import { elapsedFsrsDays, getFsrs, type FsrsMemoryState } from "./fsrsModel"
-import { selectTsFsrsParams } from "./fsrsParams"
+import { prepareFsrsReplay } from "./fsrsHistory"
+import { elapsedFsrsDays, type FsrsMemoryState } from "./fsrsModel"
+import { selectResolvedFsrsPresetParams, selectTsFsrsParams } from "./fsrsParams"
 import { i18n } from "./i18n"
 type ReplayCard = FsrsMemoryState & { last_review?: Date }
 
 const rollover = SSEother.rollover ?? 0
 export const rollover_ms = rollover * 60 * 60 * 1000
 export const day_ms = 1000 * 60 * 60 * 24
-const half_day_ms = day_ms / 2
 const date_only_re = /^\d{4}-\d{2}-\d{2}$/
 
-const timezone_offset_mins = new Date().getTimezoneOffset()
-const timezone_offset_ms = timezone_offset_mins * 60 * 1000
 export function dayFromMs(ms: number) {
-    return Math.floor((ms - rollover_ms - timezone_offset_ms) / day_ms)
+    return ankiDayFromMs(ms, rollover)
 }
-
 export function dayToMs(day: number) {
-    return day * day_ms + rollover_ms + timezone_offset_ms
+    return ankiDayToMs(day, rollover)
 }
-
 export function dayToDateString(day: number) {
-    return new Date(dayToMs(day) + half_day_ms).toISOString().slice(0, 10)
+    return new Date(day * day_ms).toISOString().slice(0, 10)
 }
-
 export function dayFromDateString(date: string) {
-    if (!date_only_re.test(date)) {
-        return
-    }
-    const ms = Date.parse(`${date}T12:00:00.000Z`)
-    if (!Number.isFinite(ms)) {
-        return
-    }
-    return dayFromMs(ms)
+    if (!date_only_re.test(date)) return
+    const ms = Date.parse(`${date}T00:00:00Z`)
+    if (Number.isFinite(ms) && new Date(ms).toISOString().slice(0, 10) === date) return ms / day_ms
 }
 
 export const today = dayFromMs(Date.now())
@@ -80,92 +72,36 @@ function bucketTimeStats(bucketedSamples: number[][]) {
     return { meanByBucket, medianByBucket }
 }
 
-function averageParams(paramSets: number[][]): number[] | null {
-    if (!paramSets.length) {
-        return null
-    }
-
-    const length = paramSets[0].length
-    if (paramSets.some((params) => params.length !== length)) {
-        return null
-    }
-
-    const sums = new Array<number>(length).fill(0)
-    for (const params of paramSets) {
-        for (let i = 0; i < length; i++) {
-            sums[i] += params[i]
-        }
-    }
-
-    return sums.map((sum) => sum / paramSets.length)
-}
-
-function selectedDeckForgettingCurveModel(): ForgettingCurveDecayModel | null {
-    const selectedDeckId = SSEother.selected_deck_id
-    const deckConfigs = SSEother.deck_configs
-    const deckConfigIds = SSEother.deck_config_ids
-
-    if (selectedDeckId === undefined || selectedDeckId === null || !deckConfigs || !deckConfigIds) {
-        return null
-    }
-
-    const deckConfigId = deckConfigIds[selectedDeckId]
-    if (deckConfigId === undefined) {
-        return null
-    }
-    const config = deckConfigs[deckConfigId]
-    if (!config) {
-        return null
-    }
-
-    return selectTsFsrsParams(config)
-}
-
-function longTermForgettingCurveModelForCards(
+function forgettingCurveModelsForCards(
     cids: Set<number>,
-    id_card_data: Record<number, CardData>
+    cards: Record<number, CardData>,
+    presets: Record<number, ResolvedFsrsPreset>
 ): ForgettingCurveDecayModel {
-    const deckConfigs = SSEother.deck_configs
-    const deckConfigIds = SSEother.deck_config_ids
-    const paramsByLength = new Map<number, number[][]>()
-    const decayValues: number[] = []
-
+    const models: (number | readonly number[])[] = []
+    const bySignature = new Map<string, number>()
+    const cardModels: Record<number, number> = {}
     for (const cid of cids) {
-        const card = id_card_data[cid]
-        if (!card) {
-            continue
+        const card = cards[cid]
+        const preset = presets[cid]
+        const config = card
+            ? SSEother.deck_configs?.[SSEother.deck_config_ids?.[card.odid || card.did]]
+            : undefined
+        const model = preset
+            ? selectResolvedFsrsPresetParams(preset)
+            : config
+              ? selectTsFsrsParams(config)
+              : card
+                ? getCardDecay(card)
+                : FSRS5_DEFAULT_DECAY
+        const signature = JSON.stringify(model)
+        if (!bySignature.has(signature)) {
+            bySignature.set(signature, models.length)
+            models.push(model)
         }
-
-        decayValues.push(getCardDecay(card))
-
-        if (!deckConfigs || !deckConfigIds) {
-            continue
-        }
-
-        const deckConfigId = deckConfigIds[card.odid || card.did]
-        if (deckConfigId === undefined) {
-            continue
-        }
-        const config = deckConfigs[deckConfigId]
-        if (!config) {
-            continue
-        }
-
-        const params = selectTsFsrsParams(config)
-        const group = paramsByLength.get(params.length) ?? []
-        group.push(params)
-        paramsByLength.set(params.length, group)
+        cardModels[cid] = bySignature.get(signature)!
     }
-
-    const dominantParams = Array.from(paramsByLength.values()).sort(
-        (a, b) => b.length - a.length
-    )[0]
-    const averaged = dominantParams ? averageParams(dominantParams) : null
-    if (averaged) {
-        return averaged
-    }
-
-    return decayValues.length > 0 ? averageDecay(decayValues) : FSRS5_DEFAULT_DECAY
+    if (models.length < 2) return models[0] ?? FSRS5_DEFAULT_DECAY
+    return { models, cards: cardModels }
 }
 
 type FSRSReplayStats = {
@@ -184,7 +120,8 @@ type FSRSReplayStats = {
 
 function stabilityAfterReviewsByRevlog(
     revlogData: Revlog[],
-    id_card_data: Record<number, CardData>
+    id_card_data: Record<number, CardData>,
+    presets: Record<number, ResolvedFsrsPreset>
 ): FSRSReplayStats {
     const stabilityByRevlog = new Map<Revlog, number>()
     const timeByRetrievabilitySamples: number[][] = []
@@ -226,37 +163,20 @@ function stabilityAfterReviewsByRevlog(
 
     const fsrsCards: Record<number, ReplayCard> = {}
 
-    for (const revlog of [...revlogData].sort((a, b) => a.id - b.id)) {
-        const cardData = id_card_data[revlog.cid]
-        if (!cardData) {
-            continue
-        }
-        const deckConfigId = deckConfigIds[cardData.odid || cardData.did]
-        if (deckConfigId === undefined) {
-            continue
-        }
-        const config = deckConfigs[deckConfigId]
-        if (!config) {
-            continue
-        }
-
-        const fsrs = getFsrs(config)
+    const sourceForCard = (cid: number) => {
+        const card = id_card_data[cid]
+        return (
+            presets[cid] ?? (card ? deckConfigs[deckConfigIds[card.odid || card.did]] : undefined)
+        )
+    }
+    for (const { review: revlog, model: fsrs, startingState, reset } of prepareFsrsReplay(
+        revlogData,
+        sourceForCard
+    )) {
         const now = new Date(revlog.id)
-        const hasPreviousReview = !!fsrsCards[revlog.cid]
+        if (reset) delete fsrsCards[revlog.cid]
+        if (revlog.ease === 0) continue
         let card = fsrsCards[revlog.cid] ?? { stability: 0, difficulty: 0 }
-
-        if (revlog.factor == 0 && revlog.type == 4 && hasPreviousReview) {
-            card = { stability: 0, difficulty: 0, last_review: card.last_review }
-            fsrsCards[revlog.cid] = card
-        }
-
-        if (revlog.ease == 0) {
-            continue
-        }
-        if (revlog.type == 3 && revlog.factor == 0) {
-            continue
-        }
-
         let memoryState: FsrsMemoryState | null = null
         let elapsed = 0
         if (card.last_review && card.stability > 0) {
@@ -316,7 +236,7 @@ function stabilityAfterReviewsByRevlog(
             }
         }
 
-        const newState = fsrs.nextState(memoryState, elapsed, revlog.ease)
+        const newState = startingState ?? fsrs.nextState(memoryState, elapsed, revlog.ease)
         card = { ...newState, last_review: now }
         fsrsCards[revlog.cid] = card
         stabilityByRevlog.set(revlog, card.stability)
@@ -373,11 +293,12 @@ export function IDify<T extends { id: number }>(array: T[]) {
 export function calculateRevlogStats(
     revlogData: Revlog[],
     cardData: CardData[],
-    end: number = today
+    end: number = today,
+    presets: Record<number, ResolvedFsrsPreset> = {}
 ) {
     console.time("revlog stats")
     let id_card_data = IDify(cardData)
-    const fsrsReplayStats = stabilityAfterReviewsByRevlog(revlogData, id_card_data)
+    const fsrsReplayStats = stabilityAfterReviewsByRevlog(revlogData, id_card_data, presets)
     const stability_after_review = fsrsReplayStats.stabilityByRevlog
 
     function emptyArray<T>(init: T): T[] {
@@ -718,12 +639,19 @@ export function calculateRevlogStats(
     const longTermForgettingCurveCardIds = new Set<number>(
         forgetting_samples.map((sample) => sample.cid)
     )
-    const forgetting_curve_long_term_model =
-        selectedDeckForgettingCurveModel() ??
-        longTermForgettingCurveModelForCards(longTermForgettingCurveCardIds, id_card_data)
+    const forgetting_curve_long_term_model = forgettingCurveModelsForCards(
+        longTermForgettingCurveCardIds,
+        id_card_data,
+        presets
+    )
 
     const forgettingCurveCardIds = new Set<number>(
         [...forgetting_samples, ...forgetting_samples_short].map((sample) => sample.cid)
+    )
+    const forgetting_curve_short_term_model = forgettingCurveModelsForCards(
+        forgettingCurveCardIds,
+        id_card_data,
+        presets
     )
     const decayValues = Array.from(forgettingCurveCardIds)
         .map((cid) => id_card_data[cid])
@@ -768,6 +696,7 @@ export function calculateRevlogStats(
         forgetting_samples_short,
         forgetting_curve_decay,
         forgetting_curve_long_term_model,
+        forgetting_curve_short_term_model,
         time_by_retrievability_mean: retrievabilityTimeStats.meanByBucket,
         time_by_retrievability_median: retrievabilityTimeStats.medianByBucket,
         time_by_stability_mean: stabilityTimeStats.meanByBucket,

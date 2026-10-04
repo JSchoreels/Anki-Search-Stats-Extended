@@ -1,5 +1,6 @@
 import _ from "lodash"
 import { dateDiffInDays } from "ts-fsrs"
+import { ankiDaySnapshotMs } from "./ankiDay"
 import type { LossBar } from "./bar"
 import {
     type CalibrationBootstrapObservation,
@@ -12,6 +13,7 @@ import {
     type Revlog,
 } from "./cardData"
 import type { DeckConfig, ResolvedFsrsPreset } from "./config"
+import { prepareFsrsReplay } from "./fsrsHistory"
 import {
     elapsedFsrsDays,
     type FsrsMemoryState,
@@ -20,9 +22,9 @@ import {
     getFsrs,
     intervalAtRetrievability,
 } from "./fsrsModel"
-import { type Buckets, dayFromMs, emptyBuckets, IDify, rollover_ms, today } from "./revlogGraphs"
+import { type Buckets, dayFromMs, emptyBuckets, IDify, rollover_ms } from "./revlogGraphs"
 export { getFsrs, intervalAtRetrievability } from "./fsrsModel"
-type ReplayCard = FsrsMemoryState & { last_review?: Date }
+type ReplayCard = FsrsMemoryState & { last_review?: Date; last_review_day?: number }
 
 export interface LossBin {
     real: number
@@ -319,7 +321,8 @@ export async function getMemorisedDays(
     leech_elapsed_threshold = 2,
     leech_min_reviews = 2,
     fsrs_presets_by_card: Record<number, ResolvedFsrsPreset> = {},
-    resolveS90Batch?: S90BatchResolver
+    resolveS90Batch?: S90BatchResolver,
+    snapshotNow = Date.now()
 ) {
     console.log("ts-fsrs upstream models (FSRS-6 / dual-trace FSRS-7)")
 
@@ -332,6 +335,13 @@ export async function getMemorisedDays(
     let fsrsCards: Record<number, ReplayCard> = {}
     let cards_by_id = IDify(cards)
 
+    const snapshotToday = dayFromMs(snapshotNow)
+    const snapshotTimes = new Map<number, number>()
+    function snapshotTime(day: number) {
+        if (!snapshotTimes.has(day))
+            snapshotTimes.set(day, ankiDaySnapshotMs(day, rollover_ms / 3600000, snapshotNow))
+        return snapshotTimes.get(day)!
+    }
     let retrievabilityDays: number[] = []
     let totalCards: number[] = []
     let noteRetrievabilityDays: number[] = []
@@ -381,7 +391,11 @@ export async function getMemorisedDays(
         cid: number
     ) {
         for (let day = from; day < to; day++) {
-            const retrievability = fsrs.retrievability(state, day - from)
+            const elapsed =
+                fsrs.version === "seven"
+                    ? Math.max(0, (snapshotTime(day) - card.last_review!.getTime()) / 86400000)
+                    : day - from
+            const retrievability = fsrs.retrievability(state, elapsed)
             const card_count = cardCounts[cards_by_id[cid].nid]
             retrievabilityDays[day] = (retrievabilityDays[day] || 0) + retrievability
             totalCards[day] = (totalCards[day] | 0) + 1
@@ -411,7 +425,7 @@ export async function getMemorisedDays(
     const last_memory_state: Record<number, FsrsMemoryState> = {}
     let s90_by_key = new Map<string, number>()
     let current_card_s90_by_cid = new Map<number, number>()
-    let s90_events_by_day = new Map<number, { card_id: number; key: string }[]>()
+    let s90_events_by_day = new Map<number, { card_id: number; key: string | null }[]>()
     let s90_request_items: S90BatchItem[] = []
     let s90_request_index_by_key = new Map<string, number>()
     let s90_dedup_total = 0
@@ -427,15 +441,21 @@ export async function getMemorisedDays(
         }
     }
 
-    function s90SourceKey(cid: number) {
+    const s90SourceKeys = new Map<number, string>()
+    function uncachedS90SourceKey(cid: number) {
         const source = card_fsrs_source(cid)
         if (!source) {
             return `card:${cid}`
         }
         if (Array.isArray((source as ResolvedFsrsPreset).params)) {
-            return `preset:${(source as ResolvedFsrsPreset).id}`
+            return `params:${getFsrs(source).weights.join(",")}`
         }
         return `deck:${(source as DeckConfig).id}`
+    }
+
+    function s90SourceKey(cid: number) {
+        if (!s90SourceKeys.has(cid)) s90SourceKeys.set(cid, uncachedS90SourceKey(cid))
+        return s90SourceKeys.get(cid)!
     }
 
     function queueS90Request(cardId: number, state: FsrsMemoryState) {
@@ -532,50 +552,39 @@ export async function getMemorisedDays(
     let time_by_difficulty_samples: number[][] = []
     for (const cid of uniqueCids) probabilities[cid] = [1]
 
-    // let log: any[] = []
-    for (const revlog of revlogs) {
-        const fsrsSource = card_fsrs_source(revlog.cid)
-        if (!fsrsSource) {
-            continue
-        }
-
+    const replay = prepareFsrsReplay(revlogs, card_fsrs_source)
+    for (const { review: revlog, model: fsrs, startingState, reset } of replay) {
         const grade = revlog.ease
-        const new_card = !fsrsCards[revlog.cid]
         const now = new Date(revlog.id)
-        const fsrs = getFsrs(fsrsSource)
-        let card = fsrsCards[revlog.cid] ?? { stability: 0, difficulty: 0 }
         const revlogDay = dayFromMs(revlog.id)
-
-        if (review_days.length === 0 || review_days[review_days.length - 1] !== revlogDay) {
+        if (revlogDay > snapshotToday || revlog.id > snapshotNow) continue
+        let card = fsrsCards[revlog.cid] ?? { stability: 0, difficulty: 0 }
+        if (review_days.length === 0 || review_days[review_days.length - 1] !== revlogDay)
             review_days.push(revlogDay)
-        }
-
-        // on forget
-        if (revlog.factor == 0 && revlog.type == 4 && !new_card) {
-            card = { stability: 0, difficulty: 0, last_review: card.last_review }
-            fsrsCards[revlog.cid] = card
-            probabilities[revlog.cid] = [1]
-        }
-        // set due date or reschedule
-        if (grade == 0) {
-            continue
-        }
-        // cram
-        if (revlog.type == 3 && revlog.factor == 0) {
-            continue
-        }
-        if (last_stability[revlog.cid]) {
-            const previous = dayFromMs(card.last_review!.getTime())
+        if (last_memory_state[revlog.cid] && card.last_review) {
             forgetting_curve(
                 fsrs,
                 last_memory_state[revlog.cid],
-                previous,
+                card.last_review_day!,
                 revlogDay,
                 card,
                 revlog.cid
             )
         }
-
+        if (reset) {
+            delete fsrsCards[revlog.cid]
+            delete last_memory_state[revlog.cid]
+            delete last_stability[revlog.cid]
+            card = { stability: 0, difficulty: 0 }
+            probabilities[revlog.cid] = [1]
+        }
+        if (grade === 0) {
+            const events = s90_events_by_day.get(revlogDay) ?? []
+            events.push({ card_id: revlog.cid, key: null })
+            s90_events_by_day.set(revlogDay, events)
+            continue
+        }
+        const new_card = !fsrsCards[revlog.cid]
         let memoryState: FsrsMemoryState | null = null
         let elapsed = 0
         if (card.last_review && card.stability > 0) {
@@ -691,8 +700,8 @@ export async function getMemorisedDays(
 
             today_so_far += 1
         }
-        const newState = fsrs.nextState(memoryState, elapsed, grade)
-        card = { ...newState, last_review: now }
+        const newState = startingState ?? fsrs.nextState(memoryState, elapsed, grade)
+        card = { ...newState, last_review: now, last_review_day: revlogDay }
         last_memory_state[revlog.cid] = newState
         last_stability[revlog.cid] = card.stability // To prevent "forget" affecting the forgetting curve
         const s90_key = queueS90Request(revlog.cid, newState)
@@ -744,11 +753,14 @@ export async function getMemorisedDays(
             if (previous_key) {
                 incrementCount(s90_count_by_key, previous_key, -1)
             }
-            s90_key_by_card.set(event.card_id, event.key)
-            incrementCount(s90_count_by_key, event.key, 1)
+            if (event.key === null) s90_key_by_card.delete(event.card_id)
+            else {
+                s90_key_by_card.set(event.card_id, event.key)
+                incrementCount(s90_count_by_key, event.key, 1)
+            }
         }
         const stats = dayStatsFromS90Counts(s90_count_by_key, s90_key_by_card.size)
-        const nextDay = review_days[i + 1] ?? today + 1
+        const nextDay = review_days[i + 1] ?? snapshotToday + 1
         for (let fillDay = day; fillDay < nextDay; fillDay++) {
             day_medians[fillDay] = stats.median
             day_means[fillDay] = stats.mean
@@ -770,13 +782,20 @@ export async function getMemorisedDays(
 
     for (const [cid, card] of Object.entries(fsrsCards)) {
         const num_cid = +cid
-        const previous = dayFromMs(card.last_review!.getTime())
+        const previous = card.last_review_day!
         const source = card_fsrs_source(num_cid)
         if (!source) {
             continue
         }
         const fsrs = getFsrs(source)
-        forgetting_curve(fsrs, last_memory_state[num_cid], previous, today + 1, card, num_cid)
+        forgetting_curve(
+            fsrs,
+            last_memory_state[num_cid],
+            previous,
+            snapshotToday + 1,
+            card,
+            num_cid
+        )
         const actual = getFsrsInternalStabilityFromCard(cards_by_id[num_cid])
         if (actual !== undefined) {
             comparedStabilityCount += 1

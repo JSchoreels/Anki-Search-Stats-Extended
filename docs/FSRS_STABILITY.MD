@@ -58,3 +58,27 @@ Historical average S90, median S90, and young-card ratio apply the final review
 day's state updates and carry them through today. This also covers searches
 with only one review day; the latest point must not disappear merely because
 there is no subsequent review day.
+
+## Daily FSRS snapshots and missing history
+
+Daily Memorised predictions use the final scheduling-affecting state for each
+Anki day. Historical snapshots are one millisecond before the following local
+rollover; today's snapshot uses one timestamp captured when replay starts.
+FSRS-7 evaluates fractional elapsed days from the actual retained review
+timestamp. Older models retain their whole-Anki-day update policy. Local day
+boundaries are constructed separately for each calendar date, including DST.
+
+Replay resolves the full preset for each card, including historical retention
+and the UTC-midnight "ignore reviews before" cutoff. A complete learning cycle
+starts from its first learning grade. Incomplete cycles start with Anki's
+interval/ease bridge using the first retained interday grade's **post-review**
+interval. That grade is represented by the bridge and is not applied a second
+time. FSRS-encoded factors restore difficulty; FSRS-7 scales both traces while
+preserving their ratio. Cram and manual scheduling entries do not update the
+state. Reset events close the previous state until another eligible grade.
+Earlier learning cycles remain available for historical graphs.
+
+The bridge is an estimate, matching native Anki's behavior; deleted history and
+past preset changes cannot be reconstructed exactly. Preset/state deduplication
+must include the complete parameter values, since cards sharing one preset id
+can have distinct resolved overrides.

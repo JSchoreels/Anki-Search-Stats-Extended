@@ -16,7 +16,6 @@ import {
     getRwkvReviewRetrievability,
     saveConfigValue,
     startRwkvMemorisedHistory,
-    uniqueRevlogCids,
     type CardData,
     type Revlog,
 } from "./search"
@@ -127,6 +126,24 @@ export let card_data: Readable<CardData[] | null> = derived([cids], ([$cids], se
     }
 })
 
+// Shared by current-state heatmaps, preset-specific curves and historical replay.
+const needsFsrsData = derived(
+    [showRevlogStats, shownCategories],
+    ([$showRevlogs, $categories]) =>
+        $showRevlogs || ($categories.misc !== false && $categories.misc !== "removed")
+)
+export const fsrsPresetData = derived(
+    [card_data, needsFsrsData],
+    (
+        [$cards, $needed],
+        set: (value: Awaited<ReturnType<typeof getFsrsPresetData>> | null) => void
+    ) => {
+        set(null)
+        if ($cards && $needed)
+            return latestResult(set, () => getFsrsPresetData($cards.map((card) => card.id)))
+    }
+)
+
 export let revlogs: Readable<Revlog[] | null> = derived(
     [cids, showRevlogStats, searchLimit],
     ([$cids, $showRevlogStats, $searchLimit], set) => {
@@ -143,24 +160,32 @@ export let cardDataStats = derived(
         calculateCardDataPies($card_data ?? [], $include_suspended, $zero_inclusive)
 )
 export const revlogStats = writable<ReturnType<typeof calculateRevlogStats> | null>(null)
-derived([revlogs, card_data], ([$revlogs, $card_data], set: typeof revlogStats.set) => {
-    set(null)
-    if ($revlogs && $card_data) {
-        return latestResult(set, (signal) => runStatsTask("revlog", [$revlogs, $card_data], signal))
+derived(
+    [revlogs, card_data, fsrsPresetData],
+    ([$revlogs, $card_data, $presets], set: typeof revlogStats.set) => {
+        set(null)
+        if ($revlogs && $card_data && $presets) {
+            return latestResult(set, (signal) =>
+                runStatsTask(
+                    "revlog",
+                    [$revlogs, $card_data, today, $presets.presetsByCard],
+                    signal
+                )
+            )
+        }
     }
-}).subscribe(revlogStats.set)
+).subscribe(revlogStats.set)
 export let last_forget = derived([revlogStats], ([$revlogStats]) => $revlogStats?.last_forget)
 export let memorised_stats = writable<Awaited<ReturnType<typeof getMemorisedDays>> | null>()
 derived(
-    [card_data, revlogs, showFsrsStats, last_forget],
+    [card_data, revlogs, showFsrsStats, last_forget, fsrsPresetData],
     (
-        [$card_data, $revlogs, $showFsrsStats, $last_forget],
+        [$card_data, $revlogs, $showFsrsStats, $last_forget, $presets],
         set: (value: Awaited<ReturnType<typeof getMemorisedDays>> | null) => void
     ) => {
         set(null)
-        if ($revlogs && $card_data && $showFsrsStats && $last_forget) {
+        if ($revlogs && $card_data && $showFsrsStats && $last_forget && $presets) {
             return latestResult(set, async (signal) => {
-                const fsrsPresets = await getFsrsPresetData(uniqueRevlogCids($revlogs))
                 return runStatsTask(
                     "memorised",
                     [
@@ -171,7 +196,7 @@ derived(
                         $last_forget,
                         2,
                         2,
-                        fsrsPresets,
+                        $presets.presetsByCard,
                     ],
                     signal
                 )
