@@ -213,7 +213,7 @@ test("First long-term forgetting curve uses FSRS7 decay parameters", () => {
     }
 })
 
-test("First long-term forgetting curve uses selected deck preset across subdecks", () => {
+test("First long-term forgetting curve uses each subdeck preset", () => {
     const previousSSEother = global.SSEother
     try {
         global.SSEother = {
@@ -261,10 +261,10 @@ test("First long-term forgetting curve uses selected deck preset across subdecks
         expect(Array.isArray(stats.forgetting_curve_long_term_model)).toBe(true)
         if (Array.isArray(stats.forgetting_curve_long_term_model)) {
             expect(stats.forgetting_curve_long_term_model.length).toBe(34)
-            expect(stats.forgetting_curve_long_term_model[27]).toBeCloseTo(fsrs7Params[27], 6)
-            expect(stats.forgetting_curve_long_term_model[28]).toBeCloseTo(fsrs7Params[28], 6)
+            expect(stats.forgetting_curve_long_term_model[27]).toBeCloseTo(fsrs7ParamsAlt[27], 6)
+            expect(stats.forgetting_curve_long_term_model[28]).toBeCloseTo(fsrs7ParamsAlt[28], 6)
             expect(stats.forgetting_curve_long_term_model[27]).not.toBeCloseTo(
-                fsrs7ParamsAlt[27],
+                fsrs7Params[27],
                 6
             )
         }

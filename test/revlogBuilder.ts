@@ -27,7 +27,7 @@ export class RevlogBuilder {
             cid: this.state.cid,
             ivl,
             ease,
-            type: ivl > 0 ? 1 : this.state.type == 0 || this.state.type == 4 ? 0 : ivl > 0 ? 1 : ivl == 0 ? 4 : 2,
+            type: ease > 0 && (this.state.ivl === 0 || this.state.type === 4) ? 0 : ivl > 0 ? 1 : this.state.type == 0 || this.state.type == 4 ? 0 : ivl > 0 ? 1 : ivl == 0 ? 4 : 2,
             time: time_spent,
             factor: ivl > 0 ? 200 : 0,
             lastIvl: this.state.ivl

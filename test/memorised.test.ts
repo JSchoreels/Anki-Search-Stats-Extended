@@ -7,6 +7,7 @@ import {
     intervalAtRetrievability,
     type S90BatchResolver,
 } from "../src/ts/MemorisedBar"
+import { ankiDaySnapshotMs } from "../src/ts/ankiDay"
 import { day_ms, dayFromMs, today } from "../src/ts/revlogGraphs"
 import { Revlog } from "../src/ts/search"
 import { RevlogBuilder } from "./revlogBuilder"
@@ -261,7 +262,11 @@ test("FSRS7 params are accepted in memorised graph pipeline", async () => {
         .retrievabilityDays
 
     expect(memorised.length).not.toBe(0)
-    expect(memorised[0]).toBeCloseTo(0.99999, 5)
+    const fsrs = getFsrsForParams(weights7)
+    let state = fsrs.nextState(null, 0, 3)
+    for (let i = 1; i < revlogs.length; i++) state = fsrs.nextState(state, (revlogs[i].id - revlogs[i-1].id) / day_ms, revlogs[i].ease)
+    const elapsed = (ankiDaySnapshotMs(0, 0, Date.now()) - revlogs[revlogs.length - 1].id) / day_ms
+    expect(memorised[0]).toBeCloseTo(fsrs.retrievability(state, elapsed), 8)
 })
 
 test("Legacy preview FSRS7 params are accepted in memorised graph pipeline", async () => {

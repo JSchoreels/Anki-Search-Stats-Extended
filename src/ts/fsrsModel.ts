@@ -1,7 +1,7 @@
-import { dateDiffInDays } from "ts-fsrs"
 import { fsrs as legacyPreviewFsrs } from "ts-fsrs-legacy-preview"
 import { clipFSRS6Parameters, FSRS6Model, migrateFSRS6Parameters } from "ts-fsrs/models/fsrs-6"
 import { FSRS7Model, type FSRS7State } from "ts-fsrs/models/fsrs-7"
+import { ankiDayFromMs } from "./ankiDay"
 import type { CardExtraData } from "./cardData"
 import { getFsrsInternalStabilityFromExtraData } from "./cardData"
 import type { DeckConfig, ResolvedFsrsPreset } from "./config"
@@ -129,11 +129,11 @@ export function elapsedFsrsDays(model: FsrsModel, previous: Date, now: Date, rol
     if (model.version === "seven") {
         return Math.max(0, (now.getTime() - previous.getTime()) / 86400000)
     }
-    const oldDate = new Date(previous.getTime() - rolloverMs)
-    oldDate.setHours(0, 0, 0, 0)
-    const newDate = new Date(now.getTime() - rolloverMs)
-    newDate.setHours(0, 0, 0, 0)
-    return dateDiffInDays(oldDate, newDate)
+    return Math.max(
+        0,
+        ankiDayFromMs(now.getTime(), rolloverMs / 3600000) -
+            ankiDayFromMs(previous.getTime(), rolloverMs / 3600000)
+    )
 }
 
 export function memoryStateFromCardData(

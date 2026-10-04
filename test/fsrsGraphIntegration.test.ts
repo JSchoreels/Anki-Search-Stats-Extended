@@ -55,7 +55,7 @@ function population(reviews: Revlog[]) {
 test("Memorised and rating replay preserve the fast trace after a same-day review", async () => {
     const start = new Date(2026, 8, 1, 12).getTime()
     const reviews = [
-        review(start, 1, 1000),
+        review(start, 1, 1000, 0),
         review(start + 600000, 3, 2000),
         review(start + 87000000, 3, 5000),
     ]
@@ -78,10 +78,10 @@ test("Memorised and rating replay preserve the fast trace after a same-day revie
 test("a manual reset rebuilds both traces from the next rated review", async () => {
     const start = new Date(2026, 8, 1, 12).getTime()
     const reviews = [
-        review(start, 1, 1000),
+        review(start, 1, 1000, 0),
         review(start + 600000, 3, 2000),
         review(start + 86400000, 0, 0, 4),
-        review(start + 86401000, 4, 3000),
+        review(start + 86401000, 4, 3000, 0),
         review(start + 172801000, 3, 5000),
     ]
     const { cards, history } = population(reviews)
@@ -96,7 +96,7 @@ test("a manual reset rebuilds both traces from the next rated review", async () 
 
 test("S90 deduplication keeps states in the same slow-stability bucket with different difficulty", async () => {
     const start = new Date(2026, 8, 1, 12).getTime()
-    const reviews = [review(start, 1, 1000), review(start + 1, 3, 2000)]
+    const reviews = [review(start, 1, 1000, 0), review(start + 1, 3, 2000)]
     const resolve = jest.fn(async (items) =>
         items.map((item: any) => core.next_interval(item, 0.9))
     )
@@ -109,7 +109,7 @@ test("S90 deduplication keeps states in the same slow-stability bucket with diff
 
 test("current-card heatmap and ease gain use the stored complete state", () => {
     const state = { stability: 10, stabilityFast: 2, difficulty: 8 }
-    const dataset = create_card_sr_dataset([card], 100)!
+    const dataset = create_card_sr_dataset([card], { 1: core.curve(10, state).retrievability })!
     expect(dataset.card_sr_data[0].s).toBe(4)
     expect(dataset.card_sr_data[0].r).toBeCloseTo(core.curve(10, state).retrievability, 10)
     const interval = core.next_interval(state, 0.9)
@@ -118,6 +118,6 @@ test("current-card heatmap and ease gain use the stored complete state", () => {
         10
     )
     const incomplete = { ...card, data: JSON.stringify({ s: 4, s_int: 10, d: 8, dr: 0.9 }) }
-    expect(create_card_sr_dataset([incomplete], 100)).toBeNull()
+    expect(create_card_sr_dataset([incomplete], {})).toBeNull()
     expect(calculateEaseFactors([incomplete], { 1: config }, { 1: 1 })).toEqual([])
 })

@@ -9,7 +9,7 @@ import { CardType } from "../anki/ts/lib/tslib/cards"
 import type { CardData } from "../src/ts/search"
 import { calculate_sr_heatmap_data, create_card_sr_dataset } from "../src/ts/srHeatmap"
 
-test("Normal card uses due field", () => {
+test("Normal card uses native retrievability", () => {
     const cards: CardData[] = [
         {
             id: 1,
@@ -33,13 +33,13 @@ test("Normal card uses due field", () => {
         },
     ]
 
-    const dataset = create_card_sr_dataset(cards, 100)
+    const dataset = create_card_sr_dataset(cards, { 1: 0.73 })
     expect(dataset).not.toBeNull()
     expect(dataset!.card_sr_data.length).toBe(1)
     expect(dataset!.card_sr_data[0].s).toBe(5)
 })
 
-test("Retrievability uses internal stability when stored S90 differs", () => {
+test("Native retrievability is independent of due date and stored S90", () => {
     const cards: CardData[] = [
         {
             id: 1,
@@ -63,13 +63,13 @@ test("Retrievability uses internal stability when stored S90 differs", () => {
         },
     ]
 
-    const dataset = create_card_sr_dataset(cards, 100)
+    const dataset = create_card_sr_dataset(cards, { 1: 0.73 })
     expect(dataset).not.toBeNull()
     expect(dataset!.card_sr_data[0].s).toBe(5)
-    expect(dataset!.card_sr_data[0].r).not.toBeCloseTo(1)
+    expect(dataset!.card_sr_data[0].r).toBe(0.73)
 })
 
-test("Filtered card uses odue field", () => {
+test("Filtered card uses the same native current retrievability", () => {
     const cards: CardData[] = [
         {
             id: 1,
@@ -93,7 +93,7 @@ test("Filtered card uses odue field", () => {
         },
     ]
 
-    const dataset = create_card_sr_dataset(cards, 100)
+    const dataset = create_card_sr_dataset(cards, { 1: 0.73 })
     expect(dataset).not.toBeNull()
     expect(dataset!.card_sr_data.length).toBe(1)
 })
@@ -122,7 +122,7 @@ test("Skips cards with invalid data", () => {
         },
     ]
 
-    const dataset = create_card_sr_dataset(cards, 100)
+    const dataset = create_card_sr_dataset(cards, { 1: 0.73 })
     expect(dataset).toBeNull()
 })
 
@@ -148,3 +148,12 @@ test.each([false, true])(
         expect(heatmap.y_dim.end_value).toBeGreaterThan(heatmap.y_dim.start_value)
     }
 )
+
+test("missing or invalid native predictions are excluded, without estimating from due", () => {
+    const card = { id: 1, type: 2, due: 100, ivl: 10, data: '{"s":5}' } as CardData
+    expect(create_card_sr_dataset([card], null)).toBeNull()
+    expect(create_card_sr_dataset([card], {})).toBeNull()
+    expect(create_card_sr_dataset([card], { 1: NaN })).toBeNull()
+    expect(create_card_sr_dataset([card], { 1: 1.01 })).toBeNull()
+    expect(create_card_sr_dataset([card], { 1: 0 })!.card_sr_data).toEqual([{ s: 5, r: 0 }])
+})
