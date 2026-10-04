@@ -1,13 +1,21 @@
 import _ from "lodash"
 import { DeltaIfy } from "../src/ts/Candlestick"
+import { calcTimePerReview } from "../src/ts/dayTimings"
 import {
     averageDecay,
     buildForgettingCurve,
     computeStabilityForSeries,
     fitStability,
 } from "../src/ts/forgettingCurveData"
-import { calculateRevlogStats, day_ms, dayFromMs } from "../src/ts/revlogGraphs"
+import {
+    calculateRevlogStats,
+    calendarDayFromMs,
+    day_ms,
+    dayFromMs,
+    easeBarChart,
+} from "../src/ts/revlogGraphs"
 import type { Revlog } from "../src/ts/search"
+import { aggregateTimeBuckets } from "../src/ts/timeBucketStats"
 import { RevlogBuilder } from "./revlogBuilder"
 
 const burden_revlog_builder1 = new RevlogBuilder()
@@ -318,6 +326,7 @@ test("First short-term forgetting curve uses FSRS7 decay parameters", () => {
             {
                 minStability: 0.01,
                 maxStability: 1440,
+                daysPerUnit: 1 / 1440,
             }
         )
         const series = shortSeriesWithStability.find((entry) => entry.rating === 3)
@@ -548,4 +557,83 @@ test("Active card maturity uses stability when available", () => {
     } finally {
         global.SSEother = previousSSEother
     }
+})
+
+test("rated zero-time reviews count consistently and manual entries do not count as ratings", () => {
+    const builder = new RevlogBuilder()
+    const revlogs = [
+        builder.review(1, 3, 0),
+        builder.review(2, 1, 1000),
+        builder.review(2, 0, 1000),
+    ] as Revlog[]
+    const day = dayFromMs(revlogs[0].id)
+    const stats = calculateRevlogStats(revlogs, [builder.card()] as any, builder.last_review)
+    const sumRatings = (values: number[][]) => values.reduce((sum, row) => sum + _.sum(row), 0)
+
+    expect(sumRatings(stats.day_ease.all)).toBe(2)
+    expect(sumRatings(stats.day_ease.learn) + sumRatings(stats.day_ease.not_learn)).toBe(2)
+    expect(sumRatings(stats.fatigue_ease.all)).toBe(2)
+    expect(stats.fatigue_ease.all[0]).toEqual([1, 0, 1, 0])
+    expect(sumRatings(stats.interval_ease)).toBe(2)
+    expect(sumRatings(stats.time_ease_seconds.all)).toBe(2)
+    expect(stats.day_ease.all[day]).toEqual([0, 0, 1, 0])
+    expect(sumRatings(stats.day_filtered_review_hours)).toBe(2)
+    expect(sumRatings(stats.day_review_hours)).toBe(2)
+})
+
+test("empty normalized rating buckets have finite zero values", () => {
+    const bins: number[][] = []
+    bins[2] = [0, 0, 0, 0]
+    bins[3] = [1, 1, 2, 0]
+    const graph = easeBarChart(bins, 0, true)
+    expect(graph.data[0].values).toEqual([0, 0, 0, 0])
+    expect(graph.data[2].values).toEqual([0, 0, 0, 0])
+    expect(graph.normalise).toBe(true)
+    expect(graph.data[3].values).toEqual([0, 2, 1, 1])
+})
+
+test("wide time buckets compute statistics from every review, including uneven populations", () => {
+    const samples = [Array(100).fill(10), [100], [], [20, 30]]
+    expect(aggregateTimeBuckets(samples, 0, 2, "mean")).toEqual([1100 / 101])
+    expect(aggregateTimeBuckets(samples, 0, 2, "median")).toEqual([10])
+    expect(aggregateTimeBuckets(samples, 2, 2, "mean")).toEqual([25])
+    expect(aggregateTimeBuckets(samples, 2, 2, "median")).toEqual([25])
+    expect(aggregateTimeBuckets(samples, 2, 1, "mean")).toEqual([0])
+    expect(aggregateTimeBuckets(samples, 8, 2, "median")).toEqual([0])
+    expect(aggregateTimeBuckets(samples, -3, 2, "mean")).toEqual([0])
+    expect(aggregateTimeBuckets(samples, -1, 2, "mean")).toEqual([10])
+    expect(samples[1]).toEqual([100])
+})
+
+test("review speed skips days without reviews instead of dividing by zero", () => {
+    const reviews = (learn: number) => ({ learn, mature: 0, young: 0, relearn: 0, filtered: 0 })
+    const values = calcTimePerReview({
+        count: { "0": reviews(0), "-1": reviews(2) },
+        time: { "0": reviews(0), "-1": reviews(6000) },
+    } as any)
+    expect(values.filter((value) => value !== undefined)).toEqual([3])
+})
+
+test("hourly review counts use the local calendar date and local hour together", () => {
+    const beforeMidnight = new Date(2026, 9, 3, 23, 59).getTime()
+    const afterMidnight = new Date(2026, 9, 4, 0, 1).getTime()
+    const revlogs = [beforeMidnight, afterMidnight].map((id) => ({
+        id,
+        cid: 1,
+        ease: 3,
+        ivl: 1,
+        lastIvl: 1,
+        factor: 200,
+        time: 0,
+        type: 1,
+    })) as Revlog[]
+    const stats = calculateRevlogStats(
+        revlogs,
+        [{ id: 1, ivl: 1 }] as any,
+        dayFromMs(afterMidnight)
+    )
+    expect(calendarDayFromMs(beforeMidnight)).toBe(Date.UTC(2026, 9, 3) / day_ms)
+    expect(calendarDayFromMs(afterMidnight)).toBe(Date.UTC(2026, 9, 4) / day_ms)
+    expect(stats.day_review_hours[calendarDayFromMs(beforeMidnight)][23]).toBe(1)
+    expect(stats.day_review_hours[calendarDayFromMs(afterMidnight)][0]).toBe(1)
 })

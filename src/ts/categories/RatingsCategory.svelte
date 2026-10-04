@@ -9,7 +9,7 @@
     import { binSize, scroll, searchLimit, revlogStats } from "../stores"
     import { today, easeBarChart, type RevlogBuckets } from "../revlogGraphs"
     import _ from "lodash"
-    import { retention_trend } from "../trend"
+    import { formatRetrievabilityAxis } from "../retrievabilityAxis"
 
     $: limit = -1 - $searchLimit
     let normalize_ease = false
@@ -22,6 +22,8 @@
     let stabilityBinSize = 2
     let repetitionsBinSize = 1
     let difficultyBinSize = 1
+
+    let retention_trend = (values: number[]) => (_.sum(values) == 0 ? 0 : 1 - values[3])
 
     function retrievabilityBucketLabeler(label: string, width = 1) {
         const raw = Number(label)
@@ -48,7 +50,7 @@
         return i18n("difficulty-of", { value })
     }
 
-    $: gradeByRetrievabilitySeries = (() => {
+    $: gradeByRetrievabilityBuckets = (() => {
         if (retrievabilityExcludeSameDay && gradeSuccessOnly) {
             return $revlogStats?.grade_by_retrievability_success_only_exclude_same_day ?? []
         }
@@ -60,6 +62,11 @@
         }
         return $revlogStats?.grade_by_retrievability ?? []
     })()
+
+    $: gradeByRetrievabilitySeries = Array.from(
+        { length: 100 },
+        (_, bucket) => gradeByRetrievabilityBuckets[bucket] ?? [0, 0, 0, 0]
+    )
 
     $: gradeByStabilitySeries = gradeSuccessOnly
         ? ($revlogStats?.grade_by_stability_success_only ?? [])
@@ -198,6 +205,7 @@
                 normalize_ease,
                 retrievabilityBucketLabeler
             )}
+            extraRender={formatRetrievabilityAxis}
             average={normalize_ease}
             bind:binSize={retrievabilityBinSize}
         />

@@ -141,7 +141,7 @@ This covers FSRS Dynamic Preset Selection rules from Anki's `fsrsPresetOverlay`.
 If no resolved preset is provided, the graph resolves the deck config from each
 card's own deck id, or `odid` for filtered-deck cards.
 
-Deck-config fallback selection order:
+The selected `fsrsVersion` is used first when its parameters are usable. Otherwise, deck-config fallback selection order is:
 
 1. `fsrsParams7`
 2. `fsrsParams6`
@@ -150,12 +150,12 @@ Deck-config fallback selection order:
 5. `fsrsWeights`
 6. `ts-fsrs` default parameters
 
-Accepted parameter lengths are `17`, `19`, `21`, and `34`.
+Accepted parameter lengths are `17`, `19`, `21`, `34`, and the persisted legacy preview layout `35`.
 
 Dynamic Desired Retention fields are carried with resolved presets so the graph
 data path stays aligned with Anki's current preset shape. Calibration and
 Memorised retrievability predictions use FSRS params and memory state; desired
-retention does not directly enter `forgetting_curve()`.
+retention does not directly enter the model's retrievability calculation.
 
 ## Calibration Source Toggle
 
@@ -396,5 +396,9 @@ behavior.
 
 ## FSRS7 Support
 
-- This addon is wired to a local `ts-fsrs` fork that includes FSRS7 (34-parameter) support.
-- FSRS7 parameter arrays from Anki (`fsrsParams7` length `34`) are now consumed directly by graph calculations.
+- `ts-fsrs` is pinned to upstream `6.0.0-beta.13`. The shared model selection in `src/ts/fsrsModel.ts` uses upstream `FSRS7Model` for 34-weight presets.
+- FSRS-7 replay preserves internal slow stability, fast stability, and difficulty after every review. Review predictions and state transitions use actual elapsed milliseconds converted to fractional days, including same-day reviews.
+- Manual memory resets clear both traces before the next rated review. Replay remains a local graph calculation; it does not rewrite review history, current card data, or due dates. Existing cached Anki predictions retain priority over replayed calibration values.
+- FSRS-4/5/6 presets keep the existing 17/19-to-21 parameter migration and collection-rollover day policy through upstream `FSRS6Model`. Original 17/19-weight layouts are clipped before migration; the zero short-term weights inserted by migration are preserved.
+- The separately named `ts-fsrs-legacy-preview` dependency retains the checked-in vendored implementation solely for existing 35-weight preview presets. Those weights describe a different model and are never truncated or interpreted as final FSRS-7.
+- All models are bundled into both browser and worker JavaScript. Anki needs no separately installed JavaScript dependencies.

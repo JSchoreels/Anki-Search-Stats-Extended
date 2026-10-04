@@ -39,3 +39,15 @@ For Rating Distribution by Retrievability, UI toggles can filter buckets to:
 For Rating Distribution by Stability/Repetitions/Difficulty, UI can filter buckets to:
 
 - include only successful answers (`ease > 1`, i.e. Hard/Good/Easy)
+
+## Counts and Ranges
+
+Daily, interval, duration, fatigue, and hourly rating counts include every
+recorded rating, even when its answer time is zero. Manual entries with no
+rating still update scheduling history but do not contribute rating counts,
+answer-time totals, or fatigue positions. The All count equals the sum of
+Learn and Young+Mature counts for the same review selection.
+
+Empty normalized buckets are zero, rather than NaN. Retrievability plots keep
+all 100 one-percent source buckets and display percentage labels; missing high
+buckets must not change the meaning of an earlier bucket.

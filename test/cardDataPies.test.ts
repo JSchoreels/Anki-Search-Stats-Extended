@@ -1,7 +1,10 @@
-import { forgetting_curve, fsrs, FSRS5_DEFAULT_DECAY } from "ts-fsrs"
+import { FSRS5_DEFAULT_DECAY } from "ts-fsrs"
+import { forgettingCurve as forgetting_curve } from "ts-fsrs/models/fsrs-6"
+import { curve, FSRS7_DEFAULT_WEIGHTS } from "ts-fsrs/models/fsrs-7"
 import { calculateCardDataPies } from "../src/ts/CardDataPies"
+import { dueDayOffset } from "../src/ts/cardDue"
 import type { DeckConfig } from "../src/ts/config"
-import { paramsForTsFsrs } from "../src/ts/fsrsParams"
+import { day_ms, dayFromMs, today } from "../src/ts/revlogGraphs"
 import type { CardData } from "../src/ts/search"
 
 const weights6 = [
@@ -9,11 +12,8 @@ const weights6 = [
     1.9395, 0.11, 0.29605, 2.2698, 0.2315, 2.9898, 0.51655, 0.6621, 0.1, 0.5,
 ]
 
-const weights7 = [
-    0.041, 2.4175, 4.1283, 11.9709, 5.6385, 0.4468, 3.262, 2.3054, 0.1688, 1.3325, 0.3524, 0.0049,
-    0.7503, 0.0896, 0.6625, 1.3, 0.882, 0.3072, 3.5875, 0.303, 0.0107, 0.2279, 2.6413, 0.5594, 1.3,
-    2.5, 1.0, 0.0723, 0.1634, 0.5, 0.9555, 0.2245, 0.6232, 0.1362,
-]
+const weights7 = [...FSRS7_DEFAULT_WEIGHTS]
+const state7 = { stability: 12, stabilityFast: 3, difficulty: 8 }
 
 function deckConfig(params: Partial<DeckConfig>): DeckConfig {
     return {
@@ -47,7 +47,7 @@ function reviewCard(params: Partial<CardData> = {}): CardData {
         odue: 0,
         odid: 0,
         flags: 0,
-        data: JSON.stringify({ s: 12, decay: 0.1 }),
+        data: JSON.stringify({ s: 12, s_int: 12, s_fast: 3, d: 8, decay: 0.1 }),
         ...params,
     }
 }
@@ -67,11 +67,13 @@ test("future due retrievability totals include only eligible review cards", () =
             reviewCard({ id: 6, due: 8 }),
         ],
         false,
-        false
+        false,
+        { 1: deckConfig({ fsrsParams7: weights7 }) },
+        { 10: 1 }
     )
     expect(stats.target_R_day_totals[7]).toBe(1)
     expect(stats.target_R_day_totals[8]).toBe(1)
-    expect(stats.target_R_days[7]).toBeCloseTo(forgetting_curve(0.1, 7, 12), 6)
+    expect(stats.target_R_days[7]).toBeCloseTo(curve(weights7, 7, state7).retrievability, 6)
 })
 
 test("future due retention uses selected FSRS7 deck model", () => {
@@ -90,7 +92,7 @@ test("future due retention uses selected FSRS7 deck model", () => {
         { 10: 1 }
     )
 
-    const expected = fsrs({ w: paramsForTsFsrs(weights7) }).forgetting_curve(7, 12)
+    const expected = curve(weights7, 7, state7).retrievability
     const decayOnly = forgetting_curve(0.1, 7, 12)
 
     expect(stats.target_R_days[7]).toBeCloseTo(expected, 6)
@@ -113,8 +115,8 @@ test("future due retention follows selected FSRS version", () => {
         { 10: 1 }
     )
 
-    const expected = fsrs({ w: weights6 }).forgetting_curve(7, 12)
-    const fsrs7Value = fsrs({ w: paramsForTsFsrs(weights7) }).forgetting_curve(7, 12)
+    const expected = forgetting_curve(weights6, 7, 12)
+    const fsrs7Value = curve(weights7, 7, state7).retrievability
 
     expect(stats.target_R_days[7]).toBeCloseTo(expected, 6)
     expect(stats.target_R_days[7]).not.toBeCloseTo(fsrs7Value, 6)
@@ -132,7 +134,7 @@ test("future due retention keeps decay-only card path when deck config is unavai
 
 test("future due retention uses internal stability when stored S90 differs", () => {
     const stats = calculateCardDataPies(
-        [reviewCard({ data: JSON.stringify({ s: 4, s_int: 12 }) })],
+        [reviewCard({ data: JSON.stringify({ s: 4, s_int: 12, s_fast: 3, d: 8 }) })],
         false,
         false,
         {
@@ -145,12 +147,32 @@ test("future due retention uses internal stability when stored S90 differs", () 
         { 10: 1 }
     )
 
-    expect(stats.target_R_days[7]).toBeCloseTo(
-        fsrs({ w: paramsForTsFsrs(weights7) }).forgetting_curve(7, 12),
-        6
-    )
+    expect(stats.target_R_days[7]).toBeCloseTo(curve(weights7, 7, state7).retrievability, 6)
     expect(stats.target_R_days[7]).not.toBeCloseTo(
-        fsrs({ w: paramsForTsFsrs(weights7) }).forgetting_curve(7, 4),
+        curve(weights7, 7, { ...state7, stability: 4 }).retrievability,
         6
     )
+})
+
+test("future due retention skips incomplete FSRS-7 state", () => {
+    const stats = calculateCardDataPies(
+        [reviewCard({ data: JSON.stringify({ s: 12, s_int: 12, d: 8 }) })],
+        false,
+        false,
+        { 1: deckConfig({ fsrsParams7: weights7 }) },
+        { 10: 1 }
+    )
+    expect(stats.target_R_days).toEqual([])
+    expect(stats.target_R_day_totals).toEqual([])
+})
+
+test("due dates use a filtered card's original due date", () => {
+    expect(dueDayOffset({ due: 10, odue: 102 } as any, 100)).toBe(2)
+    expect(dueDayOffset({ due: 102, odue: 0 } as any, 100)).toBe(2)
+})
+
+test("Unix due dates are seconds and map to a whole collection day", () => {
+    const due = Math.floor((Date.now() + 2 * day_ms) / 1000)
+    expect(dueDayOffset({ due, odue: 0 } as any, 100)).toBe(dayFromMs(due * 1000) - today)
+    expect(dueDayOffset({ due, odue: 0 } as any, 100)).toBe(2)
 })

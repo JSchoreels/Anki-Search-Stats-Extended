@@ -17,9 +17,11 @@ This document describes how long-term and short-term forgetting curve models are
 - The dominant parameter-length group is averaged element-wise and used as the model.
 - Fallback: average `card.data.decay` if no usable parameter group exists.
 
-This allows FSRS7 parameter arrays (length `34`) to drive long-term curve predictions, including the FSRS7 dual-decay formula path in `ts-fsrs`.
+FSRS-7 parameter arrays (length `34`) use upstream's dual-trace curve. Each rating's fitted first-review state uses that rating's initial difficulty and the model's initialized fast/slow stability ratio. Fitting scales both traces together; it does not use the evolved state of an existing learned card.
 
 ## Short-term Curve Model
 
 - Output key: `forgetting_curve_decay`
-- Continues to use averaged per-card decay for existing short-term behavior.
+- The first short-term graph uses the same selected/averaged preset model as the long-term graph, with averaged decay as the fallback.
+- Its samples and displayed fitted stability are in minutes. Model evaluation converts both elapsed time and fitted stability to days, preserving the FSRS-7 first-review trace ratio and rating-specific difficulty.
+- Curve fitting, RMSE calculation, and rendered prediction lines share the same evaluator and time-unit conversion.

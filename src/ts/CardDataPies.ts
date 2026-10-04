@@ -1,7 +1,7 @@
-import { forgetting_curve } from "ts-fsrs"
+import { forgettingCurve as forgetting_curve } from "ts-fsrs/models/fsrs-6"
+import { dueDayOffset } from "./cardDue"
 import type { DeckConfig } from "./config"
-import { getFsrsForConfig } from "./fsrsModel"
-import { day_ms } from "./revlogGraphs"
+import { getFsrsForConfig, memoryStateFromCardData } from "./fsrsModel"
 import {
     getDecay,
     getExtraDataFromCard,
@@ -38,13 +38,20 @@ export function calculateCardDataPies(
                 const extraData = getExtraDataFromCard(card)
                 const stability = getFsrsInternalStabilityFromExtraData(extraData)
                 if (stability && card.ivl > 0 && card.type == 2 && card.queue > 0) {
-                    let due = card.due < 365_000 ? card.due - days_elapsed : card.due / day_ms
+                    const due = dueDayOffset(card, days_elapsed)
                     const deckConfigId = deckConfigIds?.[card.odid || card.did]
                     const deckConfig =
                         deckConfigId === undefined ? undefined : deckConfigs?.[deckConfigId]
-                    const target_R = deckConfig
-                        ? getFsrsForConfig(deckConfig).forgetting_curve(card.ivl, stability)
-                        : forgetting_curve(getDecay(extraData), card.ivl, stability)
+                    let target_R: number
+                    if (deckConfig) {
+                        const model = getFsrsForConfig(deckConfig)
+                        const state = memoryStateFromCardData(model, extraData)
+                        if (!state) continue
+                        target_R = model.retrievability(state, card.ivl)
+                    } else {
+                        if (extraData.s_fast !== undefined) continue
+                        target_R = forgetting_curve(getDecay(extraData), card.ivl, stability)
+                    }
                     target_R_days[due] = (target_R_days[due] ?? 0) + target_R
                     target_R_day_totals[due] = (target_R_day_totals[due] ?? 0) + 1
                 }

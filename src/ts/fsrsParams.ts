@@ -1,9 +1,7 @@
-import { default_w, default_w_fsrs7 } from "ts-fsrs"
+import { FSRS6_DEFAULT_WEIGHTS } from "ts-fsrs/models/fsrs-6"
 import type { DeckConfig, ResolvedFsrsPreset } from "./config"
 
 const TS_FSRS_SUPPORTED_PARAM_LENGTHS = [17, 19, 21, 34, 35]
-const FINAL_FSRS7_PARAM_LENGTH = 34
-const LEGACY_TS_FSRS_FSRS7_PARAM_LENGTH = 35
 const FSRS_VERSION_SEVEN = 0
 const FSRS_VERSION_SIX = 1
 const FSRS_VERSION_FIVE = 2
@@ -41,19 +39,7 @@ export function selectTsFsrsParams(config: DeckConfig): number[] {
         config.fsrsWeights,
     ]
 
-    return configParams.find(isTsFsrsCompatible) ?? [...default_w]
-}
-
-export function paramsForTsFsrs(
-    params: number[] | readonly number[]
-): number[] | readonly number[] {
-    if (
-        params.length === FINAL_FSRS7_PARAM_LENGTH &&
-        default_w_fsrs7.length === LEGACY_TS_FSRS_FSRS7_PARAM_LENGTH
-    ) {
-        return [...params, default_w_fsrs7[LEGACY_TS_FSRS_FSRS7_PARAM_LENGTH - 1]]
-    }
-    return params
+    return configParams.find(isTsFsrsCompatible) ?? [...FSRS6_DEFAULT_WEIGHTS]
 }
 
 export function selectResolvedFsrsPresetParams(preset: ResolvedFsrsPreset): number[] {
