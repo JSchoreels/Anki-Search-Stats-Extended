@@ -262,10 +262,11 @@ model. Green means RWKV assigns a higher bucket, red a lower bucket, and grey
 the same bucket. Saturation increases through five shades for shifts of 1 to 5
 buckets; larger shifts keep the strongest shade. Each bar sorts its segments by
 signed shift from bottom to top, placing grey between the red and green sections.
-The legend uses separate rows for lower predictions, the same range, and higher
-predictions. Labels describe direction in words, such as **2 steps lower** or
-**Same range**, instead of signed differences. The endpoints read **5+ steps
-lower** and **5+ steps higher**. A bulleted guide explains the selected grouping
+The compact legend uses three rows: **Steps lower: 5+ 4 3 2 1**, **Same range**,
+and **Steps higher: 1 2 3 4 5+**, with a color swatch beside each value. Direction
+is written once per row, and the order runs from the largest downward move to
+the largest upward move. Hovering a legend value shows its full description,
+such as **2 steps lower**. A bulleted guide explains the selected grouping
 model, colors, stronger shades, a one-step example (70–75% to 75–80%), and card
 counting.
 

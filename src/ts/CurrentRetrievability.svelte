@@ -18,9 +18,18 @@
     let colorByBucketShift = false
     let groupingModel: CurrentRetrievabilityModel = "fsrs"
     const shiftLegendRows = [
-        CURRENT_RETRIEVABILITY_SHIFT_SERIES.filter(({ shift }) => shift < 0),
-        CURRENT_RETRIEVABILITY_SHIFT_SERIES.filter(({ shift }) => shift === 0),
-        CURRENT_RETRIEVABILITY_SHIFT_SERIES.filter(({ shift }) => shift > 0),
+        {
+            label: "current-retrievability-steps-lower",
+            series: CURRENT_RETRIEVABILITY_SHIFT_SERIES.filter(({ shift }) => shift < 0),
+        },
+        {
+            label: null,
+            series: CURRENT_RETRIEVABILITY_SHIFT_SERIES.filter(({ shift }) => shift === 0),
+        },
+        {
+            label: "current-retrievability-steps-higher",
+            series: CURRENT_RETRIEVABILITY_SHIFT_SERIES.filter(({ shift }) => shift > 0),
+        },
     ]
     const shiftHelp = ["lower", "same", "higher", "strength", "steps", "counts"]
     $: bins = buildCurrentRetrievabilityBins(response?.rows ?? [])
@@ -71,12 +80,24 @@
                 <span class="legend-title">{i18n("current-retrievability-shift-legend")}</span>
                 {#each shiftLegendRows as row}
                     <div class="legend-row">
-                        {#each row as { shift, color }}
-                            <span class="legend-item">
-                                <span class="swatch" style:background={color}></span>
-                                {currentRetrievabilityShiftLabel(shift)}
-                            </span>
-                        {/each}
+                        {#if row.label}
+                            <span class="legend-direction">{i18n(row.label)}</span>
+                        {/if}
+                        <div class="legend-values">
+                            {#each row.series as { shift, color }}
+                                <span
+                                    class="legend-item"
+                                    title={currentRetrievabilityShiftLabel(shift)}
+                                >
+                                    <span class="swatch" style:background={color}></span>
+                                    {#if shift === 0}
+                                        {currentRetrievabilityShiftLabel(shift)}
+                                    {:else}
+                                        {Math.abs(shift)}{Math.abs(shift) === 5 ? "+" : ""}
+                                    {/if}
+                                </span>
+                            {/each}
+                        </div>
                     </div>
                 {/each}
             {:else}
@@ -151,8 +172,20 @@
     .legend-row {
         display: flex;
         flex-wrap: wrap;
+        align-items: center;
         justify-content: center;
-        gap: 1rem;
+        gap: 0.75rem;
+    }
+
+    .legend-direction {
+        white-space: nowrap;
+    }
+
+    .legend-values {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 0.75rem;
     }
 
     .legend-item {
@@ -164,6 +197,7 @@
     .swatch {
         width: 0.8rem;
         height: 0.8rem;
+        flex-shrink: 0;
     }
 
     .reading-guide {
