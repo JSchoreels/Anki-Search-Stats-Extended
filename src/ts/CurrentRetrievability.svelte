@@ -3,6 +3,7 @@
     import { i18n } from "./i18n"
     import type { CurrentDisagreementResponse } from "./currentDisagreementData"
     import { buildCurrentRetrievabilityBins } from "./currentRetrievabilityData"
+    import type { CurrentRetrievabilityModel } from "./currentRetrievabilityData"
     import {
         CURRENT_RETRIEVABILITY_SERIES,
         CURRENT_RETRIEVABILITY_SHIFT_SERIES,
@@ -15,13 +16,20 @@
 
     let svg: SVGElement | undefined
     let colorByBucketShift = false
+    let groupingModel: CurrentRetrievabilityModel = "fsrs"
     const shiftLegendRows = [
-        CURRENT_RETRIEVABILITY_SHIFT_SERIES.filter(({ shift }) => shift <= 0),
+        CURRENT_RETRIEVABILITY_SHIFT_SERIES.filter(({ shift }) => shift < 0),
+        CURRENT_RETRIEVABILITY_SHIFT_SERIES.filter(({ shift }) => shift === 0),
         CURRENT_RETRIEVABILITY_SHIFT_SERIES.filter(({ shift }) => shift > 0),
     ]
+    const shiftHelp = ["lower", "same", "higher", "strength", "steps", "counts"]
     $: bins = buildCurrentRetrievabilityBins(response?.rows ?? [])
     $: paired = bins.reduce((sum, bin) => sum + bin.both.length + bin.rwkv.length, 0)
-    $: if (svg) renderCurrentRetrievabilityGraph(svg, bins, { colorByBucketShift })
+    $: membershipSeries = CURRENT_RETRIEVABILITY_SERIES.filter(
+        ({ key }) => key === "both" || key === groupingModel
+    )
+    $: if (svg)
+        renderCurrentRetrievabilityGraph(svg, bins, { colorByBucketShift, model: groupingModel })
 </script>
 
 <GraphContainer>
@@ -32,6 +40,27 @@
         <p>{i18n(`current-disagreement-${response.status}`)}</p>
         <button on:click={retry}>{i18n("current-disagreement-retry")}</button>
     {:else if paired}
+        <fieldset class="grouping-model">
+            <legend>{i18n("current-retrievability-group-by")}</legend>
+            <label>
+                <input
+                    type="radio"
+                    name="current-retrievability-model"
+                    value="fsrs"
+                    bind:group={groupingModel}
+                />
+                FSRS
+            </label>
+            <label>
+                <input
+                    type="radio"
+                    name="current-retrievability-model"
+                    value="rwkv"
+                    bind:group={groupingModel}
+                />
+                RWKV
+            </label>
+        </fieldset>
         <label class="shift-toggle">
             <input type="checkbox" bind:checked={colorByBucketShift} />
             {i18n("current-retrievability-color-by-shift")}
@@ -51,7 +80,7 @@
                     </div>
                 {/each}
             {:else}
-                {#each CURRENT_RETRIEVABILITY_SERIES as { key, color }}
+                {#each membershipSeries as { key, color }}
                     <span class="legend-item">
                         <span class="swatch" style:background={color}></span>
                         {i18n(`current-retrievability-${key}`)}
@@ -63,16 +92,40 @@
         <p>{i18n("current-disagreement-no-data")}</p>
     {/if}
     {#if response?.status === "ready"}
-        <p>{i18n("current-disagreement-count", { count: paired, total: response.total })}</p>
+        <p>{i18n("current-retrievability-count", { count: paired, total: response.total })}</p>
     {/if}
-    <p>
-        {i18n(
-            colorByBucketShift ? "current-retrievability-shift-help" : "current-retrievability-help"
-        )}
-    </p>
+    <ul class="reading-guide">
+        <li>{i18n("current-retrievability-help-bars", { model: groupingModel.toUpperCase() })}</li>
+        {#if colorByBucketShift}
+            {#each shiftHelp as topic}
+                <li>{i18n(`current-retrievability-shift-help-${topic}`)}</li>
+            {/each}
+        {:else}
+            {#each membershipSeries as { key }}
+                <li>{i18n(`current-retrievability-help-${key}`)}</li>
+            {/each}
+            <li>{i18n("current-retrievability-help-browse")}</li>
+        {/if}
+        <li>{i18n("current-retrievability-help-counting")}</li>
+        <li>{i18n("current-retrievability-help-scope")}</li>
+    </ul>
 </GraphContainer>
 
 <style lang="scss">
+    .grouping-model {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 1rem;
+        border: 0;
+        padding: 0;
+        margin: 0 0 0.5rem;
+        font-size: small;
+    }
+
+    .grouping-model legend {
+        margin-bottom: 0.25rem;
+    }
+
     .shift-toggle {
         align-self: flex-start;
         font-size: small;
@@ -111,5 +164,15 @@
     .swatch {
         width: 0.8rem;
         height: 0.8rem;
+    }
+
+    .reading-guide {
+        font-size: small;
+        line-height: 1.5;
+        padding-left: 1.5rem;
+    }
+
+    .reading-guide li + li {
+        margin-top: 0.35rem;
     }
 </style>

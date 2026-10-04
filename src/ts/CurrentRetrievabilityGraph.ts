@@ -2,6 +2,7 @@ import * as d3 from "d3"
 import type {
     CurrentRetrievabilityBin,
     CurrentRetrievabilityMembership,
+    CurrentRetrievabilityModel,
 } from "./currentRetrievabilityData"
 import {
     clearChart,
@@ -33,10 +34,16 @@ export const CURRENT_RETRIEVABILITY_SHIFT_SERIES = d3
     .range(-MAX_SHIFT_SHADE, MAX_SHIFT_SHADE + 1)
     .map((shift) => ({ shift, color: currentRetrievabilityShiftColor(shift) }))
 
-export function currentRetrievabilityShiftLabel(shift: number): string {
-    if (shift === -MAX_SHIFT_SHADE) return i18n("current-retrievability-shift-lower")
-    if (shift === MAX_SHIFT_SHADE) return i18n("current-retrievability-shift-higher")
-    return shift > 0 ? `+${shift}` : String(shift)
+export function currentRetrievabilityShiftLabel(shift: number, capped = true): string {
+    if (shift === 0) return i18n("current-retrievability-shift-same")
+    if (capped && shift <= -MAX_SHIFT_SHADE) return i18n("current-retrievability-shift-lower")
+    if (capped && shift >= MAX_SHIFT_SHADE) return i18n("current-retrievability-shift-higher")
+    return i18n(
+        shift < 0 ? "current-retrievability-shift-down" : "current-retrievability-shift-up",
+        {
+            count: Math.abs(shift),
+        }
+    )
 }
 
 type RetrievabilitySegment = {
@@ -48,9 +55,12 @@ type RetrievabilitySegment = {
 
 function retrievabilitySegments(
     bin: CurrentRetrievabilityBin,
-    colorByBucketShift: boolean
+    colorByBucketShift: boolean,
+    model: CurrentRetrievabilityModel
 ): RetrievabilitySegment[] {
-    const segments = CURRENT_RETRIEVABILITY_SERIES.flatMap(({ key, color }) => {
+    const segments = CURRENT_RETRIEVABILITY_SERIES.filter(
+        ({ key }) => key === "both" || key === model
+    ).flatMap(({ key, color }) => {
         if (!colorByBucketShift || key === "both") {
             return [{ key, color, shift: 0, cids: bin[key] }]
         }
@@ -104,10 +114,16 @@ function shiftSummary(
 export function renderCurrentRetrievabilityGraph(
     svg: SVGElement,
     bins: CurrentRetrievabilityBin[],
-    { colorByBucketShift = false } = {}
+    {
+        colorByBucketShift = false,
+        model = "fsrs",
+    }: {
+        colorByBucketShift?: boolean
+        model?: CurrentRetrievabilityModel
+    } = {}
 ) {
     clearChart(svg)
-    const maxCount = d3.max(bins, (bin) => bin.both.length + bin.rwkv.length + bin.fsrs.length) ?? 0
+    const maxCount = d3.max(bins, (bin) => bin.both.length + bin[model].length) ?? 0
     if (!maxCount) return
 
     const { width, height } = comparisonGraphBounds()
@@ -140,19 +156,15 @@ export function renderCurrentRetrievabilityGraph(
         .attr("y", 42)
         .attr("fill", "currentColor")
         .attr("text-anchor", "middle")
-        .text(i18n("current-retrievability-x-axis"))
+        .text(i18n("current-retrievability-x-axis", { model: model.toUpperCase() }))
 
     // Agreement and RWKV membership together include each paired card exactly once.
     const searchCounts = colorByBucketShift
-        ? shiftCounts(
-              bins.flatMap((bin) =>
-                  retrievabilitySegments(bin, true).filter(({ key }) => key !== "fsrs")
-              )
-          )
+        ? shiftCounts(bins.flatMap((bin) => retrievabilitySegments(bin, true, "rwkv")))
         : null
     for (const bin of bins) {
         let cumulative = 0
-        const segments = retrievabilitySegments(bin, colorByBucketShift)
+        const segments = retrievabilitySegments(bin, colorByBucketShift, model)
         const summary = searchCounts ? shiftSummary(shiftCounts(segments), searchCounts) : []
         for (const { key, color, shift, cids } of segments) {
             const base = cumulative
@@ -163,11 +175,12 @@ export function renderCurrentRetrievabilityGraph(
                     ? "current-retrievability-shift-bucket"
                     : "current-retrievability-bucket",
                 {
+                    model: model.toUpperCase(),
                     lower: d3.format(".0%")(bin.lower),
                     upper: d3.format(".0%")(bin.upper),
                     membership: i18n(`current-retrievability-${key}`),
                     count: cids.length,
-                    shift: shift > 0 ? `+${shift}` : String(shift),
+                    shift: currentRetrievabilityShiftLabel(shift, false),
                 }
             )
             const label = [segmentLabel, ...summary].join("\n")

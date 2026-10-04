@@ -378,22 +378,48 @@ current-disagreement-unavailable = Current comparison requires the adapted Anki 
 current-disagreement-failed = Current predictions could not be loaded. Retry when RWKV is ready; see the Anki log for details.
 current-disagreement-retry = Retry
 current-retrievability = FSRS vs RWKV Card Retrievability
-current-retrievability-x-axis = Current retrievability (R)
-current-retrievability-both = Both models
-current-retrievability-rwkv = RWKV only
-current-retrievability-fsrs = FSRS only
-current-retrievability-bucket = {$lower} to {$upper}, {$membership}: {$count} cards. Click to browse and select.
-current-retrievability-color-by-shift = Color by RWKV bucket shift from FSRS
-current-retrievability-shift-legend = RWKV − FSRS (buckets):
-current-retrievability-shift-lower = −5 or lower
-current-retrievability-shift-higher = +5 or higher
-current-retrievability-shift-bucket = {$lower} to {$upper}, {$membership}, RWKV − FSRS: {$shift} buckets. {$count} cards. Click to browse and select.
-current-retrievability-shift-counts = Cards by shift: this R bucket / whole search
-current-retrievability-shift-count = {$shift}: {$count} / {$searchCount}
-current-retrievability-bucket-total = Total cards: {$count} / {$searchCount}
-current-retrievability-above-total = RWKV above FSRS: {$count} / {$searchCount}
-current-retrievability-shift-help = Colors show the RWKV bucket minus the FSRS bucket for each card. Green means RWKV predicts a higher bucket; red means a lower bucket; grey means the same bucket. Bars stack from negative shifts at the bottom, through grey, to positive shifts at the top. Shades become more saturated from 1 to 5 buckets, with shifts of 5 or more using the strongest shade. Tooltips show the exact shift and model membership, counts for every color level, total cards, and cards with RWKV above FSRS. Summary counts are shown as this R bucket / whole search; whole-search counts include each paired card once. A card in different buckets keeps one segment in its RWKV bucket and one in its FSRS bucket, both colored by the same shift; bar totals stay the same. Each bucket spans 5 percentage points of R. Lower bounds are inclusive; upper bounds are exclusive, except 100%. Click a segment to browse and select its cards. Review date limits do not apply. Cards missing either current prediction are excluded.
-current-retrievability-help = Current recall probabilities grouped into 5-percentage-point buckets from 0% to 100%. Grey shows cards both models place in the same bucket; green shows cards only RWKV places in this bucket; blue shows cards only FSRS places in this bucket. Grey plus green is the RWKV count; grey plus blue is the FSRS count. A card in different buckets appears once in green and once in blue. Lower bounds are inclusive; upper bounds are exclusive, except 100%. Click a colored segment to browse and select its cards. Review date limits do not apply. Cards missing either current prediction are excluded.
+current-retrievability-x-axis = {$model} chance of remembering today
+current-retrievability-both = Both place here
+current-retrievability-rwkv = RWKV places here
+current-retrievability-fsrs = FSRS places here
+current-retrievability-bucket = {$model} chance of remembering: {$lower} to {$upper}. {$membership}. Cards: {$count}. Click to browse and select.
+current-retrievability-group-by = Group cards by
+current-retrievability-count = Comparing {$count} of {$total} cards.
+current-retrievability-color-by-shift = Color by how far RWKV moves each card
+current-retrievability-shift-legend = RWKV compared with FSRS
+current-retrievability-shift-lower = 5+ steps lower
+current-retrievability-shift-higher = 5+ steps higher
+current-retrievability-shift-same = Same range
+current-retrievability-shift-down = {$count ->
+    [one] 1 step lower
+    *[other] {$count} steps lower
+    }
+current-retrievability-shift-up = {$count ->
+    [one] 1 step higher
+    *[other] {$count} steps higher
+    }
+current-retrievability-shift-bucket =
+    {$model} chance of remembering: {$lower} to {$upper}
+    Cards in this section: {$count} ({$membership})
+    RWKV compared with FSRS: {$shift}
+    Click to browse these cards.
+current-retrievability-shift-counts = Cards by move, in this bar and across all compared cards:
+current-retrievability-shift-count = {$shift}: {$count} in this bar; {$searchCount} overall
+current-retrievability-bucket-total = Total cards: {$count} in this bar; {$searchCount} overall
+current-retrievability-above-total = RWKV in a higher range: {$count} in this bar; {$searchCount} overall
+current-retrievability-shift-help-lower = Red: RWKV predicts a lower chance of remembering than FSRS.
+current-retrievability-shift-help-same = Grey: both models place the card in the same percentage range.
+current-retrievability-shift-help-higher = Green: RWKV predicts a higher chance of remembering than FSRS.
+current-retrievability-shift-help-strength = Stronger colors mean bigger moves. Five or more steps share the strongest color; hover to see the exact move.
+current-retrievability-shift-help-steps = One step is one bar along the bottom axis. Moving from the 70–75% range to 75–80% is one step higher.
+current-retrievability-shift-help-counts = Hover a color to see counts for this bar and all compared cards. Click it to browse those cards.
+current-retrievability-help-both = Grey: both models place the card in the same range.
+current-retrievability-help-rwkv = Green: RWKV places the card here; FSRS places it in a different bar.
+current-retrievability-help-fsrs = Blue: FSRS places the card here; RWKV places it in a different bar.
+current-retrievability-help-browse = Click a colored section to browse its cards.
+current-retrievability-help-bars = {$model} decides each card's bar. Every compared card appears once.
+current-retrievability-help-counting = The bar counts add up to the compared-card total. Changing the grouping model moves cards between bars without changing that total.
+current-retrievability-help-scope = Only cards with predictions from both models are shown. The review date filter does not apply to these current predictions.
 um-plus-x-axis = Difference in predicted p(recall): FSRS minus RWKV
 um-plus-y-axis = B-W Metric
 um-plus-volume-axis = Paired reviews

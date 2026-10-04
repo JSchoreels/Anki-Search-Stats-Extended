@@ -1,12 +1,13 @@
 import { validCurrentPredictions, type CurrentPrediction } from "./currentDisagreementData"
 
 const BUCKET_COUNT = 20
-export type CurrentRetrievabilityMembership = "both" | "rwkv" | "fsrs"
+export type CurrentRetrievabilityModel = "rwkv" | "fsrs"
+export type CurrentRetrievabilityMembership = "both" | CurrentRetrievabilityModel
 export type CurrentRetrievabilityBin = {
     index: number
     lower: number
     upper: number
-    shifts: Record<Exclude<CurrentRetrievabilityMembership, "both">, Record<number, number[]>>
+    shifts: Record<CurrentRetrievabilityModel, Record<number, number[]>>
 } & Record<CurrentRetrievabilityMembership, number[]>
 
 export function buildCurrentRetrievabilityBins(
