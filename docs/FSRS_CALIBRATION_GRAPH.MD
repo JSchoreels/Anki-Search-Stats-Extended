@@ -211,7 +211,31 @@ Package with `npm run build` followed by `./package.sh`; `./copy_to_anki.sh`
 installs that archive into `addons21/1339555413`, preserving Anki-owned metadata,
 configuration and user files. Fully quit and reopen Anki after Python changes.
 
-The current Disagreement graph is followed by **RWKV Daily Recall Gap** and
+## FSRS vs RWKV Card Retrievability
+
+The **FSRS vs RWKV Card Retrievability** histogram immediately follows current
+Disagreement and shares its transient prediction snapshot, loading state, retry,
+search scope, and paired-card eligibility. It makes no additional prediction
+requests and introduces no persisted data or database operations.
+
+Like Anki's Card Retrievability chart, it uses 20 fixed 5-percentage-point
+intervals from 0% to 100%. Lower bounds are inclusive and upper bounds exclusive,
+except the final interval includes 100%. Within each interval, the stacked bar
+shows:
+
+- Grey: cards both models assign to this interval, counted once even if their
+  exact predictions differ.
+- Green: cards RWKV assigns here while FSRS assigns them to another interval.
+- Blue: cards FSRS assigns here while RWKV assigns them to another interval.
+
+Grey plus green recovers the RWKV count in the interval; grey plus blue recovers
+the FSRS count. The complete bar counts the union of cards assigned to that
+interval. A disagreeing card contributes once in green in its RWKV interval and
+once in blue in its FSRS interval; the paired-card summary counts it only once.
+Clicking a colored segment, or activating it with Enter or Space, browses and
+selects only the exact cards represented by that segment.
+
+The Card Retrievability comparison is followed by **RWKV Daily Recall Gap** and
 **RWKV Daily Surprise**. These reuse eligible RWKV review predictions without
 requiring paired FSRS predictions. Their calculations, daily grouping, and
 interpretation are documented in [Daily RWKV surprise](RWKV_DAILY_SURPRISE.MD).

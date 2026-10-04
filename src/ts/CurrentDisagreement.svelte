@@ -1,6 +1,7 @@
 <script lang="ts">
     import { onDestroy } from "svelte"
     import GraphContainer from "./GraphContainer.svelte"
+    import CurrentRetrievability from "./CurrentRetrievability.svelte"
     import { cids } from "./stores"
     import { i18n } from "./i18n"
     import { getCurrentCardDisagreement } from "./search"
@@ -61,3 +62,5 @@
     {/if}
     <p>{i18n("current-disagreement-help")}</p>
 </GraphContainer>
+
+<CurrentRetrievability {response} retry={() => restart($cids)} />

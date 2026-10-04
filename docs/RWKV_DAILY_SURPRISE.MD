@@ -1,6 +1,7 @@
 # Daily RWKV recall gap and surprise
 
-Two graphs follow **FSRS vs RWKV current Disagreement**, in this order:
+Two graphs follow **FSRS vs RWKV Card Retrievability** (which immediately follows
+current Disagreement), in this order:
 
 1. **RWKV Daily Recall Gap**: signed standardized difference between actual and
    expected recalls.

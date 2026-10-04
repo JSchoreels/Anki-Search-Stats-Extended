@@ -14,10 +14,9 @@ export type CurrentDisagreementBin = {
     cids: number[]
 }
 
-export function buildCurrentDisagreementBins(rows: CurrentPrediction[]): CurrentDisagreementBin[] {
-    const bins = new Map<number, CurrentDisagreementBin>()
+export function validCurrentPredictions(rows: CurrentPrediction[]): CurrentPrediction[] {
     const seen = new Set<number>()
-    for (const { cid, fsrs, rwkv } of rows) {
+    return rows.filter(({ cid, fsrs, rwkv }) => {
         if (
             seen.has(cid) ||
             !Number.isSafeInteger(cid) ||
@@ -29,8 +28,15 @@ export function buildCurrentDisagreementBins(rows: CurrentPrediction[]): Current
             rwkv < 0 ||
             rwkv > 1
         )
-            continue
+            return false
         seen.add(cid)
+        return true
+    })
+}
+
+export function buildCurrentDisagreementBins(rows: CurrentPrediction[]): CurrentDisagreementBin[] {
+    const bins = new Map<number, CurrentDisagreementBin>()
+    for (const { cid, fsrs, rwkv } of validCurrentPredictions(rows)) {
         const index = Math.round((fsrs - rwkv) * UM_PLUS_BINS_PER_UNIT)
         const center = index / UM_PLUS_BINS_PER_UNIT
         let bin = bins.get(index)
