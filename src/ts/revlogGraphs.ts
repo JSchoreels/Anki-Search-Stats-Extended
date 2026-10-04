@@ -1,15 +1,5 @@
 import _ from "lodash"
-import {
-    type Card,
-    checkParameters,
-    createEmptyCard,
-    dateDiffInDays,
-    type FSRS,
-    fsrs as Fsrs,
-    FSRS5_DEFAULT_DECAY,
-    type FSRSState,
-    generatorParameters,
-} from "ts-fsrs"
+import { FSRS5_DEFAULT_DECAY } from "ts-fsrs"
 import type { BarChart, BarDatum } from "./bar"
 import { totalCalc } from "./barHelpers"
 import { type CardData, getCardDecay, type Revlog } from "./cardData"
@@ -19,7 +9,9 @@ import {
     type ForgettingCurveDecayModel,
     type ForgettingSample,
 } from "./forgettingCurveData"
-import { paramsForTsFsrs, selectTsFsrsParams } from "./fsrsParams"
+import { selectTsFsrsParams } from "./fsrsParams"
+import { elapsedFsrsDays, getFsrs, type FsrsMemoryState } from "./fsrsModel"
+type ReplayCard = FsrsMemoryState & { last_review?: Date }
 import { i18n } from "./i18n"
 
 const rollover = SSEother.rollover ?? 0
@@ -56,27 +48,6 @@ export function dayFromDateString(date: string) {
 export const today = dayFromMs(Date.now())
 export const no_rollover_today = Math.floor(Date.now() / day_ms)
 const stability_maturity_threshold = 21
-
-let deckFsrs: Record<number, { signature: string; model: FSRS }> = {}
-
-function getFsrs(config: DeckConfig) {
-    const id = config.id
-    const params = selectTsFsrsParams(config)
-    const signature = `${params.length}:${params.join(",")}`
-    if (!deckFsrs[id] || deckFsrs[id].signature !== signature) {
-        deckFsrs[id] = {
-            signature,
-            model: Fsrs(
-                generatorParameters({
-                    w: checkParameters(paramsForTsFsrs(params)),
-                    enable_fuzz: false,
-                    enable_short_term: true,
-                })
-            ),
-        }
-    }
-    return deckFsrs[id].model
-}
 
 function median(values: number[]) {
     if (!values.length) {
@@ -249,7 +220,7 @@ function stabilityAfterReviewsByRevlog(
         }
     }
 
-    const fsrsCards: Record<number, Card> = {}
+    const fsrsCards: Record<number, ReplayCard> = {}
 
     for (const revlog of [...revlogData].sort((a, b) => a.id - b.id)) {
         const cardData = id_card_data[revlog.cid]
@@ -268,10 +239,10 @@ function stabilityAfterReviewsByRevlog(
         const fsrs = getFsrs(config)
         const now = new Date(revlog.id)
         const hasPreviousReview = !!fsrsCards[revlog.cid]
-        let card = fsrsCards[revlog.cid] ?? createEmptyCard(new Date(revlog.cid))
+        let card = fsrsCards[revlog.cid] ?? { stability: 0, difficulty: 0 }
 
         if (revlog.factor == 0 && revlog.type == 4 && hasPreviousReview) {
-            card = fsrs.forget(card, now).card
+            card = { stability: 0, difficulty: 0, last_review: card.last_review }
             fsrsCards[revlog.cid] = card
         }
 
@@ -282,24 +253,15 @@ function stabilityAfterReviewsByRevlog(
             continue
         }
 
-        let memoryState: FSRSState | null = null
+        let memoryState: FsrsMemoryState | null = null
         let elapsed = 0
-        if (card.last_review) {
-            memoryState = card.stability
-                ? {
-                      difficulty: card.difficulty,
-                      stability: card.stability,
-                  }
-                : null
-            const oldDate = new Date(card.last_review.getTime() - rollover_ms)
-            oldDate.setHours(0, 0, 0, 0)
-            const newDate = new Date(now.getTime() - rollover_ms)
-            newDate.setHours(0, 0, 0, 0)
-            elapsed = dateDiffInDays(oldDate, newDate)
+        if (card.last_review && card.stability > 0) {
+            memoryState = card
+            elapsed = elapsedFsrsDays(fsrs, card.last_review, now, rollover_ms)
 
             if (revlog.time > 0 && card.stability > 0) {
                 const seconds = revlog.time / 1000
-                const retrievability = fsrs.forgetting_curve(elapsed, card.stability)
+                const retrievability = fsrs.retrievability(card, elapsed)
                 const retrievabilityBucket = Math.max(
                     0,
                     Math.min(99, Math.floor(retrievability * 100))
@@ -312,7 +274,7 @@ function stabilityAfterReviewsByRevlog(
                 timeByStabilitySamples[stabilityBucket].push(seconds)
             }
 
-            const retrievability = fsrs.forgetting_curve(elapsed, card.stability)
+            const retrievability = fsrs.retrievability(card, elapsed)
             const retrievabilityBucket = Math.max(0, Math.min(99, Math.floor(retrievability * 100)))
             const stabilityBucket = Math.max(0, Math.round(card.stability))
             const difficultyBucket = Math.max(0, Math.min(99, Math.round(card.difficulty * 10) - 1))
@@ -350,10 +312,8 @@ function stabilityAfterReviewsByRevlog(
             }
         }
 
-        const newState = fsrs.next_state(memoryState, elapsed, revlog.ease)
-        card.last_review = now
-        card.stability = newState.stability
-        card.difficulty = newState.difficulty
+        const newState = fsrs.nextState(memoryState, elapsed, revlog.ease)
+        card = { ...newState, last_review: now }
         fsrsCards[revlog.cid] = card
         stabilityByRevlog.set(revlog, card.stability)
     }
@@ -413,7 +373,6 @@ export function calculateRevlogStats(
 ) {
     console.time("revlog stats")
     let id_card_data = IDify(cardData)
-    deckFsrs = {}
     const fsrsReplayStats = stabilityAfterReviewsByRevlog(revlogData, id_card_data)
     const stability_after_review = fsrsReplayStats.stabilityByRevlog
 

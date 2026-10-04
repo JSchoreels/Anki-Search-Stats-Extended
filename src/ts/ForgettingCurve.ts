@@ -1,8 +1,10 @@
 import * as d3 from "d3"
 import * as _ from "lodash"
-import { forgetting_curve } from "ts-fsrs"
-import type { ForgettingCurveDecayModel, ForgettingCurveSeries } from "./forgettingCurveData"
-import { paramsForTsFsrs } from "./fsrsParams"
+import {
+    forgettingCurveWithModel,
+    type ForgettingCurveDecayModel,
+    type ForgettingCurveSeries,
+} from "./forgettingCurveData"
 import { defaultGraphBounds } from "./graph"
 import { tooltip, tooltipShown } from "./stores"
 import { tooltipX } from "./tooltip"
@@ -28,17 +30,7 @@ export interface ForgettingCurveRenderOptions {
     yLabel: string
     decayModel: ForgettingCurveDecayModel
     maxX?: number
-}
-
-function forgettingCurveWithModel(
-    model: ForgettingCurveDecayModel,
-    elapsedDays: number,
-    stability: number
-) {
-    if (typeof model !== "number") {
-        return forgetting_curve(paramsForTsFsrs(model), elapsedDays, stability)
-    }
-    return forgetting_curve(model, elapsedDays, stability)
+    daysPerUnit?: number
 }
 
 export function renderForgettingCurve(
@@ -117,7 +109,13 @@ export function renderForgettingCurve(
 
             const predicted = _.range(0, rightmost, step).map((delta) => ({
                 delta,
-                recall: forgettingCurveWithModel(options.decayModel, delta, seriesEntry.stability!),
+                recall: forgettingCurveWithModel(
+                    options.decayModel,
+                    delta,
+                    seriesEntry.stability!,
+                    seriesEntry.rating,
+                    options.daysPerUnit
+                ),
             }))
 
             container

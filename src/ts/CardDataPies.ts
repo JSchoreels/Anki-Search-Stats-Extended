@@ -1,6 +1,6 @@
-import { forgetting_curve } from "ts-fsrs"
+import { forgettingCurve as forgetting_curve } from "ts-fsrs/models/fsrs-6"
 import type { DeckConfig } from "./config"
-import { getFsrsForConfig } from "./fsrsModel"
+import { getFsrsForConfig, memoryStateFromCardData } from "./fsrsModel"
 import { day_ms } from "./revlogGraphs"
 import {
     getDecay,
@@ -41,9 +41,16 @@ export function calculateCardDataPies(
                     const deckConfigId = deckConfigIds?.[card.odid || card.did]
                     const deckConfig =
                         deckConfigId === undefined ? undefined : deckConfigs?.[deckConfigId]
-                    const target_R = deckConfig
-                        ? getFsrsForConfig(deckConfig).forgetting_curve(card.ivl, stability)
-                        : forgetting_curve(getDecay(extraData), card.ivl, stability)
+                    let target_R: number
+                    if (deckConfig) {
+                        const model = getFsrsForConfig(deckConfig)
+                        const state = memoryStateFromCardData(model, extraData)
+                        if (!state) continue
+                        target_R = model.retrievability(state, card.ivl)
+                    } else {
+                        if (extraData.s_fast !== undefined) continue
+                        target_R = forgetting_curve(getDecay(extraData), card.ivl, stability)
+                    }
                     target_R_days[due] = (target_R_days[due] ?? 0) + target_R
                 }
             }

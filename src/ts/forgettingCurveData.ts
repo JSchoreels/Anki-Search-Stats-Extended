@@ -1,6 +1,7 @@
 import { mean } from "d3-array"
-import { default_w, forgetting_curve, FSRS5_DEFAULT_DECAY } from "ts-fsrs"
-import { paramsForTsFsrs } from "./fsrsParams"
+import { FSRS5_DEFAULT_DECAY } from "ts-fsrs"
+import { forgettingCurve as forgetting_curve, FSRS6_DEFAULT_WEIGHTS } from "ts-fsrs/models/fsrs-6"
+import { getFsrsForParams } from "./fsrsModel"
 
 export type ForgettingCurveDecayModel = number | readonly number[]
 
@@ -33,10 +34,10 @@ export interface ForgettingCurveSeries {
 }
 
 const RATING_DEFAULT_STABILITY: Record<number, number> = {
-    1: default_w[0],
-    2: default_w[1],
-    3: default_w[2],
-    4: default_w[3],
+    1: FSRS6_DEFAULT_WEIGHTS[0],
+    2: FSRS6_DEFAULT_WEIGHTS[1],
+    3: FSRS6_DEFAULT_WEIGHTS[2],
+    4: FSRS6_DEFAULT_WEIGHTS[3],
 }
 
 const ANKI_MIN_FSRS_STABILITY = 0.0001
@@ -44,6 +45,7 @@ const MAX_STABILITY = 100
 const EPSILON = 1e-6
 
 export interface ForgettingCurveOptions {
+    daysPerUnit?: number
     deltaLimitByRating?: (rating: number) => number
     minStability?: number
     maxStability?: number
@@ -55,13 +57,31 @@ export interface ForgettingCurveOptions {
     }
 }
 
-function forgettingCurveWithModel(
+export function forgettingCurveWithModel(
     model: ForgettingCurveDecayModel,
     elapsedDays: number,
-    stability: number
+    stability: number,
+    rating = 3,
+    daysPerUnit = 1
 ) {
     if (typeof model !== "number") {
-        return forgetting_curve(paramsForTsFsrs(model), elapsedDays, stability)
+        const fsrs = getFsrsForParams(model)
+        const initial = fsrs.nextState(null, 0, rating)
+        const fittedStability = stability * daysPerUnit
+        // This graph fits the state immediately after the first review, when the trace ratio is known.
+        return fsrs.retrievability(
+            {
+                ...initial,
+                stability: fittedStability,
+                ...(initial.stabilityFast === undefined
+                    ? {}
+                    : {
+                          stabilityFast:
+                              (initial.stabilityFast * fittedStability) / initial.stability,
+                      }),
+            },
+            elapsedDays * daysPerUnit
+        )
     }
     return forgetting_curve(model, elapsedDays, stability)
 }
@@ -319,7 +339,8 @@ export function fitStability(
     initial: number,
     decay: ForgettingCurveDecayModel = FSRS5_DEFAULT_DECAY,
     minStability: number = ANKI_MIN_FSRS_STABILITY,
-    maxStability: number = MAX_STABILITY
+    maxStability: number = MAX_STABILITY,
+    daysPerUnit = 1
 ): number | null {
     if (!samples.length) {
         return null
@@ -329,12 +350,18 @@ export function fitStability(
         let total = 0
         for (const sample of samples) {
             const prediction = clampProbability(
-                forgettingCurveWithModel(decay, sample.delta, stability)
+                forgettingCurveWithModel(
+                    decay,
+                    sample.delta,
+                    stability,
+                    sample.firstRating,
+                    daysPerUnit
+                )
             )
             const recall = sample.recall
             total += -(recall * Math.log(prediction) + (1 - recall) * Math.log(1 - prediction))
         }
-        total += Math.abs(stability - initial) / 16
+        total += (Math.abs(stability - initial) * daysPerUnit) / 16
         return total
     }
 
@@ -377,14 +404,21 @@ export function fitStability(
 export function computeRmse(
     samples: ForgettingSample[],
     stability: number,
-    decay: ForgettingCurveDecayModel = FSRS5_DEFAULT_DECAY
+    decay: ForgettingCurveDecayModel = FSRS5_DEFAULT_DECAY,
+    daysPerUnit = 1
 ): number | null {
     if (!samples.length) {
         return null
     }
 
     const squaredError = samples.reduce((p, sample) => {
-        const prediction = forgettingCurveWithModel(decay, sample.delta, stability)
+        const prediction = forgettingCurveWithModel(
+            decay,
+            sample.delta,
+            stability,
+            sample.firstRating,
+            daysPerUnit
+        )
         return p + (sample.recall - prediction) ** 2
     }, 0)
 
@@ -407,13 +441,18 @@ export function computeStabilityForSeries(
 
         const stability = fitStability(
             ratingSamples,
-            RATING_DEFAULT_STABILITY[entry.rating],
+            (typeof decay === "number"
+                ? RATING_DEFAULT_STABILITY[entry.rating]
+                : decay[entry.rating - 1]) / (options.daysPerUnit ?? 1),
             decay,
             options.minStability,
-            options.maxStability
+            options.maxStability,
+            options.daysPerUnit
         )
 
-        const rmse = stability ? computeRmse(ratingSamples, stability, decay) : null
+        const rmse = stability
+            ? computeRmse(ratingSamples, stability, decay, options.daysPerUnit)
+            : null
 
         return {
             ...entry,

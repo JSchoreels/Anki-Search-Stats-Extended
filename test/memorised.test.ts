@@ -1,16 +1,12 @@
-import { fsrs } from "ts-fsrs"
+import type { DeckConfig, ResolvedFsrsPreset } from "../src/ts/config"
+import { getFsrsForParams, type FsrsModel } from "../src/ts/fsrsModel"
+import { selectResolvedFsrsPresetParams, selectTsFsrsParams } from "../src/ts/fsrsParams"
 import {
     buildCalibrationBins,
     getMemorisedDays,
     intervalAtRetrievability,
     type S90BatchResolver,
 } from "../src/ts/MemorisedBar"
-import type { DeckConfig, ResolvedFsrsPreset } from "../src/ts/config"
-import {
-    paramsForTsFsrs,
-    selectResolvedFsrsPresetParams,
-    selectTsFsrsParams,
-} from "../src/ts/fsrsParams"
 import { dayFromMs } from "../src/ts/revlogGraphs"
 import { Revlog } from "../src/ts/search"
 import { RevlogBuilder } from "./revlogBuilder"
@@ -80,7 +76,7 @@ function localS90Resolver(
     fsrsPresetsByCard: Record<number, ResolvedFsrsPreset> = {}
 ): S90BatchResolver {
     const cardsById = Object.fromEntries(cards.map((card) => [card.id, card]))
-    const fsrsBySignature: Record<string, ReturnType<typeof fsrs>> = {}
+    const fsrsBySignature: Record<string, FsrsModel> = {}
 
     function paramsForCard(cardId: number) {
         const preset = fsrsPresetsByCard[cardId]
@@ -96,8 +92,8 @@ function localS90Resolver(
         items.map((item) => {
             const params = paramsForCard(item.card_id)
             const signature = `${params.length}:${params.join(",")}`
-            fsrsBySignature[signature] ??= fsrs({ w: paramsForTsFsrs(params) })
-            return intervalAtRetrievability(fsrsBySignature[signature], item.stability, target)
+            fsrsBySignature[signature] ??= getFsrsForParams(params)
+            return intervalAtRetrievability(fsrsBySignature[signature], item, target)
         })
 }
 
@@ -178,7 +174,7 @@ test("Day Timings", async () => {
 // https://github.com/open-spaced-repetition/fsrs-rs/blob/a7aaa40498bae992e0be0a1e9a1380e4992aee60/src/inference.rs#L433-L465
 test("Stability", async () => {
     const card = new RevlogBuilder()
-    const FSRS = fsrs({ w: weights })
+    const FSRS = getFsrsForParams(weights)
     const cards = [
         {
             ...card.card(),
@@ -199,13 +195,13 @@ test("Stability", async () => {
     const OFFSET = 10
 
     expect(memorised[card.last_review + OFFSET]).toBeCloseTo(
-        FSRS.forgetting_curve(OFFSET, 31.722975)
+        FSRS.retrievability({ stability: 31.722975, difficulty: 5 }, OFFSET)
     )
 })
 
 test("Stability On Forget", async () => {
     const card = new RevlogBuilder()
-    const FSRS = fsrs({ w: weights })
+    const FSRS = getFsrsForParams(weights)
     const cards = [
         {
             ...card.card(),
@@ -229,7 +225,7 @@ test("Stability On Forget", async () => {
     const OFFSET = 10
 
     expect(memorised[card.last_review + OFFSET]).toBeCloseTo(
-        FSRS.forgetting_curve(OFFSET, 31.722975)
+        FSRS.retrievability({ stability: 31.722975, difficulty: 5 }, OFFSET)
     )
 })
 
@@ -323,12 +319,12 @@ test("Calibration uses FSRS6 equation when deck option selects FSRS6", async () 
     expect(calibrationEntry).toBeTruthy()
     expect(calibrationEntry!.count).toBe(1)
 
-    const fsrs6 = fsrs({ w: weights })
-    const fsrs7 = fsrs({ w: paramsForTsFsrs(weights7) })
-    const firstState6 = fsrs6.next_state(null, 0, 3)
-    const expectedP6 = fsrs6.forgetting_curve(1, firstState6.stability)
-    const firstState7 = fsrs7.next_state(null, 0, 3)
-    const p7 = fsrs7.forgetting_curve(1, firstState7.stability)
+    const fsrs6 = getFsrsForParams(weights)
+    const fsrs7 = getFsrsForParams(weights7)
+    const firstState6 = fsrs6.nextState(null, 0, 3)
+    const expectedP6 = fsrs6.retrievability(firstState6, 1)
+    const firstState7 = fsrs7.nextState(null, 0, 3)
+    const p7 = fsrs7.retrievability(firstState7, 1)
 
     expect(calibrationEntry!.predicted).toBeCloseTo(expectedP6, 6)
     expect(Math.abs(calibrationEntry!.predicted - p7)).toBeGreaterThan(1e-4)
@@ -359,12 +355,12 @@ test("Calibration uses FSRS7 equation when deck option selects FSRS7", async () 
     expect(calibrationEntry).toBeTruthy()
     expect(calibrationEntry!.count).toBe(1)
 
-    const fsrs6 = fsrs({ w: weights })
-    const fsrs7 = fsrs({ w: paramsForTsFsrs(weights7) })
-    const firstState6 = fsrs6.next_state(null, 0, 3)
-    const p6 = fsrs6.forgetting_curve(1, firstState6.stability)
-    const firstState7 = fsrs7.next_state(null, 0, 3)
-    const expectedP7 = fsrs7.forgetting_curve(1, firstState7.stability)
+    const fsrs6 = getFsrsForParams(weights)
+    const fsrs7 = getFsrsForParams(weights7)
+    const firstState6 = fsrs6.nextState(null, 0, 3)
+    const p6 = fsrs6.retrievability(firstState6, 1)
+    const firstState7 = fsrs7.nextState(null, 0, 3)
+    const expectedP7 = fsrs7.retrievability(firstState7, 1)
 
     expect(calibrationEntry!.predicted).toBeCloseTo(expectedP7, 6)
     expect(Math.abs(calibrationEntry!.predicted - p6)).toBeGreaterThan(1e-4)
@@ -471,16 +467,15 @@ test("Calibration uses each card's deck preset when a parent deck is selected", 
     const predicted = calibrationEntries.reduce((sum, entry) => sum + entry.predicted, 0)
     const count = calibrationEntries.reduce((sum, entry) => sum + entry.count, 0)
 
-    const fsrsChildA = fsrs({ w: weights })
-    const fsrsChildB = fsrs({ w: weights2 })
-    const fsrsParent = fsrs({ w: paramsForTsFsrs(weights7) })
-    const childAState = fsrsChildA.next_state(null, 0, 3)
-    const childBState = fsrsChildB.next_state(null, 0, 3)
-    const parentState = fsrsParent.next_state(null, 0, 3)
+    const fsrsChildA = getFsrsForParams(weights)
+    const fsrsChildB = getFsrsForParams(weights2)
+    const fsrsParent = getFsrsForParams(weights7)
+    const childAState = fsrsChildA.nextState(null, 0, 3)
+    const childBState = fsrsChildB.nextState(null, 0, 3)
+    const parentState = fsrsParent.nextState(null, 0, 3)
     const expectedPerCardPreset =
-        fsrsChildA.forgetting_curve(1, childAState.stability) +
-        fsrsChildB.forgetting_curve(1, childBState.stability)
-    const parentPresetForBothCards = 2 * fsrsParent.forgetting_curve(1, parentState.stability)
+        fsrsChildA.retrievability(childAState, 1) + fsrsChildB.retrievability(childBState, 1)
+    const parentPresetForBothCards = 2 * fsrsParent.retrievability(parentState, 1)
 
     expect(count).toBe(2)
     expect(predicted).toBeCloseTo(expectedPerCardPreset, 6)
@@ -502,26 +497,20 @@ test("Calibration uses Anki-resolved dynamic preset for a card", async () => {
     })
     const calibrationEntry = stats.calibration.find((entry) => !!entry && entry.count > 0)
 
-    const deckFsrs = fsrs({ w: paramsForTsFsrs(weights7) })
-    const dynamicFsrs = fsrs({ w: weights })
-    const deckState = deckFsrs.next_state(null, 0, 3)
-    const dynamicState = dynamicFsrs.next_state(null, 0, 3)
+    const deckFsrs = getFsrsForParams(weights7)
+    const dynamicFsrs = getFsrsForParams(weights)
+    const deckState = deckFsrs.nextState(null, 0, 3)
+    const dynamicState = dynamicFsrs.nextState(null, 0, 3)
 
     expect(calibrationEntry).toBeTruthy()
     expect(calibrationEntry!.count).toBe(1)
-    expect(calibrationEntry!.predicted).toBeCloseTo(
-        dynamicFsrs.forgetting_curve(1, dynamicState.stability),
-        6
-    )
-    expect(calibrationEntry!.predicted).not.toBeCloseTo(
-        deckFsrs.forgetting_curve(1, deckState.stability),
-        4
-    )
+    expect(calibrationEntry!.predicted).toBeCloseTo(dynamicFsrs.retrievability(dynamicState, 1), 6)
+    expect(calibrationEntry!.predicted).not.toBeCloseTo(deckFsrs.retrievability(deckState, 1), 4)
 })
 
 test("Average stability over time uses replayed S90 for FSRS7", async () => {
     const card = new RevlogBuilder()
-    const fsrs7 = fsrs({ w: paramsForTsFsrs(weights7) })
+    const fsrs7 = getFsrsForParams(weights7)
     const cards = [
         {
             ...card.card(),
@@ -533,8 +522,8 @@ test("Average stability over time uses replayed S90 for FSRS7", async () => {
     const stats = await getMemorisedDaysForTest(revlogs, cards, configs, mappings, [], 2, 2)
 
     const firstDay = dayFromMs(revlogs[0].id)
-    const firstReviewState = fsrs7.next_state(null, 0, 3)
-    const expectedS90 = intervalAtRetrievability(fsrs7, firstReviewState.stability, 0.9)
+    const firstReviewState = fsrs7.nextState(null, 0, 3)
+    const expectedS90 = intervalAtRetrievability(fsrs7, firstReviewState, 0.9)
 
     expect(stats.day_means[firstDay]).toBeCloseTo(expectedS90, 5)
     expect(stats.day_means[firstDay]).not.toBeCloseTo(firstReviewState.stability, 2)
@@ -566,11 +555,11 @@ test("Average stability over time resolves S90 locally by default", async () => 
             2
         )
         const firstDay = dayFromMs(revlogs[0].id)
-        const fsrs7 = fsrs({ w: paramsForTsFsrs(weights7) })
-        const firstReviewState = fsrs7.next_state(null, 0, 3)
+        const fsrs7 = getFsrsForParams(weights7)
+        const firstReviewState = fsrs7.nextState(null, 0, 3)
 
         expect(stats.day_means[firstDay]).toBeCloseTo(
-            intervalAtRetrievability(fsrs7, firstReviewState.stability, 0.9),
+            intervalAtRetrievability(fsrs7, firstReviewState, 0.9),
             5
         )
         expect(fetchSpy).not.toHaveBeenCalled()

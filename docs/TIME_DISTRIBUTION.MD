@@ -43,6 +43,7 @@ The following arrays are returned by `getMemorisedDays()`:
 ### Semantics
 
 - Buckets are built from per-review FSRS state immediately before applying the current rating.
+- FSRS-7 uses upstream's complete slow/fast stability and difficulty state with fractional elapsed days. Older models preserve the collection-rollover calendar-day convention.
 - Retrievability bucket: `floor(R * 100)` clamped to `0..99`.
 - Stability bucket: `round(S)` in days, clamped to `>= 0`.
 - Difficulty bucket: `round(D * 10) - 1` clamped to `0..99` (0.1-point buckets).
@@ -53,7 +54,7 @@ The following arrays are returned by `getMemorisedDays()`:
 
 - Only rated reviews (`ease > 0`) are included.
 - Cramming entries (`type == 3 && factor == 0`) are excluded.
-- Reset entries update FSRS state via `forget`, but do not create samples.
+- Reset entries clear replayed memory before the next rated review, but do not create samples.
 - Retrievability graph UI defaults to excluding same-day reviews (`elapsed < 1`).
 - Retrievability graph can optionally restrict to successful answers only (`ease > 1`, i.e. Hard/Good/Easy).
 

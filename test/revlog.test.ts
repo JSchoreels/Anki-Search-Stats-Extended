@@ -276,6 +276,7 @@ test("First short-term forgetting curve uses FSRS7 decay parameters", () => {
             {
                 minStability: 0.01,
                 maxStability: 1440,
+                daysPerUnit: 1 / 1440,
             }
         )
         const series = shortSeriesWithStability.find((entry) => entry.rating === 3)

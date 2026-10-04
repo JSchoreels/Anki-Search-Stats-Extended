@@ -68,6 +68,7 @@
             seriesWithStability = computeStabilityForSeries(series, data, effectiveDecayModel, {
                 minStability: 0.01,
                 maxStability: 1440,
+                daysPerUnit: 1 / 1440,
             })
         } else {
             seriesWithStability = computeStabilityForSeries(series, data, effectiveDecayModel, {})
@@ -144,6 +145,7 @@
                 yLabel: yLabel ?? i18n("forgetting-curve-y-axis"),
                 maxX: xAxisMax,
                 decayModel: effectiveDecayModel,
+                daysPerUnit: isShortTerm ? 1 / 1440 : 1,
             })
         } else if (svg) {
             svg.innerHTML = ""
@@ -152,7 +154,10 @@
 
     const decayText = (model: ForgettingCurveDecayModel) => {
         if (Array.isArray(model)) {
-            if (model.length >= 34) {
+            if (model.length === 34) {
+                return `${model[23].toFixed(2)}/${model[24].toFixed(2)}`
+            }
+            if (model.length === 35) {
                 return `${model[27].toFixed(2)}/${model[28].toFixed(2)}`
             }
             return (model[20] ?? FSRS5_DEFAULT_DECAY).toFixed(2)

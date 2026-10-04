@@ -18,4 +18,6 @@ For each review card with FSRS stability in `card.data.s`, the graph resolves th
 
 `selectTsFsrsParams()` follows Anki's selected `fsrsVersion` first. When `fsrsVersion` selects FSRS7, the graph uses the 34-parameter FSRS7 model through `ts-fsrs`.
 
-If deck config data is unavailable, the graph keeps the older per-card `card.data.decay` path.
+For FSRS-7, the curve receives the card's stored `s_int` (slow stability), `s_fast` (fast stability), and `d` (difficulty). `s` remains the display S90. Cards missing any required FSRS-7 state field are omitted from the retention sum; the graph does not fabricate a trace.
+
+If deck config data is unavailable, the graph keeps the older per-card `card.data.decay` path for cards without a fast trace. A card with `s_fast` requires its preset weights and cannot use the decay-only fallback.

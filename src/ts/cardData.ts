@@ -38,6 +38,7 @@ export interface CardExtraData {
     pos?: number
     s?: number
     s_int?: number
+    s_fast?: number
     decay?: number
 }
 
