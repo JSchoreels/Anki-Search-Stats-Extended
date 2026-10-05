@@ -30,11 +30,14 @@ export function exportTroubleshootingInfo() {
                   rwkv,
                   get(searchLimit)
               )
-            : "SSE troubleshooting report build 2026-10-05.5\nCalibration counts are not available yet; wait for the graphs to load or enable FSRS statistics.",
+            : "SSE troubleshooting report build 2026-10-05.6\nCalibration counts are not available yet; wait for the graphs to load or enable FSRS statistics.",
         `Exported at (UTC): ${new Date().toISOString()}`,
         `Matched cards: ${get(cids)?.length ?? "loading"}`,
         `FSRS history: ${samples ? "loaded" : "not loaded"}; FSRS cache: ${fsrs ? "loaded" : "not loaded"}; RWKV cache: ${rwkv ? "loaded" : "not loaded"}`,
         `Automatic FSRS calibration: ${generation?.phase ?? "waiting for FSRS history"}`,
+        ...(generation?.phase === "ready" && typeof generation.generated === "boolean"
+            ? [`FSRS generation result: ${generation.generated ? "generated predictions" : "reused existing data"}`]
+            : []),
         ...warnings.map((warning) => `Warning: ${warning}`),
     ].join("\n")
     window.bridgeCommand(`sseExportTroubleshooting:${JSON.stringify(report)}`)

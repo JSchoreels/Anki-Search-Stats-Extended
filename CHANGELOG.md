@@ -2,7 +2,9 @@
 
 ## Unreleased
 
-- Prepare historical FSRS calibration automatically when eligible FSRS statistics load. Reuse completed history and refresh both model caches after preparation.
+- Keep calibration graphs displayed after an unchanged validation check, avoiding a second cache load and graph calculation each time Statistics opens.
+- Check existing FSRS validation data in the background; open native training progress only when generation is needed.
+- Prepare historical FSRS calibration automatically when eligible FSRS statistics load. Reuse completed history and refresh model caches when generation changes them.
 - Keep cached graphs available during generation. Preserve native progress and Cancel; a cancelled or failed job retries when Statistics is reopened.
 - Remove the test-build diagnostic panel, full-history replay override and Generate button.
 - Add Export troubleshooting info beside Save PDF, with a Support-area fallback when the native button cannot be installed. Save aggregate calibration counts, date ranges, model sources, generation status and Anki environment details as a text file.

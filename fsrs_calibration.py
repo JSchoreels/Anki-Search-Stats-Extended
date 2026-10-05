@@ -169,7 +169,8 @@ def _save_records(path, created, records):
 
 
 def ensure_calibration(
-    col, requested_cids, user_files, table, progress, cancelled=lambda: False
+    col, requested_cids, user_files, table, progress, cancelled=lambda: False,
+    *, check_only=False,
 ):
     def check_cancel():
         if cancelled():
@@ -230,6 +231,10 @@ def ensure_calibration(
                 "update outdated preview parameters first."
             )
             continue
+        if check_only:
+            # The background check must finish before opening native
+            # training progress. A no-op never needs a modal dialog or graph refresh.
+            return {"generated": False, "needsGeneration": True, "warnings": warnings}
         # Rebuild the entire current history if the previous prefix changed.
         history = _history(col, cids)
         arguments = {
@@ -302,7 +307,11 @@ class CalibrationService:
             self.requested = set(cids)
             self.token += 1
             token = self.token
-            self.state = {"phase": "queued", "warnings": []}
+            self.state = {
+                "phase": "queued",
+                "label": "Checking historical FSRS calibration data",
+                "warnings": [],
+            }
 
         cancel = threading.Event()
 
@@ -314,14 +323,15 @@ class CalibrationService:
         def progress(label, current, total):
             update(label=label, currentPreset=current, totalPresets=total)
 
-        def operation(current_col):
+        def operation(current_col, *, check_only):
             if current_col is not col:
                 raise RuntimeError(
                     "Anki profile changed before FSRS calibration started."
                 )
             update(phase="running")
             return ensure_calibration(
-                col, cids, user_files, table, progress, cancel.is_set
+                col, cids, user_files, table, progress, cancel.is_set,
+                check_only=check_only,
             )
 
         def on_progress(value, ui):
@@ -346,17 +356,29 @@ class CalibrationService:
                 ],
             )
 
-        def launch():
+        def checked(result):
+            if result.pop("needsGeneration", False):
+                launch(check_only=False)
+            else:
+                update(phase="ready", **result)
+
+        def launch(*, check_only=True):
             from aqt.operations import QueryOp
 
             try:
-                QueryOp(
+                query = QueryOp(
                     parent=mw,
-                    op=operation,
-                    success=lambda result: update(phase="ready", **result),
-                ).failure(failure).with_progress(
-                    "Preparing historical FSRS calibration"
-                ).with_backend_progress(on_progress).run_in_background()
+                    op=lambda current_col: operation(current_col, check_only=check_only),
+                    success=(
+                        checked if check_only
+                        else lambda result: update(phase="ready", **result)
+                    ),
+                ).failure(failure)
+                if not check_only:
+                    query.with_progress(
+                        "Preparing historical FSRS calibration"
+                    ).with_backend_progress(on_progress)
+                query.run_in_background()
             except Exception as error:
                 failure(error)
 

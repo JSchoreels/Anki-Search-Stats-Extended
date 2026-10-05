@@ -50,6 +50,15 @@ test("background service shares pending work, completes, reuses cache and report
     expect(results.service_failure.warnings.join(" ")).toContain("cancelled by user")
 })
 
+test("unchanged cache checks stay non-modal and only actual generation opens training progress", () => {
+    expect(results.sparse_check).toMatchObject({ generated: false, needsGeneration: true })
+    expect(results.calls_after_sparse_check).toBe(0)
+    expect(results.reopen_check).toEqual({ generated: false, warnings: [] })
+    expect(results.service_check_modal).toBe(false)
+    expect(results.service_generation_modal).toBe(true)
+    expect(results.service_reopen_modal).toBe(false)
+})
+
 test("10,000 ordinary cards resolve once per deck and use a short preset search", () => {
     expect(results.ordinary).toEqual({
         cards: 10000,

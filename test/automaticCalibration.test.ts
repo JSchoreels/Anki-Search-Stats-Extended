@@ -81,3 +81,71 @@ test("a new selection waits for the active job and prepares its own cards afterw
     expect(starts).toHaveLength(2)
     stores.cids.set(null)
 })
+
+test("an unchanged cache check keeps both graph objects without another cache request or bin calculation", async () => {
+    const requests: string[] = []
+    const worker = jest.fn(async () => [])
+    jest.doMock("../src/ts/statsWorkerClient", () => ({ runStatsTask: worker }))
+    global.fetch = jest.fn(async (url: string) => {
+        requests.push(url)
+        if (url.endsWith("startFsrsCalibration"))
+            return response({ phase: "running", coversRequest: true, warnings: [] })
+        if (url.endsWith("fsrsCalibrationProgress"))
+            return response({ phase: "ready", generated: false, warnings: [] })
+        if (url.endsWith("fsrsReviewRetrievability") || url.endsWith("rwkvReviewRetrievability"))
+            return response({ column: "cache", data: [[100, 0.9]] })
+        return response({ columns: [], data: [], presets: [], cards: {}, retrievability: {} })
+    }) as typeof fetch
+    const stores = await import("../src/ts/stores")
+    stores.cids.set([10])
+    await flush()
+    stores.memorised_stats.set(history as never)
+    await flush()
+    const fsrs = get(stores.fsrsCalibrationStats)
+    const rwkv = get(stores.rwkvCalibrationStats)
+    expect(fsrs).not.toBeNull()
+    expect(rwkv).not.toBeNull()
+    const callsBefore = worker.mock.calls.length
+    await jest.advanceTimersByTimeAsync(1000)
+    await flush()
+    expect(get(stores.fsrsCalibrationStats)).toBe(fsrs)
+    expect(get(stores.rwkvCalibrationStats)).toBe(rwkv)
+    expect(worker).toHaveBeenCalledTimes(callsBefore)
+    for (const endpoint of ["fsrsReviewRetrievability", "rwkvReviewRetrievability"])
+        expect(requests.filter((url) => url.endsWith(endpoint))).toHaveLength(1)
+    stores.cids.set(null)
+})
+
+test.each([false, true])("a no-op FSRS check refreshes only deferred RWKV data (cache response late: %s)", async (late) => {
+    const requests: string[] = []
+    let release: (value: unknown) => void = () => {}
+    let rwkvCalls = 0
+    global.fetch = jest.fn(async (url: string) => {
+        requests.push(url)
+        if (url.endsWith("startFsrsCalibration"))
+            return response({ phase: "running", coversRequest: true, warnings: [] })
+        if (url.endsWith("fsrsCalibrationProgress"))
+            return response({ phase: "ready", generated: false, warnings: [] })
+        if (url.endsWith("fsrsReviewRetrievability"))
+            return response({ column: "cache", data: [[100, 0.9]] })
+        if (url.endsWith("rwkvReviewRetrievability")) {
+            rwkvCalls++
+            if (rwkvCalls > 1) return response({ column: "rwkv", data: [[100, 0.8]] })
+            const deferred = response({ data: [], refresh_after_fsrs: true })
+            return late ? new Promise((resolve) => { release = resolve }) : deferred
+        }
+        return response({ columns: [], data: [], presets: [], cards: {}, retrievability: {} })
+    }) as typeof fetch
+    const stores = await import("../src/ts/stores")
+    stores.cids.set([10])
+    await flush()
+    stores.memorised_stats.set(history as never)
+    await flush()
+    await jest.advanceTimersByTimeAsync(1000)
+    if (late) release(response({ data: [], refresh_after_fsrs: true }))
+    await flush()
+    expect(get(stores.rwkvCalibrationStats)?.predictionsByRevlogId).toEqual({ 100: 0.8 })
+    expect(requests.filter((url) => url.endsWith("rwkvReviewRetrievability"))).toHaveLength(2)
+    expect(requests.filter((url) => url.endsWith("fsrsReviewRetrievability"))).toHaveLength(1)
+    stores.cids.set(null)
+})

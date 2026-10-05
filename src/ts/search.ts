@@ -345,6 +345,7 @@ async function getReviewRetrievability(
         warnings?: unknown[]
         roles?: unknown[]
         role_counts?: Record<string, unknown>
+        refresh_after_fsrs?: boolean
     }
     const roles = (response.roles ?? []).filter((role): role is string => typeof role === "string")
     const roleCounts: Record<string, number> = {}
@@ -375,6 +376,7 @@ async function getReviewRetrievability(
         warnings,
         roles,
         roleCounts,
+        ...(response.refresh_after_fsrs === true ? { refreshAfterFsrs: true } : {}),
     }
 }
 

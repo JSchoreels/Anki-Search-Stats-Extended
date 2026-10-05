@@ -44,7 +44,7 @@ export function calibrationDiagnosticReport(
     const paired = buildUmPlusData(samples, fsrs.predictionsByRevlogId, rwkv.predictionsByRevlogId)
     const usesCache = fsrs.cachedPredictionCount > 0
     return [
-        "SSE troubleshooting report build 2026-10-05.5",
+        "SSE troubleshooting report build 2026-10-05.6",
         `Review range: ${dayRange === 0 ? "all history" : `${dayRange} days`}; current stats search`,
         `Eligible historical calibration samples: ${samples.length}`,
         `FSRS historical replay predictions: ${replay.count}`,

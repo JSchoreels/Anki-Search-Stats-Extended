@@ -52,5 +52,7 @@ test("endpoint reports provenance and only explicit alignment forces missing rec
 test("an empty RWKV cache waits for active FSRS generation before launching its own replay", () => {
     expect(results.pending_fsrs_generated).toBe(false)
     expect(results.pending_fsrs_read.data).toEqual([])
+    expect(results.pending_fsrs_read.refresh_after_fsrs).toBe(true)
+    expect(results.explicit_filled_tail.refresh_after_fsrs).toBe(false)
     expect(results.explicit_filled_tail.data).toEqual([[3, 0.73], [9, 0.79]])
 })

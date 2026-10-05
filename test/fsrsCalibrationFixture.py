@@ -142,6 +142,10 @@ result = {}
 with tempfile.TemporaryDirectory() as root:
     col = Collection()
     col.cache[200] = ["post_optimization"]
+    result["sparse_check"] = module.ensure_calibration(
+        col, [10], root, "cache.fsrs", lambda *args: None, check_only=True
+    )
+    result["calls_after_sparse_check"] = len(col.calls)
     result["sparse"] = ensure(col, root)
     result["request"] = col.calls[0]
     assert col.calls[0]["search"] == "cid:10,13 (-is:suspended)"
@@ -151,6 +155,9 @@ with tempfile.TemporaryDirectory() as root:
     assert col.calls[0]["num_of_relearning_steps"] == 2
     ensure(col, root)
     result["calls_after_reopen"] = len(col.calls)
+    result["reopen_check"] = module.ensure_calibration(
+        col, [10], root, "cache.fsrs", lambda *args: None, check_only=True
+    )
     col.rows.append([300, 10, 3, 1, 4, 2500])
     col.cache[300] = ["post_optimization"]
     ensure(col, root)
@@ -300,6 +307,7 @@ class Query:
 
     def __init__(self, parent, op, success):
         self.op, self.success = op, success
+        self.modal = False
         self.instances.append(self)
 
     def failure(self, fn):
@@ -307,6 +315,7 @@ class Query:
         return self
 
     def with_progress(self, label):
+        self.modal = True
         return self
 
     def with_backend_progress(self, fn):
@@ -329,15 +338,23 @@ with tempfile.TemporaryDirectory() as root:
     assert len(queued) == 1
     queued.pop()()
     query = Query.instances[-1]
+    result["service_check_modal"] = query.modal
+    query.success(query.op(col))
+    query = Query.instances[-1]
+    result["service_generation_modal"] = query.modal
     query.success(query.op(col))
     result["service"] = service.snapshot()
     service.start(mw, [10], root, "cache.fsrs")
     queued.pop()()
     query = Query.instances[-1]
+    result["service_reopen_modal"] = query.modal
     query.success(query.op(col))
     result["service_calls_after_reopen"] = len(col.calls)
+    col.cache = {}
     service.start(mw, [10], root, "cache.fsrs")
     queued.pop()()
+    query = Query.instances[-1]
+    query.success(query.op(col))
     query = Query.instances[-1]
     ui = NS(user_wants_abort=True)
     query.on_progress(NS(HasField=lambda _: False), ui)

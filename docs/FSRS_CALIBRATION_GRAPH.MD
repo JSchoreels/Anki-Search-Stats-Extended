@@ -178,13 +178,22 @@ automatically. Each selected card population is prepared once per stats page;
 date changes and repeated calculations for already prepared cards do not repeat
 the job. A new selection arriving during preparation waits for that job and is
 then checked. Reopening Statistics starts a fresh settings/history check.
+The check runs in a non-modal background `QueryOp`; existing graphs remain
+displayed. A successful unchanged check (`generated: false`) neither reloads the
+FSRS cache nor recalculates calibration bins, UM+ or ROC. Native training progress
+opens only when the check finds missing/stale validation data requiring generation.
+The generation operation rechecks the current collection before invoking the API.
 
 Existing FSRS and RWKV caches load independently and remain usable during
 preparation. Empty RWKV caches wait for a pending FSRS job before starting
 RWKV generation; the completion refresh then reads/generates aligned predictions.
-A serialized Anki `QueryOp` provides native progress and Cancel;
-concurrent stats windows share the pending operation. Success or failure refreshes
-available graph caches. Cancellation or failure stops automatic retries for the
+A serialized Anki `QueryOp` provides native progress and Cancel during generation;
+concurrent stats windows share the pending operation. Generation or failure refreshes
+available graph caches (a failed job may have written some completed presets).
+RWKV requests check alignment against existing FSRS rows as they load. If missing
+RWKV data was deferred behind an FSRS check, its response marks `refresh_after_fsrs`;
+the frontend refreshes only RWKV after an unchanged check, regardless of response
+order. Complete caches require no second read. Cancellation or failure stops automatic retries for the
 current stats page; close and reopen Statistics to retry. There is no Generate
 button or diagnostic replay override. Progress and warnings remain visible in
 the calibration panel, while a completed successful job adds no status panel.
@@ -234,8 +243,8 @@ replay, training, database query or network request. Cancelling the save dialog
 writes nothing. Export before data is ready explicitly identifies unloaded inputs.
 
 The report includes SSE build, Anki version/build, operating system and historical
-calibration API availability; automatic-generation state and warnings; eligible
-and replay counts; selected FSRS/RWKV sources, roles, counts and UTC review-date
+calibration API availability; automatic-generation state, result and warnings;
+eligible and replay counts; selected FSRS/RWKV sources, roles, counts and UTC review-date
 ranges; paired count; and UM+ populated/visible bucket counts. Saved RWKV
 post-optimization predictions and recovered replay values have separate counts.
 The calibration summary omits card content, individual review IDs and search text.

@@ -814,9 +814,13 @@ def rwkv_review_retrievability() -> bytes:
     )
     missing_validation = missing_rwkv_validation_reviews(fsrs_rows, role_aware_rows)
     missing_post = _missing_rwkv_post_optimization_reviews(fsrs_rows, role_aware_rows)
+    fsrs_pending = _fsrs_calibration_pending()
+    refresh_after_fsrs = bool(
+        fsrs_pending and (not role_aware_rows or missing_validation or missing_post)
+    )
     if (
         (not role_aware_rows or fsrs_rows)
-        and not _fsrs_calibration_pending()
+        and not fsrs_pending
         and _ensure_rwkv_calibration_data(force=bool(missing_validation or missing_post))
     ):
         role_aware_rows = _read_rwkv_calibration_retrievability_cache(
@@ -850,7 +854,10 @@ def rwkv_review_retrievability() -> bytes:
         )
     if not target_review_ids:
         return Response(
-            orjson.dumps({"column": None, "data": [], "warnings": warnings})
+            orjson.dumps({
+                "column": None, "data": [], "warnings": warnings,
+                "refresh_after_fsrs": refresh_after_fsrs,
+            })
         )
 
     cache_rows = (
@@ -925,7 +932,10 @@ def rwkv_review_retrievability() -> bytes:
             "retrievability row(s)."
         )
         return Response(
-            orjson.dumps({"column": None, "data": [], "warnings": warnings})
+            orjson.dumps({
+                "column": None, "data": [], "warnings": warnings,
+                "refresh_after_fsrs": refresh_after_fsrs,
+            })
         )
 
     review_entries = sorted(predictions_by_revlog_id.items())
@@ -934,6 +944,7 @@ def rwkv_review_retrievability() -> bytes:
         orjson.dumps({
             "column": source, "data": review_entries, "warnings": warnings,
             "roles": sorted(role_counts), "role_counts": role_counts,
+            "refresh_after_fsrs": refresh_after_fsrs,
         })
     )
 

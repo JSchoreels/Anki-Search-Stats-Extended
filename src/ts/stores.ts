@@ -303,6 +303,7 @@ export type FsrsCalibrationStats = {
 }
 export let fsrsCalibrationGeneration = writable<FsrsCalibrationProgress | null>(null)
 export let fsrsCalibrationRevision = writable(0)
+const rwkvCalibrationRevision = writable(0)
 
 const preparedCalibrationCards = new Set<number>()
 let calibrationRunning = false
@@ -333,7 +334,12 @@ async function prepareFsrsCalibration(cardIds: number[]) {
         // Cancellation/failure stops automatic retries until this stats page reopens.
         calibrationStopped = true
     }
-    fsrsCalibrationRevision.update((revision) => revision + 1)
+    // Unchanged validation data must not clear/recompute graphs on every reopen.
+    const cacheMayHaveChanged = get(fsrsCalibrationGeneration)?.generated !== false
+    if (cacheMayHaveChanged) {
+        fsrsCalibrationRevision.update((revision) => revision + 1)
+        rwkvCalibrationRevision.update((revision) => revision + 1)
+    }
     calibrationRunning = false
     const currentCards = get(cids)
     if (currentCards?.length && get(memorised_stats)?.calibration_samples?.length) {
@@ -402,12 +408,13 @@ export type RwkvCalibrationStats = {
     warnings: string[]
     roles?: string[]
     roleCounts?: Record<string, number>
+    refreshAfterFsrs?: boolean
 }
 export let rwkvCalibrationStats = writable<RwkvCalibrationStats | null>(null)
 derived(
-    [cids, searchLimit, memorised_stats, rwkvStatsGeneration, fsrsCalibrationRevision],
+    [cids, searchLimit, memorised_stats, rwkvStatsGeneration, rwkvCalibrationRevision],
     (
-        [$cids, $searchLimit, $memorised_stats, , $fsrsCalibrationRevision],
+        [$cids, $searchLimit, $memorised_stats],
         set: (value: RwkvCalibrationStats | null) => void
     ) => {
         set(null)
@@ -422,13 +429,12 @@ derived(
         }
 
         return latestResult(set, async (signal) => {
-            const { column, predictionsByRevlogId, warnings, roles, roleCounts } =
+            const { column, predictionsByRevlogId, warnings, roles, roleCounts, refreshAfterFsrs } =
                 await getRwkvReviewRetrievability(
                     $cids,
                     $searchLimit,
                     samples.map((sample) => sample.revlogId),
-                    $fsrsCalibrationRevision > 0 &&
-                        get(fsrsCalibrationGeneration)?.phase === "ready"
+                    true
                 )
             return {
                 column,
@@ -437,7 +443,20 @@ derived(
                 warnings,
                 roles,
                 roleCounts,
+                refreshAfterFsrs,
             }
         })
     }
 ).subscribe(rwkvCalibrationStats.set)
+
+derived([rwkvCalibrationStats, fsrsCalibrationGeneration], ([$rwkv, $generation]) => {
+    // A quiet no-op can still unblock missing RWKV data. Watching both results
+    // handles either response order without reloading an unchanged FSRS graph.
+    if (
+        $rwkv?.refreshAfterFsrs &&
+        $generation?.phase === "ready" &&
+        $generation.generated === false
+    ) {
+        rwkvCalibrationRevision.update((revision) => revision + 1)
+    }
+}).subscribe(() => {})

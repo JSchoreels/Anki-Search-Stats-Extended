@@ -66,7 +66,7 @@ test("Statistics reads both caches immediately while automatic generation refres
         expect(get(stores.rwkvCalibrationStats)).not.toBeNull()
         expect(get(stores.fsrsCalibrationGeneration)?.phase).toBe("queued")
         expect(requests.filter((url) => url.endsWith("startFsrsCalibration"))).toHaveLength(1)
-        expect(alignmentBody).not.toHaveProperty("ensure_fsrs_alignment")
+        expect(alignmentBody).toHaveProperty("ensure_fsrs_alignment", true)
         await jest.advanceTimersByTimeAsync(1000)
         await flush()
         const fsrs = get(stores.fsrsCalibrationStats)!
