@@ -8,6 +8,7 @@
     import MemorisedGraphContainer from "../MemorisedGraphContainer.svelte"
     import FsrsCalibration from "../FSRSCalibration.svelte"
     import CalibrationDiagnostics from "../CalibrationDiagnostics.svelte"
+    import FsrsCalibrationGeneration from "../FsrsCalibrationGeneration.svelte"
     import { calibrationDiagnosticReport } from "../calibrationDiagnostics"
     import UMPlus from "../UMPlus.svelte"
     import ROC from "../ROC.svelte"
@@ -118,7 +119,7 @@
                   $searchLimit,
                   useHistoricalReplay
               )
-            : "SSE calibration diagnostic build 2026-10-05.1\nLoading calibration data..."
+            : "SSE calibration diagnostic build 2026-10-05.3\nLoading calibration data..."
     $: cachedFsrsCalibrationData = $fsrsCalibrationStats?.bins ?? []
     $: fsrsCalibrationData =
         !useHistoricalReplay && _.sumBy(cachedFsrsCalibrationData, (bin) => bin?.count ?? 0) > 0
@@ -245,6 +246,7 @@
                     )}
                 </div>
             {/if}
+            <FsrsCalibrationGeneration />
             <CalibrationDiagnostics report={calibrationReport} bind:useHistoricalReplay />
         </div>
         <p>

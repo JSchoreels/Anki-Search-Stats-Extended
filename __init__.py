@@ -13,6 +13,8 @@ from anki.hooks import wrap
 from aqt import QDesktopServices, QUrl, mw
 from aqt.stats import NewDeckStats
 
+from .fsrs_calibration import CalibrationService, missing_rwkv_validation_reviews
+
 addon_dir = Path(os.path.dirname(__file__))
 locale_dir = addon_dir / "locale"
 mw.addonManager.setWebExports(__name__, r"stats-worker\.js")
@@ -544,6 +546,36 @@ def fsrs_review_retrievability() -> bytes:
 post_handlers["fsrsReviewRetrievability"] = fsrs_review_retrievability
 
 
+_fsrs_calibration_service = CalibrationService()
+
+
+def start_fsrs_calibration() -> bytes:
+    req = orjson.loads(request.data)
+    cids = _positive_ints(req.get("cids", []))
+    if not cids:
+        return Response(
+            orjson.dumps({"phase": "ready", "warnings": [], "generated": False})
+        )
+    state = _fsrs_calibration_service.start(
+        mw, cids, addon_dir / "user_files", _cache_table_name(FSRS_RETRIEVABILITY_CACHE_TABLE)
+    )
+    return Response(orjson.dumps(state))
+
+
+def fsrs_calibration_progress() -> bytes:
+    if _fsrs_calibration_service.col is not mw.col:
+        return Response(
+            orjson.dumps({"phase": "failed", "warnings": [
+                "Anki profile changed while preparing FSRS calibration. Reopen Statistics."
+            ]})
+        )
+    return Response(orjson.dumps(_fsrs_calibration_service.snapshot()))
+
+
+post_handlers["startFsrsCalibration"] = start_fsrs_calibration
+post_handlers["fsrsCalibrationProgress"] = fsrs_calibration_progress
+
+
 def _read_rwkv_calibration_retrievability_cache(
     cids: list[int],
     day_range: int,
@@ -604,7 +636,7 @@ def _read_rwkv_calibration_retrievability_cache(
     """)
 
 
-def _ensure_rwkv_calibration_data() -> bool:
+def _ensure_rwkv_calibration_data(*, force=False) -> bool:
     """Ask adapted Anki builds to lazily generate missing RWKV history data."""
 
     try:
@@ -612,7 +644,8 @@ def _ensure_rwkv_calibration_data() -> bool:
     except ImportError:
         return False
 
-    ensure = getattr(rwkv_scheduler, "ensure_rwkv_calibration_data", None)
+    name = "recompute_rwkv_calibration_data" if force else "ensure_rwkv_calibration_data"
+    ensure = getattr(rwkv_scheduler, name, None)
     if not callable(ensure):
         return False
     try:
@@ -710,7 +743,14 @@ def rwkv_review_retrievability() -> bytes:
         day_range,
         requested_review_ids,
     )
-    if not role_aware_rows and _ensure_rwkv_calibration_data():
+    fsrs_rows = (
+        _read_fsrs_calibration_retrievability_cache(cids, day_range, requested_review_ids)
+        if req.get("ensure_fsrs_alignment") else []
+    )
+    missing_validation = missing_rwkv_validation_reviews(fsrs_rows, role_aware_rows)
+    if (
+        not role_aware_rows or fsrs_rows
+    ) and _ensure_rwkv_calibration_data(force=bool(missing_validation)):
         role_aware_rows = _read_rwkv_calibration_retrievability_cache(
             cids,
             day_range,
@@ -726,6 +766,12 @@ def rwkv_review_retrievability() -> bytes:
         )
     else:
         target_review_ids = _rwkv_review_target_ids(cids, day_range)
+    remaining_validation = missing_rwkv_validation_reviews(fsrs_rows, role_aware_rows) & target_review_ids
+    if remaining_validation:
+        warnings.append(
+            f"RWKV calibration is missing {len(remaining_validation)} FSRS validation review(s) "
+            "after the alignment refresh. Only available paired reviews are compared."
+        )
     if not target_review_ids:
         return Response(
             orjson.dumps({"column": None, "data": [], "warnings": warnings})

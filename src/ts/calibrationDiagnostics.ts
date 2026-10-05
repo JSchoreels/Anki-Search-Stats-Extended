@@ -43,7 +43,7 @@ export function calibrationDiagnosticReport(
     const paired = buildUmPlusData(samples, fsrs.predictionsByRevlogId, rwkv.predictionsByRevlogId)
     const usesCache = !useHistoricalReplay && fsrs.cachedPredictionCount > 0
     return [
-        "SSE calibration diagnostic build 2026-10-05.1",
+        "SSE calibration diagnostic build 2026-10-05.3",
         `Review range: ${dayRange === 0 ? "all history" : `${dayRange} days`}; current stats search`,
         `Eligible historical calibration samples: ${samples.length}`,
         `FSRS historical replay predictions: ${replay.count}`,
@@ -58,13 +58,19 @@ export function calibrationDiagnosticReport(
         `Paired FSRS + RWKV reviews: ${paired.count}`,
         `UM+ populated buckets: ${paired.bins.length}; buckets visible with default >=200 filter: ${visibleUmPlusBins(paired.bins, false).length}`,
         ...(usesCache && selected.count < replay.count
-            ? ["Cache selection reduces the FSRS sample. Historical replay is not merged into a non-empty cache."]
+            ? [
+                  "Cache selection reduces the FSRS sample. Historical replay is not merged into a non-empty cache.",
+              ]
             : []),
         ...(fsrs.roles.length === 1 && fsrs.roles[0] === "post_optimization"
-            ? ["Only post_optimization cache roles were returned; no historical validation_fold predictions were returned for this search."]
+            ? [
+                  "Only post_optimization cache roles were returned; no historical validation_fold predictions were returned for this search.",
+              ]
             : []),
         ...(paired.count > 0 && visibleUmPlusBins(paired.bins, false).length === 0
-            ? ["UM+ pairs exist, but all buckets are hidden. Enable Show Small Buckets to see them."]
+            ? [
+                  "UM+ pairs exist, but all buckets are hidden. Enable Show Small Buckets to see them.",
+              ]
             : []),
         "This report contains counts and dates only, without card content or review IDs.",
     ].join("\n")

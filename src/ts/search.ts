@@ -204,9 +204,16 @@ export async function getRevlogs(cids: number[], day_range: number) {
 export async function getRwkvReviewRetrievability(
     cids: number[],
     day_range: number,
-    revlogIds: number[] = []
+    revlogIds: number[] = [],
+    ensureFsrsAlignment = false
 ) {
-    return getReviewRetrievability("rwkvReviewRetrievability", cids, day_range, revlogIds)
+    return getReviewRetrievability(
+        "rwkvReviewRetrievability",
+        cids,
+        day_range,
+        revlogIds,
+        ensureFsrsAlignment
+    )
 }
 
 export type RwkvMemorisedHistoryProgress = {
@@ -240,6 +247,72 @@ export async function cancelRwkvMemorisedHistory() {
     await endpoint("cancelRwkvMemorisedHistory", "{}", false)
 }
 
+export type FsrsCalibrationProgress = {
+    phase: "queued" | "running" | "ready" | "failed"
+    label?: string
+    currentPreset?: number
+    totalPresets?: number
+    coversRequest?: boolean
+    generated?: boolean
+    warnings: string[]
+}
+
+function calibrationPollDelay(signal: AbortSignal) {
+    return new Promise<void>((resolve, reject) => {
+        const abort = () => {
+            clearTimeout(timer)
+            reject(new DOMException("Statistics request cancelled", "AbortError"))
+        }
+        const timer = setTimeout(() => {
+            signal.removeEventListener("abort", abort)
+            resolve()
+        }, 1000)
+        signal.addEventListener("abort", abort, { once: true })
+        if (signal.aborted) abort()
+    })
+}
+
+export async function ensureFsrsCalibration(
+    cids: number[],
+    signal: AbortSignal,
+    onProgress: (state: FsrsCalibrationProgress) => void
+): Promise<string[]> {
+    try {
+        let needsOwnRequest = true
+        while (needsOwnRequest) {
+            signal.throwIfAborted()
+            let state = (await endpoint(
+                "startFsrsCalibration",
+                JSON.stringify({ cids }),
+                false
+            )) as FsrsCalibrationProgress
+            needsOwnRequest = state.coversRequest === false
+            while (state.phase === "queued" || state.phase === "running") {
+                signal.throwIfAborted()
+                onProgress(state)
+                await calibrationPollDelay(signal)
+                state = (await endpoint(
+                    "fsrsCalibrationProgress",
+                    "{}",
+                    false
+                )) as FsrsCalibrationProgress
+            }
+            signal.throwIfAborted()
+            onProgress(state)
+            if (state.phase === "failed") return state.warnings
+            if (!needsOwnRequest) return state.warnings
+        }
+        return []
+    } catch (error) {
+        signal.throwIfAborted()
+        const warnings = [
+            `Historical FSRS calibration is unavailable: ${error instanceof Error ? error.message : error}. Restart Anki after installing this update.`,
+        ]
+        onProgress({ phase: "failed", warnings })
+        return warnings
+    }
+}
+
 export async function getFsrsReviewRetrievability(
     cids: number[],
     day_range: number,
@@ -252,23 +325,27 @@ async function getReviewRetrievability(
     endpointName: "fsrsReviewRetrievability" | "rwkvReviewRetrievability",
     cids: number[],
     day_range: number,
-    revlogIds: number[] = []
+    revlogIds: number[] = [],
+    ensureFsrsAlignment = false
 ) {
     const revlog_ids = [...new Set(revlogIds)].filter(
         (revlogId) => Number.isInteger(revlogId) && revlogId > 0
     )
     const response = (await endpoint(
         endpointName,
-        JSON.stringify({ cids, day_range, revlog_ids })
+        JSON.stringify({
+            cids,
+            day_range,
+            revlog_ids,
+            ...(ensureFsrsAlignment ? { ensure_fsrs_alignment: true } : {}),
+        })
     )) as {
         column?: string | null
         data?: [number, number | string | null][]
         warnings?: unknown[]
         roles?: unknown[]
     }
-    const roles = (response.roles ?? []).filter(
-        (role): role is string => typeof role === "string"
-    )
+    const roles = (response.roles ?? []).filter((role): role is string => typeof role === "string")
     const predictionsByRevlogId: Record<number, number> = {}
     const warnings = (response.warnings ?? []).filter(
         (warning): warning is string => typeof warning === "string" && warning.length > 0

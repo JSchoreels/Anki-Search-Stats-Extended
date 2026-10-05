@@ -10,6 +10,20 @@ the existing tests. Changing the search or history range terminates obsolete
 workers and ignores obsolete endpoint responses. Worker failures are reported;
 they do not fall back to blocking the page.
 
+Historical FSRS calibration generation starts only from the **Generate FSRS
+calibration data** button. Ordinary Statistics loads read caches immediately;
+they perform no generation freshness scan or polling delay. FSRS and RWKV cache
+reads are independent, so RWKV is available while FSRS training is pending.
+The explicit job runs as a serialized Anki background operation with native
+cancellable progress. Ordinary presets resolve once per home deck and use short
+native preset searches. Overlay routing retains exact per-card settings, with
+one native batch resolver preparation and cached home-deck options. Explicit
+repeat generation checks historical-prefix hashes and cache coverage to reuse
+completed work. After completion, both graph caches refresh and RWKV checks
+held-out coverage against FSRS. See
+[FSRS calibration generation](FSRS_CALIBRATION_GRAPH.MD) for metadata and
+compatibility behavior.
+
 Anki's pending-RWKV graph retries reuse SSE's current search data until RWKV is
 ready; RWKV calibration then reloads any newly available predictions. This reuse is limited to a pending response with the same search, native
 history range, and SSE all-time setting in the same page. An ordinary refresh

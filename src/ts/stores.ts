@@ -8,6 +8,7 @@ import { today, type calculateRevlogStats } from "./revlogGraphs"
 import {
     cancelRwkvMemorisedHistory,
     catchErrors,
+    ensureFsrsCalibration,
     getCardData,
     getFsrsPresetData,
     getFsrsReviewRetrievability,
@@ -17,6 +18,7 @@ import {
     saveConfigValue,
     startRwkvMemorisedHistory,
     type CardData,
+    type FsrsCalibrationProgress,
     type Revlog,
 } from "./search"
 import { runStatsTask } from "./statsWorkerClient"
@@ -299,9 +301,29 @@ export type FsrsCalibrationStats = {
     predictionsByRevlogId: Record<number, number>
     warnings: string[]
 }
+export let fsrsCalibrationGeneration = writable<FsrsCalibrationProgress | null>(null)
+export let fsrsCalibrationRevision = writable(0)
+
+export async function generateFsrsCalibration() {
+    const cardIds = get(cids)
+    const state = get(fsrsCalibrationGeneration)
+    if (!cardIds?.length || state?.phase === "queued" || state?.phase === "running") return
+    fsrsCalibrationGeneration.set({
+        phase: "queued",
+        label: "Preparing historical FSRS calibration",
+        warnings: [],
+    })
+    await ensureFsrsCalibration(
+        cardIds,
+        new AbortController().signal,
+        fsrsCalibrationGeneration.set
+    )
+    fsrsCalibrationRevision.update((revision) => revision + 1)
+}
+
 export let fsrsCalibrationStats = writable<FsrsCalibrationStats | null>(null)
 derived(
-    [cids, searchLimit, memorised_stats],
+    [cids, searchLimit, memorised_stats, fsrsCalibrationRevision],
     (
         [$cids, $searchLimit, $memorised_stats],
         set: (value: FsrsCalibrationStats | null) => void
@@ -313,16 +335,24 @@ derived(
 
         const samples = $memorised_stats.calibration_samples ?? []
         if (samples.length === 0) {
-            set({ column: null, bins: [], predictionsByRevlogId: {}, warnings: [], cachedPredictionCount: 0, roles: [] })
+            set({
+                column: null,
+                bins: [],
+                predictionsByRevlogId: {},
+                warnings: [],
+                cachedPredictionCount: 0,
+                roles: [],
+            })
             return
         }
 
         return latestResult(set, async (signal) => {
-            const { column, predictionsByRevlogId, warnings, roles } = await getFsrsReviewRetrievability(
-                $cids,
-                $searchLimit,
-                samples.map((sample) => sample.revlogId)
-            )
+            const { column, predictionsByRevlogId, warnings, roles } =
+                await getFsrsReviewRetrievability(
+                    $cids,
+                    $searchLimit,
+                    samples.map((sample) => sample.revlogId)
+                )
             const effectivePredictions =
                 Object.keys(predictionsByRevlogId).length > 0
                     ? predictionsByRevlogId
@@ -347,9 +377,9 @@ export type RwkvCalibrationStats = {
 }
 export let rwkvCalibrationStats = writable<RwkvCalibrationStats | null>(null)
 derived(
-    [cids, searchLimit, memorised_stats, rwkvStatsGeneration],
+    [cids, searchLimit, memorised_stats, rwkvStatsGeneration, fsrsCalibrationRevision],
     (
-        [$cids, $searchLimit, $memorised_stats],
+        [$cids, $searchLimit, $memorised_stats, , $fsrsCalibrationRevision],
         set: (value: RwkvCalibrationStats | null) => void
     ) => {
         set(null)
@@ -367,7 +397,8 @@ derived(
             const { column, predictionsByRevlogId, warnings } = await getRwkvReviewRetrievability(
                 $cids,
                 $searchLimit,
-                samples.map((sample) => sample.revlogId)
+                samples.map((sample) => sample.revlogId),
+                $fsrsCalibrationRevision > 0 && get(fsrsCalibrationGeneration)?.phase === "ready"
             )
             return {
                 column,

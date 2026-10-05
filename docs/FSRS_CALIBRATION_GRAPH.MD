@@ -118,8 +118,8 @@ Anki-side producers should store pre-answer predictions for the same
   `search_stats_fsrs_review_retrievability` with source
   `fsrs_calibration_recompute`. Ordinary optimization does not populate this
   cache. Older builds wrote `fsrs_optimization` rows during optimization.
-  The current SSE data-loading path reads the FSRS cache but does not call this
-  generation API, so later answer-time rows alone can activate cache selection.
+  SSE exposes this API through an explicit **Generate FSRS calibration data**
+  button. Opening Statistics only reads existing predictions.
 - FSRS answer handling writes `search_stats_fsrs_review_retrievability` with
   source `fsrs_review` and role `post_optimization`.
 - RWKV state-cache build/update maintains recurrent review state without
@@ -162,7 +162,64 @@ data path stays aligned with Anki's current preset shape. Calibration and
 Memorised retrievability predictions use FSRS params and memory state; desired
 retention does not directly enter the model's retrievability calculation.
 
-## Diagnostic build 2026-10-05.1
+## Historical FSRS Calibration Generation
+
+The **Generate FSRS calibration data** button in the calibration panel calls
+`/_anki/startFsrsCalibration` and polls `/_anki/fsrsCalibrationProgress`.
+Opening Statistics does not start FSRS training, scan the collection for
+freshness, or wait for a generation poll. FSRS and RWKV read their existing
+caches independently; RWKV remains available while FSRS generation is pending.
+UM+ and ROC continue to require paired predictions.
+
+On adapted Anki builds, `fsrs_calibration.py` calls the supported backend
+`compute_fsrs_review_retrievability_calibration` API with validation folds
+enabled. A serialized Anki `QueryOp` shows native progress and supports Cancel;
+concurrent stats windows share a pending operation. Success or failure refreshes
+the graph caches to include any completed presets. Cancellation or failure shows
+a warning beside the button. Only another explicit click retries generation;
+reopening Statistics or changing the search does not restart a cancelled job.
+
+Generation covers the complete collection population sharing each selected
+card's resolved preset settings, independently of the graph search and date
+range. Without overlay routing rules, SSE reads card/deck membership in one batch,
+resolves model settings once per home deck, caches deck options, and uses Anki's
+short `preset:"<name>"` optimizer search. With overlay routing, it prepares the
+native batch preset-ID resolver without computing current retrievability, then
+preserves individual resolved settings and uses exact card IDs for split groups.
+Distinct overrides remain separate even when preset IDs match.
+
+The API receives current parameters, FSRS version, the preset's optimizer search
+(default `-is:suspended`), ignore-before date, within-day relearning-step count,
+and FSRS-7 same-day and scheduling-penalty options. Model parameters come from
+the resolved preset; learning steps remain options of the home deck. Filtered
+cards use their original deck options. Legacy 35-weight FSRS-7 preview presets
+show a warning and are not passed to the final FSRS-7 backend.
+
+An add-on `user_files/fsrs-calibration-<collection-path-hash>.json` record tracks
+resolved settings, the historical review prefix and its hash, and historical
+cache coverage. An explicit click reuses completed generation when this record
+still matches; recent answers alone do not require retraining. Changed
+parameters/options, edited or removed historical reviews, or lost historical
+cache coverage cause regeneration on the next click. A completed attempt with
+no validation rows is remembered and reported. Existing validation caches are
+adopted on first use; their original parameter freshness cannot be established
+retrospectively. Metadata is local, excluded from packages, and preserved by
+runtime synchronization.
+
+Anki owns prediction-cache writes through its supported API. SSE adds no direct
+SQLite writes for generation and does not reschedule cards or change parameters.
+Builds without the API retain existing cache/replay selection and display an
+unavailable warning when generation is requested.
+
+After successful explicit generation, RWKV cache refresh compares requested
+FSRS `validation_fold` review IDs with valid RWKV `test_fold` predictions.
+Missing held-out coverage calls the supported `recompute_rwkv_calibration_data`
+API, rather than an ensure API that could accept an existing partial cache.
+Otherwise the existing ensure API verifies current data and fold alignment.
+The cache is reread after generation; remaining eligible coverage gaps produce
+a count-only warning. Graph comparisons include available paired reviews.
+
+## Diagnostic build 2026-10-05.3
 
 The calibration panel includes a selectable aggregate report. It reports eligible
 historical samples, browser-replay predictions, returned FSRS cache prediction
@@ -171,7 +228,7 @@ their UTC date ranges, paired review count, and UM+ buckets visible under the
 200-review default threshold. Missing role metadata is explicitly identified;
 it is not interpreted as proof of a missing validation cache. Counts apply to
 the current search and review range. Reports contain no card text or review IDs.
-No extra backend requests or database operations are added.
+The report itself adds no backend requests or database operations.
 
 The optional **Use full-history FSRS replay (diagnostic)** checkbox bypasses the
 FSRS cache for Calibration, UM+ and ROC in this stats view. It uses the existing
@@ -182,7 +239,8 @@ the UI identifies that current parameters replayed over past reviews are not
 held-out validation. The report continues to show the cache count and roles,
 so reports with the checkbox off and on can identify a sparse-cache selection.
 
-This is a diagnostic package, not a change to the default calibration policy.
+The diagnostic replay checkbox remains separate from explicit historical
+validation-cache generation.
 
 ## Calibration Source Toggle
 
