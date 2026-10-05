@@ -4,6 +4,7 @@
     import { i18n } from "./i18n"
     import LinkButton from "./LinkButton.svelte"
     import { openLocaleFolder } from "./search"
+    import { exportTroubleshootingInfo } from "./troubleshooting"
 </script>
 
 <GraphCategory hidden_title={i18n("about")} config_name="about">
@@ -46,6 +47,10 @@
     </GraphContainer>
     <GraphContainer>
         <h1>{i18n("support")}</h1>
+        {#if !SSEother.troubleshooting_export_button}
+            <button on:click={exportTroubleshootingInfo}>Export troubleshooting info</button>
+            <br />
+        {/if}
         <LinkButton href="https://ankiweb.net/shared/info/1613056169">
             {i18n("like-on-ankiweb")}
         </LinkButton>

@@ -36,23 +36,22 @@ export function calibrationDiagnosticReport(
     replayPredictions: Record<number, number>,
     fsrs: FsrsDiagnosticSource,
     rwkv: PredictionSource,
-    dayRange: number,
-    useHistoricalReplay = false
+    dayRange: number
 ): string {
     const replay = predictionSummary(samples, replayPredictions)
     const selected = predictionSummary(samples, fsrs.predictionsByRevlogId)
     const rwkvSelected = predictionSummary(samples, rwkv.predictionsByRevlogId)
     const paired = buildUmPlusData(samples, fsrs.predictionsByRevlogId, rwkv.predictionsByRevlogId)
-    const usesCache = !useHistoricalReplay && fsrs.cachedPredictionCount > 0
+    const usesCache = fsrs.cachedPredictionCount > 0
     return [
-        "SSE calibration diagnostic build 2026-10-05.4",
+        "SSE troubleshooting report build 2026-10-05.5",
         `Review range: ${dayRange === 0 ? "all history" : `${dayRange} days`}; current stats search`,
         `Eligible historical calibration samples: ${samples.length}`,
         `FSRS historical replay predictions: ${replay.count}`,
         `FSRS cached predictions returned: ${fsrs.cachedPredictionCount}`,
         `FSRS cache roles returned: ${fsrs.roles.join(", ") || "none / not reported"}`,
         `FSRS cache source: ${fsrs.column ?? "none"}`,
-        `FSRS graph uses: ${useHistoricalReplay ? "historical replay override (diagnostic, not held-out)" : usesCache ? "cached predictions only" : "historical replay fallback"}`,
+        `FSRS graph uses: ${usesCache ? "cached predictions only" : "historical replay fallback"}`,
         `FSRS reviews used: ${selected.count}; eligible without selected FSRS prediction: ${samples.length - selected.count}`,
         `FSRS selected review dates (UTC): ${selected.range}`,
         `RWKV source: ${rwkv.column ?? "none"}; reviews used: ${rwkvSelected.count}`,
@@ -81,6 +80,6 @@ export function calibrationDiagnosticReport(
                   "UM+ pairs exist, but all buckets are hidden. Enable Show Small Buckets to see them.",
               ]
             : []),
-        "This report contains counts and dates only, without card content or review IDs.",
+        "Calibration summary contains aggregate counts and dates, without card content or review IDs.",
     ].join("\n")
 }

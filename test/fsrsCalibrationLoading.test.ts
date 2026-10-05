@@ -15,7 +15,7 @@ afterEach(() => {
     jest.resetModules()
 })
 
-test("Statistics reads both caches immediately; explicit generation refreshes them after completion", async () => {
+test("Statistics reads both caches immediately while automatic generation refreshes them once", async () => {
     const originalFetch = global.fetch
     const requests: string[] = []
     let alignmentBody: unknown
@@ -64,15 +64,10 @@ test("Statistics reads both caches immediately; explicit generation refreshes th
         await flush()
         expect(get(stores.fsrsCalibrationStats)?.cachedPredictionCount).toBe(1)
         expect(get(stores.rwkvCalibrationStats)).not.toBeNull()
-        expect(get(stores.fsrsCalibrationGeneration)).toBeNull()
-        expect(requests).not.toContain("/_anki/startFsrsCalibration")
-        expect(alignmentBody).not.toHaveProperty("ensure_fsrs_alignment")
-        const pending = stores.generateFsrsCalibration()
-        await flush()
         expect(get(stores.fsrsCalibrationGeneration)?.phase).toBe("queued")
-        expect(get(stores.rwkvCalibrationStats)).not.toBeNull()
+        expect(requests.filter((url) => url.endsWith("startFsrsCalibration"))).toHaveLength(1)
+        expect(alignmentBody).not.toHaveProperty("ensure_fsrs_alignment")
         await jest.advanceTimersByTimeAsync(1000)
-        await pending
         await flush()
         const fsrs = get(stores.fsrsCalibrationStats)!
         expect(fsrs.cachedPredictionCount).toBe(3)
@@ -80,6 +75,9 @@ test("Statistics reads both caches immediately; explicit generation refreshes th
         expect(fsrs.bins.reduce((sum, bin) => sum + (bin?.count ?? 0), 0)).toBe(3)
         expect(Object.keys(get(stores.rwkvCalibrationStats)!.predictionsByRevlogId)).toHaveLength(3)
         expect(alignmentBody).toMatchObject({ ensure_fsrs_alignment: true, revlog_ids: ids })
+        stores.memorised_stats.set({ ...get(stores.memorised_stats)! })
+        await flush()
+        expect(requests.filter((url) => url.endsWith("startFsrsCalibration"))).toHaveLength(1)
         stores.cids.set(null)
     } finally {
         global.fetch = originalFetch
@@ -111,6 +109,8 @@ test("an obsolete search stops polling without publishing later progress", async
 test("RWKV cache loads even when the FSRS cache request remains pending", async () => {
     const originalFetch = global.fetch
     global.fetch = jest.fn(async (url: string) => {
+        if (url.endsWith("startFsrsCalibration"))
+            return response({ phase: "running", coversRequest: true, warnings: [] })
         if (url.endsWith("fsrsReviewRetrievability")) return new Promise(() => {})
         if (url.endsWith("rwkvReviewRetrievability")) return response({ data: [[100, 0.8]] })
         return response({ columns: [], data: [], presets: [], cards: {}, retrievability: {} })
@@ -127,7 +127,7 @@ test("RWKV cache loads even when the FSRS cache request remains pending", async 
         await flush()
         expect(get(stores.fsrsCalibrationStats)).toBeNull()
         expect(get(stores.rwkvCalibrationStats)?.predictionsByRevlogId).toEqual({ 100: 0.8 })
-        expect(get(stores.fsrsCalibrationGeneration)).toBeNull()
+        expect(get(stores.fsrsCalibrationGeneration)?.phase).toBe("running")
         stores.cids.set(null)
     } finally {
         global.fetch = originalFetch

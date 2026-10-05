@@ -304,10 +304,19 @@ export type FsrsCalibrationStats = {
 export let fsrsCalibrationGeneration = writable<FsrsCalibrationProgress | null>(null)
 export let fsrsCalibrationRevision = writable(0)
 
-export async function generateFsrsCalibration() {
-    const cardIds = get(cids)
-    const state = get(fsrsCalibrationGeneration)
-    if (!cardIds?.length || state?.phase === "queued" || state?.phase === "running") return
+const preparedCalibrationCards = new Set<number>()
+let calibrationRunning = false
+let calibrationStopped = false
+
+async function prepareFsrsCalibration(cardIds: number[]) {
+    if (
+        calibrationRunning ||
+        calibrationStopped ||
+        !cardIds.length ||
+        cardIds.every((id) => preparedCalibrationCards.has(id))
+    )
+        return
+    calibrationRunning = true
     fsrsCalibrationGeneration.set({
         phase: "queued",
         label: "Preparing historical FSRS calibration",
@@ -318,8 +327,25 @@ export async function generateFsrsCalibration() {
         new AbortController().signal,
         fsrsCalibrationGeneration.set
     )
+    if (get(fsrsCalibrationGeneration)?.phase === "ready") {
+        cardIds.forEach((id) => preparedCalibrationCards.add(id))
+    } else {
+        // Cancellation/failure stops automatic retries until this stats page reopens.
+        calibrationStopped = true
+    }
     fsrsCalibrationRevision.update((revision) => revision + 1)
+    calibrationRunning = false
+    const currentCards = get(cids)
+    if (currentCards?.length && get(memorised_stats)?.calibration_samples?.length) {
+        void prepareFsrsCalibration(currentCards)
+    }
 }
+
+derived([cids, memorised_stats], ([$cids, $memorised]) => {
+    if ($cids?.length && $memorised?.calibration_samples?.length) {
+        void prepareFsrsCalibration([...$cids])
+    }
+}).subscribe(() => {})
 
 export let fsrsCalibrationStats = writable<FsrsCalibrationStats | null>(null)
 derived(

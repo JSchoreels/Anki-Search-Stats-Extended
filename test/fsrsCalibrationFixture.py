@@ -262,6 +262,7 @@ globals_ = {
     "_read_rwkv_calibration_retrievability_cache": lambda *args: rwkv_rows,
     "missing_rwkv_validation_reviews": module.missing_rwkv_validation_reviews,
     "_ensure_rwkv_calibration_data": ensure_rwkv,
+    "_fsrs_calibration_pending": lambda: False,
     "_rwkv_review_target_ids_for_requested_ids": lambda ids, **kw: (set(ids), []),
     "_rwkv_retrievability_column": lambda: None,
     "_valid_probability": lambda value: 0 <= value <= 1,

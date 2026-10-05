@@ -12,6 +12,7 @@ names = {
     "_read_rwkv_calibration_retrievability_cache",
     "_valid_probability",
     "_missing_rwkv_post_optimization_reviews",
+    "_fsrs_calibration_pending",
     "rwkv_review_retrievability",
 }
 code = compile(
@@ -107,6 +108,8 @@ globals_ = {
     "_rwkv_retrievability_column": lambda: None,
 }
 exec(code, globals_)
+service_state = {"phase": "idle"}
+globals_["_fsrs_calibration_service"] = NS(col=globals_["mw"].col, snapshot=lambda: service_state)
 read = globals_["_read_rwkv_calibration_retrievability_cache"]
 result = {"selected": read([10], 0, list(range(1, 12)))}
 result["requested_only"] = read([], 0, [3])
@@ -119,6 +122,13 @@ globals_["request"].data = json.dumps(
 )
 result["explicit_missing_tail"] = json.loads(globals_["rwkv_review_retrievability"]())
 result["explicit_force"] = forced[-1]
+service_state["phase"] = "running"
+globals_["request"].data = json.dumps({"cids": [10], "revlog_ids": [9]})
+calls_before = len(forced)
+result["pending_fsrs_read"] = json.loads(globals_["rwkv_review_retrievability"]())
+result["pending_fsrs_generated"] = len(forced) != calls_before
+service_state["phase"] = "ready"
+globals_["request"].data = json.dumps({"cids": [10], "revlog_ids": [3, 9], "ensure_fsrs_alignment": True})
 
 
 def complete_recent_replay(**kwargs):

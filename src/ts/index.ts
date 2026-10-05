@@ -3,6 +3,7 @@ import Root from "./Root.svelte"
 import type { SSEconfig, SSEother } from "./config"
 import { patchFetch } from "./root"
 import { config, other } from "./stores"
+import { exportTroubleshootingInfo } from "./troubleshooting"
 
 declare global {
     let css: string
@@ -11,6 +12,7 @@ declare global {
 
     interface Window {
         bridgeCommand: (string: string) => void
+        exportSseTroubleshooting: () => void
     }
 }
 
@@ -18,6 +20,7 @@ patchFetch()
 
 config.set(SSEconfig)
 other.set(SSEother)
+window.exportSseTroubleshooting = exportTroubleshootingInfo
 
 setTimeout(() => mount(Root, { target: document.body }), SSEconfig.loadDelayMs ?? 100)
 

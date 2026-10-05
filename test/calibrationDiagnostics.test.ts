@@ -29,7 +29,7 @@ test("recent RWKV coverage reports saved and replayed counts separately", () => 
         },
         0
     )
-    expect(report).toContain("build 2026-10-05.4")
+    expect(report).toContain("build 2026-10-05.5")
     expect(report).toContain(
         "cached post-optimization reviews: 1; post-optimization replay reviews: 2"
     )
@@ -54,27 +54,6 @@ test("sparse cache report distinguishes full replay, selected samples and hidden
         "no historical validation_fold predictions were returned for this search"
     )
     expect(report).not.toContain(String(ids[2]))
-})
-
-test("override report retains cache evidence and identifies replay as not held-out", () => {
-    const report = calibrationDiagnosticReport(
-        samples,
-        replay,
-        {
-            ...fsrs,
-            predictionsByRevlogId: replay,
-        },
-        rwkv,
-        365,
-        true
-    )
-    expect(report).toContain("Review range: 365 days")
-    expect(report).toContain("FSRS cached predictions returned: 1")
-    expect(report).toContain("historical replay override (diagnostic, not held-out)")
-    expect(report).toContain("FSRS reviews used: 3")
-    expect(report).toContain("Paired FSRS + RWKV reviews: 3")
-    expect(report).not.toContain("Cache selection reduces")
-    expect(fsrs.predictionsByRevlogId).toEqual(cached)
 })
 
 test("empty cache fallback and missing role metadata are distinguished from validation absence", () => {

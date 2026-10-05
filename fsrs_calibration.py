@@ -1,4 +1,4 @@
-"""On-demand historical FSRS calibration through Anki's supported backend API."""
+"""Historical FSRS calibration through Anki's supported backend API."""
 
 import hashlib
 import json
@@ -67,7 +67,7 @@ def _settings(col, cid, home_deck=None, configs=None):
 
 
 def _groups(col, requested_cids, check_cancel):
-    # Generation is explicit. Ordinary stats loads do not scan cards or history.
+    # Statistics prepares each selected population once per page, reusing records.
     cards = col.db.all("SELECT id, did, odid FROM cards ORDER BY id")
     has_overrides = bool((col.get_config("fsrsPresetOverlay", {}) or {}).get("rules"))
     preset_by_card = {}
@@ -184,7 +184,7 @@ def ensure_calibration(
             "generated": False,
             "warnings": [
                 "This Anki build cannot generate historical FSRS calibration predictions. "
-                "The diagnostic historical-replay switch remains available."
+                "Existing predictions remain available; update Anki to enable generation."
             ],
         }
     from anki import deck_config_pb2, scheduler_pb2
@@ -342,8 +342,7 @@ class CalibrationService:
                 phase="failed",
                 warnings=[
                     f"Historical FSRS calibration did not finish: {error}. "
-                    "Click Generate FSRS calibration data again to retry, "
-                    "or use the diagnostic historical-replay switch."
+                    "Close and reopen Statistics to retry."
                 ],
             )
 

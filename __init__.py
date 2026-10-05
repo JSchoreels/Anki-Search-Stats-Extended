@@ -10,10 +10,11 @@ from pathlib import Path
 
 import orjson
 from anki.hooks import wrap
-from aqt import QDesktopServices, QUrl, mw
+from aqt import QDesktopServices, QUrl, gui_hooks, mw
 from aqt.stats import NewDeckStats
 
 from .fsrs_calibration import CalibrationService, missing_rwkv_validation_reviews
+from .troubleshooting import add_export_button, handle_export_command
 
 addon_dir = Path(os.path.dirname(__file__))
 locale_dir = addon_dir / "locale"
@@ -59,6 +60,9 @@ def new_refresh(self: NewDeckStats):
             f"/_addons/{mw.addonManager.addonFromModule(__name__)}/stats-worker.js"
             f"?v={time.time_ns()}"
         ),
+        "troubleshooting_export_button": (
+            getattr(self, "_sse_troubleshooting_button", None) is not None
+        ),
         "rollover": prefs.rollover,
         "learn_ahead_secs": prefs.learn_ahead_secs,
         "selected_deck_id": mw.col.decks.current()["id"],
@@ -85,6 +89,8 @@ def new_refresh(self: NewDeckStats):
 
 
 NewDeckStats.refresh = wrap(NewDeckStats.refresh, new_refresh, "after")
+if hasattr(gui_hooks, "stats_dialog_will_show"):
+    gui_hooks.stats_dialog_will_show.append(add_export_button)
 
 # Search endpoint
 from anki.utils import int_time
@@ -143,6 +149,8 @@ post_handlers["currentCardDisagreement"] = current_card_disagreement
 
 
 def current_disagreement_bridge(self, cmd, _old):
+    if handle_export_command(self, cmd):
+        return True
     if cmd.startswith("currentDisagreementBrowse:"):
         from .current_disagreement import browse_bucket
 
@@ -705,6 +713,13 @@ def _missing_rwkv_post_optimization_reviews(fsrs_rows, rwkv_rows):
     return post_ids - available
 
 
+def _fsrs_calibration_pending():
+    return (
+        _fsrs_calibration_service.col is mw.col
+        and _fsrs_calibration_service.snapshot()["phase"] in {"queued", "running"}
+    )
+
+
 def _rwkv_retrievability_column():
     revlog_columns = {row[1] for row in mw.col.db.all("PRAGMA table_info(revlog)")}
     return next(
@@ -800,8 +815,10 @@ def rwkv_review_retrievability() -> bytes:
     missing_validation = missing_rwkv_validation_reviews(fsrs_rows, role_aware_rows)
     missing_post = _missing_rwkv_post_optimization_reviews(fsrs_rows, role_aware_rows)
     if (
-        not role_aware_rows or fsrs_rows
-    ) and _ensure_rwkv_calibration_data(force=bool(missing_validation or missing_post)):
+        (not role_aware_rows or fsrs_rows)
+        and not _fsrs_calibration_pending()
+        and _ensure_rwkv_calibration_data(force=bool(missing_validation or missing_post))
+    ):
         role_aware_rows = _read_rwkv_calibration_retrievability_cache(
             cids,
             day_range,
