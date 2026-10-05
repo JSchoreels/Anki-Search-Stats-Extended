@@ -195,26 +195,52 @@ def _fsrs_preset_to_dict(preset):
     }
 
 
+def _fsrs_preset_routes(cids: list[int]):
+    """Group cards that must resolve to the same preset, or None to resolve per card.
+
+    Overlay presets are fixed by their id and deck presets by the home deck, so
+    one resolution per (preset id, home deck) gives every card's exact preset.
+    """
+    batch = getattr(mw.col._backend, "get_fsrs_preset_ids_for_cards", None)
+    if not callable(batch):
+        return None
+    try:
+        # Evaluates each overlay rule once for all cards instead of once per card.
+        preset_ids = {item.card_id: item.preset_id for item in batch(cids)}
+    except Exception as error:
+        print(f"Search Stats Extended: batch FSRS preset lookup failed: {error}")
+        return None
+    home_decks = dict(mw.col.db.all(f"""
+    SELECT id, CASE WHEN odid != 0 THEN odid ELSE did END
+    FROM cards
+    WHERE id IN ({",".join(str(cid) for cid in cids)})
+    """))
+    return {cid: (preset_ids.get(cid), home_decks.get(cid)) for cid in cids}
+
+
 def fsrs_preset_data() -> bytes:
     cids = [int(cid) for cid in orjson.loads(request.data)]
-    # Resolve search-matched presets in one native batch before per-card reads.
-    # include_retrievability=False skips preset resolution in Anki's backend.
     metrics = {
         str(entry.card_id): entry.fsrs_retrievability
         for entry in mw.col.card_memory_metrics(cids, include_retrievability=True)
         if entry.HasField("fsrs_retrievability")
     } if cids else {}
+    routes = _fsrs_preset_routes(cids) if cids else None
     presets = []
     indices = {}
+    index_by_route = {}
     cards = {}
     for cid in cids:
-        preset = _fsrs_preset_to_dict(mw.col.fsrs_preset_for_card(cid))
-        # A shared preset id can still have card/deck-specific overrides.
-        key = orjson.dumps(preset)
-        if key not in indices:
-            indices[key] = len(presets)
-            presets.append(preset)
-        cards[str(cid)] = indices[key]
+        route = routes[cid] if routes is not None else cid
+        if route not in index_by_route:
+            preset = _fsrs_preset_to_dict(mw.col.fsrs_preset_for_card(cid))
+            # A shared preset id can still have card/deck-specific overrides.
+            key = orjson.dumps(preset)
+            if key not in indices:
+                indices[key] = len(presets)
+                presets.append(preset)
+            index_by_route[route] = indices[key]
+        cards[str(cid)] = index_by_route[route]
     return Response(orjson.dumps({"presets": presets, "cards": cards, "retrievability": metrics}))
 
 
