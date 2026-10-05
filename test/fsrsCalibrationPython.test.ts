@@ -77,4 +77,6 @@ test("an existing partial RWKV cache triggers the real recompute API and reports
     expect(results.alignment_force_calls).toEqual([true, false])
     expect(results.alignment_api_calls).toEqual(["ensure", "recompute"])
     expect(results.incomplete_alignment.join(" ")).toContain("missing 1 FSRS validation review")
+    expect(results.available_cache_changed).toBe(false)
+    expect(results.api_calls_after_available_cache).toEqual(["ensure", "recompute"])
 })

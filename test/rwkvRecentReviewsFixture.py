@@ -13,6 +13,10 @@ names = {
     "_valid_probability",
     "_missing_rwkv_post_optimization_reviews",
     "_fsrs_calibration_pending",
+    "_rwkv_training_review_ids",
+    "_should_force_rwkv_recompute",
+    "_remember_rwkv_recompute",
+    "_rwkv_recompute_cache_state",
     "rwkv_review_retrievability",
 }
 code = compile(
@@ -80,7 +84,11 @@ row("rwkv", 11, 0.9, "final_fit", "rwkv_calibration_recompute", 200)
 columns = {"sample_role", "fold_index"}
 forced = []
 globals_ = {
-    "mw": NS(col=NS(db=NS(all=lambda sql: db.execute(sql).fetchall()))),
+    "mw": NS(col=NS(db=NS(
+        all=lambda sql: db.execute(sql).fetchall(),
+        list=lambda sql: [r[0] for r in db.execute(sql)],
+    ))),
+    "_rwkv_recompute_attempt": {"col": None, "reviews": {}},
     "FSRS_RETRIEVABILITY_CACHE_TABLE": "fsrs",
     "RWKV_RETRIEVABILITY_CACHE_TABLE": "rwkv",
     "FSRS_CALIBRATION_CACHE_ROLES": ("validation_fold", "post_optimization"),
@@ -139,6 +147,78 @@ def complete_recent_replay(**kwargs):
 
 globals_["_ensure_rwkv_calibration_data"] = complete_recent_replay
 result["explicit_filled_tail"] = json.loads(globals_["rwkv_review_retrievability"]())
+
+# RWKV training reviews can never get held-out predictions: no forced recompute.
+globals_["_ensure_rwkv_calibration_data"] = (
+    lambda **kwargs: forced.append(kwargs["force"]) or False
+)
+globals_["request"].data = json.dumps({"cids": [10], "revlog_ids": [5, 6], "ensure_fsrs_alignment": True})
+training_response = json.loads(globals_["rwkv_review_retrievability"]())
+result["training_force"] = forced[-1]
+result["training_warnings"] = training_response["warnings"]
+
+# A completed recompute that cannot fill a review is not repeated on every load.
+db.execute("INSERT INTO revlog VALUES (12, 10)")
+row("fsrs", 12, 0.9, "post_optimization", "fsrs_review")
+unfillable = []
+globals_["_ensure_rwkv_calibration_data"] = lambda **kwargs: unfillable.append(kwargs["force"]) or True
+globals_["request"].data = json.dumps({"cids": [10], "revlog_ids": [12], "ensure_fsrs_alignment": True})
+globals_["rwkv_review_retrievability"]()
+globals_["rwkv_review_retrievability"]()
+result["unfillable_forces"] = unfillable
+
+# Default requests must preserve the FSRS post-review cohort after lazy generation.
+db.execute("INSERT INTO revlog VALUES (13, 10)")
+row("fsrs", 13, 0.9, "post_optimization", "fsrs_review")
+fsrs_reads = []
+read_fsrs = globals_["_read_fsrs_calibration_retrievability_cache"]
+globals_["_read_fsrs_calibration_retrievability_cache"] = (
+    lambda *args: fsrs_reads.append(args) or read_fsrs(*args)
+)
+
+
+def generate_unflagged(**kwargs):
+    assert not kwargs["force"]
+    row("rwkv", 13, 0.76, "final_fit", "rwkv_calibration_recompute", 400)
+    return True
+
+
+globals_["_ensure_rwkv_calibration_data"] = generate_unflagged
+globals_["request"].data = json.dumps({"cids": [10], "revlog_ids": [13]})
+result["unflagged_generation"] = json.loads(globals_["rwkv_review_retrievability"]())
+result["unflagged_fsrs_reads"] = len(fsrs_reads)
+
+# The endpoint must record the post-replay state, then allow a forced repair
+# after a later cache change even when the missing review IDs are identical.
+db.execute("INSERT INTO revlog VALUES (14, 10)")
+row("fsrs", 14, 0.9, "post_optimization", "fsrs_review")
+cache_change_forces = []
+
+
+def replay_unfillable(**kwargs):
+    cache_change_forces.append(kwargs["force"])
+    if kwargs["force"]:
+        row("rwkv", 14, 0.8, "final_fit", "rwkv_state_cache_build", 500)
+    return kwargs["force"]
+
+
+globals_["_ensure_rwkv_calibration_data"] = replay_unfillable
+globals_["request"].data = json.dumps({"cids": [10], "revlog_ids": [14], "ensure_fsrs_alignment": True})
+globals_["rwkv_review_retrievability"]()
+globals_["rwkv_review_retrievability"]()
+db.execute("DELETE FROM rwkv WHERE revlog_id = 14")
+globals_["rwkv_review_retrievability"]()
+result["cache_change_forces"] = cache_change_forces
+
+db.execute("INSERT INTO revlog VALUES (15, 10)")
+row("fsrs", 15, 0.9, "post_optimization", "fsrs_review")
+failure_forces = []
+globals_["_ensure_rwkv_calibration_data"] = lambda **kwargs: failure_forces.append(kwargs["force"]) or False
+globals_["request"].data = json.dumps({"cids": [10], "revlog_ids": [15], "ensure_fsrs_alignment": True})
+globals_["rwkv_review_retrievability"]()
+globals_["rwkv_review_retrievability"]()
+result["failure_forces"] = failure_forces
+
 columns = set()
 result["legacy"] = read([10], 0, [3])
 columns = {"sample_role", "fold_index"}

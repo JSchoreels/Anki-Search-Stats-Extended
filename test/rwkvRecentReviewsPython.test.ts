@@ -56,3 +56,26 @@ test("an empty RWKV cache waits for active FSRS generation before launching its 
     expect(results.explicit_filled_tail.refresh_after_fsrs).toBe(false)
     expect(results.explicit_filled_tail.data).toEqual([[3, 0.73], [9, 0.79]])
 })
+
+test("RWKV training reviews and unfillable gaps do not force a recompute on every load", () => {
+    expect(results.training_force).toBe(false)
+    expect(results.training_warnings.join(" ")).toContain(
+        "2 FSRS calibration review(s) were RWKV training reviews"
+    )
+    expect(results.unfillable_forces).toEqual([true, false])
+})
+
+test("lazy generation preserves recent replay without an alignment flag and reads FSRS once", () => {
+    expect(results.unflagged_generation.data).toEqual([[13, 0.76]])
+    expect(results.unflagged_generation.role_counts).toEqual({ post_optimization_replay: 1 })
+    expect(results.unflagged_generation.warnings).toEqual([])
+    expect(results.unflagged_fsrs_reads).toBe(1)
+})
+
+test("completed endpoint replays don't loop, but a changed cache allows repair of the same reviews", () => {
+    expect(results.cache_change_forces).toEqual([true, false, true])
+})
+
+test("failed endpoint replays are retried rather than recorded as completed", () => {
+    expect(results.failure_forces).toEqual([true, true])
+})

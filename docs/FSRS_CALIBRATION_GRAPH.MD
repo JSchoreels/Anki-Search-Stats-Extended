@@ -50,9 +50,15 @@ source.
       the held-out cache rows define the graph sample.
     - When no role-aware RWKV calibration rows are available, the add-on calls
       Anki's `aqt.rwkv_scheduler.ensure_rwkv_calibration_data(mw)` API when that
-      API exists, then retries the cache read. The API is a no-op when current
+      API exists. SSE checks `rwkv_calibration_data_available()` when available
+      and retries the cache read only when generation may have changed rows.
+      The API is a no-op when current
       data is already complete and otherwise runs Anki's calibration-only
       historical replay while preserving active reviewer state.
+    - The endpoint reads FSRS rows once and shares them with each RWKV cache
+      read, including the read after lazy generation. The `ensure_fsrs_alignment`
+      flag controls alignment checks; it does not control whether the active
+      FSRS post-optimization cohort can use recovered RWKV replay predictions.
     - Older Anki versions without the API retain the legacy read-only fallback:
       incomplete persisted values return no RWKV calibration data.
     - Expected values are probabilities in the `[0, 1]` range keyed by
@@ -225,11 +231,27 @@ reviews or lost cache coverage trigger regeneration. Existing validation caches
 are adopted initially; their original parameter freshness cannot be established
 retrospectively. Metadata remains local and is preserved by runtime sync.
 
-After preparation succeeds, RWKV refresh checks FSRS validation IDs against valid
-RWKV test-fold predictions and checks active FSRS post-optimization coverage.
-Missing coverage calls the supported `recompute_rwkv_calibration_data` API;
-otherwise the ensure API verifies current data/fold alignment. Remaining eligible
-gaps produce count-only warnings. Comparisons use available paired reviews.
+RWKV requests with `ensure_fsrs_alignment` check FSRS validation IDs against valid
+RWKV test-fold predictions and check active FSRS post-optimization coverage.
+Reviews recorded as `final_fit` from `rwkv_calibration_train` are excluded from
+forced repair: a replay cannot turn training reviews into held-out predictions.
+Their unpaired count is reported separately. Fixable missing coverage calls the
+supported `recompute_rwkv_calibration_data` API; otherwise the native availability
+check/ensure API verifies current data and fold alignment. Complete data does not
+cause another full cache read. Remaining eligible gaps produce count-only warnings.
+Comparisons use available paired reviews.
+
+Completed forced replays are remembered for missing review IDs only while their
+collection and relevant cache state match. SSE reads exact FSRS/RWKV cache rows
+and column sets for just those missing review IDs; it does not scan unrelated
+cache rows or use a collection-wide write counter. Capture occurs after completed
+generation, so its own writes do not immediately trigger another attempt. Later
+changes or clears of those rows, external commits affecting them, changed cache
+columns or a profile change permit repair again for the same review IDs.
+Temporary search-table writes and unrelated cache updates do not invalidate it.
+Failures are not recorded as completed, and unchanged unfillable gaps do not
+force replay on every search change. This state is session-only; it changes no
+cache schema, collection data or add-on configuration.
 Builds without the historical FSRS API retain existing cache/replay behavior and
 report that automatic generation is unavailable.
 

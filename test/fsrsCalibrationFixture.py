@@ -269,6 +269,10 @@ globals_ = {
     "_read_rwkv_calibration_retrievability_cache": lambda *args: rwkv_rows,
     "missing_rwkv_validation_reviews": module.missing_rwkv_validation_reviews,
     "_ensure_rwkv_calibration_data": ensure_rwkv,
+    "_rwkv_training_review_ids": lambda ids: set(),
+    "_rwkv_recompute_attempt": {"col": None, "reviews": {}},
+    "_rwkv_recompute_cache_state": lambda ids: {rid: ("synthetic-cache", 1) for rid in ids},
+    "mw": NS(col=NS()),
     "_fsrs_calibration_pending": lambda: False,
     "_rwkv_review_target_ids_for_requested_ids": lambda ids, **kw: (set(ids), []),
     "_rwkv_retrievability_column": lambda: None,
@@ -277,6 +281,8 @@ globals_ = {
 }
 exec(endpoint_code("_missing_rwkv_post_optimization_reviews"), globals_)
 exec(endpoint_code("rwkv_review_retrievability"), globals_)
+exec(endpoint_code("_should_force_rwkv_recompute"), globals_)
+exec(endpoint_code("_remember_rwkv_recompute"), globals_)
 response = json.loads(globals_["rwkv_review_retrievability"]())
 assert len(response["data"]) == 2 and not response["warnings"]
 globals_["rwkv_review_retrievability"]()
@@ -299,6 +305,10 @@ exec(endpoint_code("_ensure_rwkv_calibration_data"), api_globals)
 api_globals["_ensure_rwkv_calibration_data"]()
 api_globals["_ensure_rwkv_calibration_data"](force=True)
 result["alignment_api_calls"] = api_calls
+
+sys.modules["aqt"].rwkv_scheduler.rwkv_calibration_data_available = lambda mw: True
+result["available_cache_changed"] = api_globals["_ensure_rwkv_calibration_data"]()
+result["api_calls_after_available_cache"] = list(api_calls)
 
 
 # Exercise scheduling, concurrent-view deduplication and native progress with a mock QueryOp.

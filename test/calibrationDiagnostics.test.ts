@@ -29,7 +29,7 @@ test("recent RWKV coverage reports saved and replayed counts separately", () => 
         },
         0
     )
-    expect(report).toContain("build 2026-10-05.6")
+    expect(report).toContain("build 2026-10-05.7")
     expect(report).toContain(
         "cached post-optimization reviews: 1; post-optimization replay reviews: 2"
     )

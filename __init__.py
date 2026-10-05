@@ -588,7 +588,9 @@ def _read_rwkv_calibration_retrievability_cache(
     cids: list[int],
     day_range: int,
     revlog_ids=None,
+    fsrs_rows=None,
 ):
+    """Pass `fsrs_rows` already read for the same scope to avoid re-reading them."""
     revlog_ids = revlog_ids or []
     if not cids and not revlog_ids:
         return []
@@ -604,9 +606,11 @@ def _read_rwkv_calibration_retrievability_cache(
     # Some core builds mark every review outside FSRS validation folds as RWKV
     # final_fit, including later answers. Only recover the active FSRS
     # post-optimization cohort; never expose the historical training population.
+    if fsrs_rows is None:
+        fsrs_rows = _read_fsrs_calibration_retrievability_cache(cids, day_range, revlog_ids)
     post_review_ids = {
         row[0]
-        for row in _read_fsrs_calibration_retrievability_cache(cids, day_range, revlog_ids)
+        for row in fsrs_rows
         if row[2] == "post_optimization" and _valid_probability(row[1])
     }
     post_clause = (
@@ -685,13 +689,24 @@ def _read_rwkv_calibration_retrievability_cache(
 
 
 def _ensure_rwkv_calibration_data(*, force=False) -> bool:
-    """Ask adapted Anki builds to lazily generate missing RWKV history data."""
+    """Ask adapted Anki builds to lazily generate missing RWKV history data.
+
+    Returns whether calibration rows may have changed, so callers re-read only then.
+    """
 
     try:
         from aqt import rwkv_scheduler
     except ImportError:
         return False
 
+    available = getattr(rwkv_scheduler, "rwkv_calibration_data_available", None)
+    if not force and callable(available):
+        try:
+            if available(mw):
+                # ensure_rwkv_calibration_data() would be a no-op.
+                return False
+        except Exception as error:
+            print(f"Search Stats Extended: RWKV calibration check failed: {error}")
     name = "recompute_rwkv_calibration_data" if force else "ensure_rwkv_calibration_data"
     ensure = getattr(rwkv_scheduler, name, None)
     if not callable(ensure):
@@ -711,6 +726,65 @@ def _missing_rwkv_post_optimization_reviews(fsrs_rows, rwkv_rows):
     }
     available = {row[0] for row in rwkv_rows or [] if _valid_probability(row[1])}
     return post_ids - available
+
+
+def _rwkv_training_review_ids(revlog_ids):
+    """Reviews RWKV trained on: a recompute can never give them held-out predictions."""
+    if not revlog_ids:
+        return set()
+    table = _cache_table_name(RWKV_RETRIEVABILITY_CACHE_TABLE)
+    reviews = ",".join(str(revlog_id) for revlog_id in sorted(revlog_ids))
+    return set(mw.col.db.list(f"""
+    SELECT DISTINCT revlog_id
+    FROM {table}
+    WHERE
+        sample_role = 'final_fit'
+        AND source = 'rwkv_calibration_train'
+        AND revlog_id IN ({reviews})
+    """))
+
+
+_rwkv_recompute_attempt = {"col": None, "reviews": {}}
+
+
+def _rwkv_recompute_cache_state(review_ids):
+    """Exact states for missing reviews, without scanning unrelated cache rows."""
+    states = {rid: [] for rid in review_ids}
+    reviews = ",".join(str(rid) for rid in sorted(review_ids))
+    for table in (FSRS_RETRIEVABILITY_CACHE_TABLE, RWKV_RETRIEVABILITY_CACHE_TABLE):
+        columns = _table_columns(table)
+        rows_by_review = {rid: set() for rid in review_ids}
+        if columns:
+            rows = mw.col.db.all(f"""
+                SELECT revlog_id, * FROM {_cache_table_name(table)}
+                WHERE revlog_id IN ({reviews})
+            """)
+            for row in rows:
+                rows_by_review[row[0]].add(tuple(row[1:]))
+        for rid in review_ids:
+            states[rid].append((tuple(sorted(columns)), frozenset(rows_by_review[rid])))
+    return {rid: tuple(state) for rid, state in states.items()}
+
+
+def _should_force_rwkv_recompute(missing_review_ids) -> bool:
+    """Reuse completed attempts only while this collection/cache is unchanged."""
+    if not missing_review_ids:
+        return False
+    attempt = _rwkv_recompute_attempt
+    if attempt["col"] is not mw.col:
+        attempt.update(col=mw.col, reviews={})
+    if any(rid not in attempt["reviews"] for rid in missing_review_ids):
+        return True
+    states = _rwkv_recompute_cache_state(missing_review_ids)
+    return any(attempt["reviews"].get(rid) != state for rid, state in states.items())
+
+
+def _remember_rwkv_recompute(missing_review_ids):
+    # Only completed recomputes are remembered; failures retry on the next load.
+    # Snapshot after generation so its own writes don't invalidate the attempt.
+    if _rwkv_recompute_attempt["col"] is not mw.col:
+        _rwkv_recompute_attempt.update(col=mw.col, reviews={})
+    _rwkv_recompute_attempt["reviews"].update(_rwkv_recompute_cache_state(missing_review_ids))
 
 
 def _fsrs_calibration_pending():
@@ -803,30 +877,44 @@ def rwkv_review_retrievability() -> bytes:
     if not cids and not requested_review_ids:
         return Response(orjson.dumps({"column": None, "data": []}))
 
+    fsrs_rows = _read_fsrs_calibration_retrievability_cache(
+        cids, day_range, requested_review_ids
+    )
     role_aware_rows = _read_rwkv_calibration_retrievability_cache(
         cids,
         day_range,
         requested_review_ids,
+        fsrs_rows,
     )
-    fsrs_rows = (
-        _read_fsrs_calibration_retrievability_cache(cids, day_range, requested_review_ids)
-        if req.get("ensure_fsrs_alignment") else []
+    # The flag controls alignment/recomputation, not visibility of recent replay.
+    # Keep the same FSRS cohort on both cache reads, including unflagged requests.
+    alignment_rows = fsrs_rows if req.get("ensure_fsrs_alignment") else []
+    missing_validation = missing_rwkv_validation_reviews(alignment_rows, role_aware_rows)
+    missing_post = _missing_rwkv_post_optimization_reviews(alignment_rows, role_aware_rows)
+    rwkv_training = (
+        _rwkv_training_review_ids(missing_validation | missing_post)
+        if role_aware_rows is not None else set()
     )
-    missing_validation = missing_rwkv_validation_reviews(fsrs_rows, role_aware_rows)
-    missing_post = _missing_rwkv_post_optimization_reviews(fsrs_rows, role_aware_rows)
+    missing_validation -= rwkv_training
+    missing_post -= rwkv_training
     fsrs_pending = _fsrs_calibration_pending()
     refresh_after_fsrs = bool(
         fsrs_pending and (not role_aware_rows or missing_validation or missing_post)
     )
+    fixable = missing_validation | missing_post
+    force = _should_force_rwkv_recompute(fixable)
     if (
-        (not role_aware_rows or fsrs_rows)
+        (not role_aware_rows or alignment_rows)
         and not fsrs_pending
-        and _ensure_rwkv_calibration_data(force=bool(missing_validation or missing_post))
+        and _ensure_rwkv_calibration_data(force=force)
     ):
+        if force:
+            _remember_rwkv_recompute(fixable)
         role_aware_rows = _read_rwkv_calibration_retrievability_cache(
             cids,
             day_range,
             requested_review_ids,
+            fsrs_rows,
         )
     using_role_aware_cache = role_aware_rows is not None
 
@@ -838,15 +926,23 @@ def rwkv_review_retrievability() -> bytes:
         )
     else:
         target_review_ids = _rwkv_review_target_ids(cids, day_range)
-    remaining_validation = missing_rwkv_validation_reviews(fsrs_rows, role_aware_rows) & target_review_ids
+    unpaired_training = rwkv_training & target_review_ids
+    if unpaired_training:
+        warnings.append(
+            f"{len(unpaired_training)} FSRS calibration review(s) were RWKV training reviews, "
+            "so they have no held-out RWKV prediction and are not paired."
+        )
+    remaining_validation = (
+        missing_rwkv_validation_reviews(alignment_rows, role_aware_rows) & target_review_ids
+    ) - rwkv_training
     if remaining_validation:
         warnings.append(
             f"RWKV calibration is missing {len(remaining_validation)} FSRS validation review(s) "
             "after the alignment refresh. Only available paired reviews are compared."
         )
     remaining_post = (
-        _missing_rwkv_post_optimization_reviews(fsrs_rows, role_aware_rows) & target_review_ids
-    )
+        _missing_rwkv_post_optimization_reviews(alignment_rows, role_aware_rows) & target_review_ids
+    ) - rwkv_training
     if remaining_post:
         warnings.append(
             f"RWKV calibration is missing {len(remaining_post)} post-optimization review(s) "
