@@ -1,3 +1,6 @@
+import { get } from "svelte/store"
+import { parseReviewRetrievabilityResponse } from "../src/ts/calibrationPredictions"
+import { calibrationSamplesFrom } from "../src/ts/calibrationSamples"
 import { uniqueRevlogCids } from "../src/ts/search"
 
 test("compact presets expand to each card's complete resolved settings", async () => {
@@ -62,9 +65,16 @@ test("getRwkvReviewRetrievability sends calibration revlog ids", async () => {
                 }),
             })
         )
-        expect(result).toEqual({
+        expect(typeof result).toBe("string")
+        expect(
+            parseReviewRetrievabilityResponse(
+                result,
+                calibrationSamplesFrom([{ revlogId: 123, cardId: 10, actual: 1 }])
+            )
+        ).toEqual({
             column: "cache",
-            predictionsByRevlogId: { 123: 0.42 },
+            responsePredictionCount: 1,
+            predictions: new Float64Array([0.42]),
             warnings: [],
             roles: ["post_optimization_replay"],
             roleCounts: { post_optimization_replay: 1 },
@@ -75,37 +85,57 @@ test("getRwkvReviewRetrievability sends calibration revlog ids", async () => {
     }
 })
 
-test("getRwkvReviewRetrievability reports endpoint warnings", async () => {
+test("calibration stores report endpoint warnings after worker parsing", async () => {
     const originalFetch = global.fetch
     const warnMock = jest.spyOn(console, "warn").mockImplementation(() => undefined)
     const warning = "RWKV calibration ignored 2 non-answer revlog row(s)."
-    const fetchMock = jest.fn().mockResolvedValue({
+    const fetchMock = jest.fn(async (url: string) => ({
         ok: true,
         text: async () =>
-            JSON.stringify({
-                column: "cache",
-                data: [[123, 0.42]],
-                warnings: [warning],
-            }),
-    })
-
+            JSON.stringify(
+                url.endsWith("ReviewRetrievability")
+                    ? { column: "cache", data: [[123, 0.42]], warnings: [warning] }
+                    : {
+                          phase: "ready",
+                          generated: false,
+                          columns: [],
+                          data: [],
+                          presets: [],
+                          cards: {},
+                          retrievability: {},
+                      }
+            ),
+    }))
     jest.resetModules()
     global.fetch = fetchMock as typeof fetch
+    jest.doMock("../src/ts/statsWorkerClient", () => ({
+        runStatsTask: async (task: keyof import("../src/ts/statsTasks").Tasks, args: never) => {
+            const { runStatsTaskLocally } = await import("../src/ts/statsTasks")
+            return runStatsTaskLocally(task, args)
+        },
+    }))
     try {
-        const { getRwkvReviewRetrievability } = await import("../src/ts/search")
-        const result = await getRwkvReviewRetrievability([10], 365, [123])
-
-        expect(result).toEqual({
+        const stores = await import("../src/ts/stores")
+        stores.cids.set([10])
+        for (let i = 0; i < 40; i++) await Promise.resolve()
+        stores.memorised_stats.set({
+            calibration_samples: calibrationSamplesFrom([{ revlogId: 123, cardId: 10, actual: 1 }]),
+            fsrs_calibration_replay_predictions: new Float64Array([0.9]),
+        } as never)
+        for (let i = 0; i < 40; i++) await Promise.resolve()
+        expect(get(stores.rwkvCalibrationStats)).toMatchObject({
             column: "cache",
-            predictionsByRevlogId: { 123: 0.42 },
+            predictions: new Float64Array([0.42]),
             warnings: [warning],
             roles: [],
             roleCounts: {},
         })
         expect(warnMock).toHaveBeenCalledWith("Search Stats Extended:", warning)
+        stores.cids.set(null)
     } finally {
         global.fetch = originalFetch
         warnMock.mockRestore()
+        jest.dontMock("../src/ts/statsWorkerClient")
         jest.resetModules()
     }
 })
@@ -139,9 +169,16 @@ test("getFsrsReviewRetrievability sends calibration revlog ids", async () => {
                 }),
             })
         )
-        expect(result).toEqual({
+        expect(typeof result).toBe("string")
+        expect(
+            parseReviewRetrievabilityResponse(
+                result,
+                calibrationSamplesFrom([{ revlogId: 321, cardId: 20, actual: 1 }])
+            )
+        ).toEqual({
             column: "cache",
-            predictionsByRevlogId: { 321: 0.62 },
+            responsePredictionCount: 1,
+            predictions: new Float64Array([0.62]),
             warnings: [],
             roles: ["post_optimization"],
             roleCounts: {},

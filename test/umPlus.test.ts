@@ -1,4 +1,4 @@
-import type { CalibrationSample } from "../src/ts/MemorisedBar"
+import type { CalibrationSampleInput as CalibrationSample } from "../src/ts/calibrationSamples"
 import {
     buildUmPlusData,
     umPlusDisagreementDomain,
@@ -7,6 +7,7 @@ import {
     weightedRegressionSlope,
     type UmPlusBin,
 } from "../src/ts/umPlusData"
+import { calibrationInputs } from "./calibrationInputs"
 
 function groupedSamples(count: number, recalled: number, firstRevlogId: number) {
     return Array.from(
@@ -32,7 +33,7 @@ test("UM+ groups paired reviews by model disagreement", () => {
         ...higherFsrs.map((sample) => [sample.revlogId, 0.6]),
     ])
 
-    const data = buildUmPlusData(samples, fsrsPredictions, rwkvPredictions)
+    const data = buildUmPlusData(...calibrationInputs(samples, fsrsPredictions, rwkvPredictions))
 
     expect(data.count).toBe(20)
     expect(data.bins).toHaveLength(2)
@@ -49,13 +50,15 @@ test("UM+ groups paired reviews by model disagreement", () => {
 
 test("UM+ includes only reviews with valid paired predictions", () => {
     const data = buildUmPlusData(
-        [
-            { revlogId: 1, cardId: 1, actual: 1 },
-            { revlogId: 2, cardId: 2, actual: 0 },
-            { revlogId: 3, cardId: 3, actual: 1 },
-        ],
-        { 1: 0.8, 2: 0.5, 3: 1.2 },
-        { 1: 0.6, 3: 0.4 }
+        ...calibrationInputs(
+            [
+                { revlogId: 1, cardId: 1, actual: 1 },
+                { revlogId: 2, cardId: 2, actual: 0 },
+                { revlogId: 3, cardId: 3, actual: 1 },
+            ],
+            { 1: 0.8, 2: 0.5, 3: 1.2 },
+            { 1: 0.6, 3: 0.4 }
+        )
     )
 
     expect(data.count).toBe(1)
@@ -66,9 +69,11 @@ test("UM+ includes only reviews with valid paired predictions", () => {
 test("paired UM+ bin errors differ by the bin disagreement", () => {
     const samples = groupedSamples(4, 3, 1)
     const data = buildUmPlusData(
-        samples,
-        { 1: 0.9, 2: 0.8, 3: 0.7, 4: 0.8 },
-        { 1: 0.7, 2: 0.6, 3: 0.5, 4: 0.6 }
+        ...calibrationInputs(
+            samples,
+            { 1: 0.9, 2: 0.8, 3: 0.7, 4: 0.8 },
+            { 1: 0.7, 2: 0.6, 3: 0.5, 4: 0.6 }
+        )
     )
 
     expect(data.bins).toHaveLength(1)

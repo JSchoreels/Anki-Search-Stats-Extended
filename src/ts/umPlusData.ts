@@ -1,4 +1,4 @@
-import type { CalibrationSample } from "./MemorisedBar"
+import { type CalibrationSamples, sampleCount } from "./calibrationSamples"
 
 export const UM_PLUS_BINS_PER_UNIT = 20
 export const UM_PLUS_BIN_COUNT = 2 * UM_PLUS_BINS_PER_UNIT + 1
@@ -105,9 +105,9 @@ export function weightedRegressionSlope(
  * measures each model's mean prediction error inside the shared bins.
  */
 export function buildUmPlusData(
-    samples: CalibrationSample[],
-    fsrsPredictions: Record<number, number>,
-    rwkvPredictions: Record<number, number>
+    samples: CalibrationSamples,
+    fsrsPredictions: Float64Array,
+    rwkvPredictions: Float64Array
 ): UmPlusData {
     const sumDisagreement = Array<number>(UM_PLUS_BIN_COUNT).fill(0)
     const sumFsrsError = Array<number>(UM_PLUS_BIN_COUNT).fill(0)
@@ -115,10 +115,10 @@ export function buildUmPlusData(
     const counts = Array<number>(UM_PLUS_BIN_COUNT).fill(0)
     const offset = UM_PLUS_BINS_PER_UNIT
 
-    for (const sample of samples) {
-        const fsrs = fsrsPredictions[sample.revlogId]
-        const rwkv = rwkvPredictions[sample.revlogId]
-        if (!isProbability(fsrs) || !isProbability(rwkv) || !isProbability(sample.actual)) {
+    for (let i = 0; i < sampleCount(samples); i++) {
+        const fsrs = fsrsPredictions[i]
+        const rwkv = rwkvPredictions[i]
+        if (!isProbability(fsrs) || !isProbability(rwkv) || !isProbability(samples.actual[i])) {
             continue
         }
 
@@ -131,8 +131,8 @@ export function buildUmPlusData(
             )
         )
         sumDisagreement[index] += disagreement
-        sumFsrsError[index] += fsrs - sample.actual
-        sumRwkvError[index] += rwkv - sample.actual
+        sumFsrsError[index] += fsrs - samples.actual[i]
+        sumRwkvError[index] += rwkv - samples.actual[i]
         counts[index] += 1
     }
 

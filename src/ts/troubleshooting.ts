@@ -1,5 +1,6 @@
 import { get } from "svelte/store"
 import { calibrationDiagnosticReport } from "./calibrationDiagnostics"
+import { EMPTY_CALIBRATION_SAMPLES } from "./calibrationSamples"
 import {
     cids,
     fsrsCalibrationGeneration,
@@ -24,8 +25,8 @@ export function exportTroubleshootingInfo() {
     const report = [
         samples && fsrs && rwkv
             ? calibrationDiagnosticReport(
-                  samples.calibration_samples ?? [],
-                  samples.fsrs_calibration_predictions_by_revlog_id,
+                  samples.calibration_samples ?? EMPTY_CALIBRATION_SAMPLES,
+                  samples.fsrs_calibration_replay_predictions,
                   fsrs,
                   rwkv,
                   get(searchLimit)
@@ -36,7 +37,9 @@ export function exportTroubleshootingInfo() {
         `FSRS history: ${samples ? "loaded" : "not loaded"}; FSRS cache: ${fsrs ? "loaded" : "not loaded"}; RWKV cache: ${rwkv ? "loaded" : "not loaded"}`,
         `Automatic FSRS calibration: ${generation?.phase ?? "waiting for FSRS history"}`,
         ...(generation?.phase === "ready" && typeof generation.generated === "boolean"
-            ? [`FSRS generation result: ${generation.generated ? "generated predictions" : "reused existing data"}`]
+            ? [
+                  `FSRS generation result: ${generation.generated ? "generated predictions" : "reused existing data"}`,
+              ]
             : []),
         ...warnings.map((warning) => `Warning: ${warning}`),
     ].join("\n")

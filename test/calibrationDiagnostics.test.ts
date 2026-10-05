@@ -1,21 +1,23 @@
 import { calibrationDiagnosticReport } from "../src/ts/calibrationDiagnostics"
-import type { CalibrationSample } from "../src/ts/MemorisedBar"
+import { alignPredictions, calibrationSamplesFrom } from "../src/ts/calibrationSamples"
 
-const samples: CalibrationSample[] = [1, 2, 3].map((day) => ({
-    revlogId: Date.UTC(2026, 9, day),
-    cid: day,
-    actual: 1,
-}))
-const ids = samples.map((sample) => sample.revlogId)
-const replay = { [ids[0]]: 0.8, [ids[1]]: 0.9, [ids[2]]: 0.95 }
-const cached = { [ids[2]]: 0.95 }
+const samples = calibrationSamplesFrom(
+    [1, 2, 3].map((day) => ({
+        revlogId: Date.UTC(2026, 9, day),
+        cardId: day,
+        actual: 1,
+    }))
+)
+const ids = samples.revlogIds
+const replay = alignPredictions(samples, { [ids[0]]: 0.8, [ids[1]]: 0.9, [ids[2]]: 0.95 })
+const cached = alignPredictions(samples, { [ids[2]]: 0.95 })
 const fsrs = {
     column: "search_stats_fsrs_review_retrievability",
     cachedPredictionCount: 1,
     roles: ["post_optimization"],
-    predictionsByRevlogId: cached,
+    predictions: cached,
 }
-const rwkv = { column: "rwkv-cache", predictionsByRevlogId: replay }
+const rwkv = { column: "rwkv-cache", predictions: replay }
 
 test("recent RWKV coverage reports saved and replayed counts separately", () => {
     const report = calibrationDiagnosticReport(
@@ -64,9 +66,9 @@ test("empty cache fallback and missing role metadata are distinguished from vali
             column: null,
             cachedPredictionCount: 0,
             roles: [],
-            predictionsByRevlogId: replay,
+            predictions: replay,
         },
-        { column: null, predictionsByRevlogId: {} },
+        { column: null, predictions: alignPredictions(samples, {}) },
         0
     )
     expect(report).toContain("historical replay fallback")

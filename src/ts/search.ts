@@ -30,7 +30,7 @@ ${e?.stack ? e.stack : e}`)
     }
 }
 
-async function endpoint(endpoint: string, body?: string, alertOnError = true) {
+async function endpointText(endpoint: string, body?: string, alertOnError = true) {
     const resp = await realFetch(`/_anki/${endpoint}`, {
         method: "POST",
         body,
@@ -55,7 +55,11 @@ ${responseText}`)
         throw new Error(`Endpoint ${endpoint} failed: ${resp.status} ${responseText}`)
     }
 
-    const blob = await resp.text()
+    return resp.text()
+}
+
+async function endpoint(endpoint: string, body?: string, alertOnError = true) {
+    const blob = await endpointText(endpoint, body, alertOnError)
     // Handle empty responses (e.g., from writeConfig endpoint)
     if (blob === "") {
         return null
@@ -331,7 +335,7 @@ async function getReviewRetrievability(
     const revlog_ids = [...new Set(revlogIds)].filter(
         (revlogId) => Number.isInteger(revlogId) && revlogId > 0
     )
-    const response = (await endpoint(
+    return endpointText(
         endpointName,
         JSON.stringify({
             cids,
@@ -339,45 +343,7 @@ async function getReviewRetrievability(
             revlog_ids,
             ...(ensureFsrsAlignment ? { ensure_fsrs_alignment: true } : {}),
         })
-    )) as {
-        column?: string | null
-        data?: [number, number | string | null][]
-        warnings?: unknown[]
-        roles?: unknown[]
-        role_counts?: Record<string, unknown>
-        refresh_after_fsrs?: boolean
-    }
-    const roles = (response.roles ?? []).filter((role): role is string => typeof role === "string")
-    const roleCounts: Record<string, number> = {}
-    for (const [role, count] of Object.entries(response.role_counts ?? {})) {
-        if (typeof count === "number" && Number.isInteger(count) && count >= 0) {
-            roleCounts[role] = count
-        }
-    }
-    const predictionsByRevlogId: Record<number, number> = {}
-    const warnings = (response.warnings ?? []).filter(
-        (warning): warning is string => typeof warning === "string" && warning.length > 0
     )
-
-    for (const [revlogId, rawPrediction] of response.data ?? []) {
-        const prediction = typeof rawPrediction === "string" ? Number(rawPrediction) : rawPrediction
-        if (typeof prediction === "number" && Number.isFinite(prediction)) {
-            predictionsByRevlogId[revlogId] = prediction
-        }
-    }
-
-    for (const warning of warnings) {
-        console.warn("Search Stats Extended:", warning)
-    }
-
-    return {
-        column: response.column ?? null,
-        predictionsByRevlogId,
-        warnings,
-        roles,
-        roleCounts,
-        ...(response.refresh_after_fsrs === true ? { refreshAfterFsrs: true } : {}),
-    }
 }
 
 export function browserSearch(search: string) {

@@ -19,6 +19,7 @@
     import { barDateLabeler, barStringLabeler, barHourLabeler, type BarChart } from "../bar"
     import {
         calibrationMode,
+        calibrationComparison,
         fsrsCalibrationStats,
         memorised_stats,
         rwkvCalibrationStats,
@@ -37,9 +38,7 @@
     import type { PieDatum } from "../pie"
     import _ from "lodash"
     import * as d3 from "d3"
-    import { buildUmPlusData } from "../umPlusData"
-    import { buildRocData } from "../rocData"
-    import { buildRwkvDailyData, type RwkvDailyMetric } from "../rwkvDailyData"
+    import type { RwkvDailyMetric } from "../rwkvDailyData"
 
     const rwkvDailyMetrics: RwkvDailyMetric[] = ["standardizedGap", "logLoss"]
 
@@ -50,8 +49,6 @@
         MEDIAN,
         MEAN,
     }
-
-    $: selectedFsrsPredictions = $fsrsCalibrationStats?.predictionsByRevlogId ?? {}
 
     let average_type = Average.MEDIAN
     let interval_bin_size = 1
@@ -152,23 +149,10 @@
             : $calibrationMode === "rwkv"
               ? ($rwkvCalibrationStats?.warnings ?? [])
               : ($fsrsCalibrationStats?.warnings ?? [])
-    $: umPlusData = buildUmPlusData(
-        umPlusLoading ? [] : ($memorised_stats?.calibration_samples ?? []),
-        selectedFsrsPredictions,
-        $rwkvCalibrationStats?.predictionsByRevlogId ?? {}
-    )
-    $: rocData = buildRocData(
-        umPlusLoading ? [] : ($memorised_stats?.calibration_samples ?? []),
-        selectedFsrsPredictions,
-        $rwkvCalibrationStats?.predictionsByRevlogId ?? {}
-    )
-    $: umPlusLoading = !!$memorised_stats && (!$fsrsCalibrationStats || !$rwkvCalibrationStats)
-    $: rwkvDailyData = $rwkvCalibrationStats
-        ? buildRwkvDailyData(
-              $memorised_stats?.calibration_samples ?? [],
-              $rwkvCalibrationStats.predictionsByRevlogId
-          )
-        : []
+    $: umPlusData = $calibrationComparison?.umPlus
+    $: rocData = $calibrationComparison?.roc
+    $: umPlusLoading = $calibrationComparison === null
+    $: rwkvDailyData = $calibrationComparison?.rwkvDaily ?? []
     $: umPlusWarnings = Array.from(
         new Set([
             ...($fsrsCalibrationStats?.warnings ?? []),
@@ -246,7 +230,7 @@
             {/if}
             {#if umPlusLoading}
                 <div class="calibration-message">{i18n("loading")}</div>
-            {:else if umPlusData.count > 0}
+            {:else if umPlusData && umPlusData.count > 0}
                 <UMPlus data={umPlusData} />
             {:else}
                 <div class="calibration-message">{i18n("um-plus-no-data")}</div>
@@ -268,7 +252,7 @@
             {/if}
             {#if umPlusLoading}
                 <div class="calibration-message">{i18n("loading")}</div>
-            {:else if rocData.positiveCount > 0 && rocData.negativeCount > 0}
+            {:else if rocData && rocData.positiveCount > 0 && rocData.negativeCount > 0}
                 <ROC data={rocData} />
             {:else}
                 <div class="calibration-message">{i18n("roc-no-data")}</div>
@@ -288,7 +272,7 @@
                 {#if $rwkvCalibrationStats?.warnings.length}
                     <Warning always>{$rwkvCalibrationStats.warnings.join(" ")}</Warning>
                 {/if}
-                {#if !$rwkvCalibrationStats}
+                {#if $calibrationComparison === null}
                     <div class="calibration-message">{i18n("loading")}</div>
                 {:else if rwkvDailyData.length}
                     <RwkvDailyGraph data={rwkvDailyData} {metric} />

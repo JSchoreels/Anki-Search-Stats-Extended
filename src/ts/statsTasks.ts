@@ -1,0 +1,43 @@
+import { parseReviewRetrievabilityResponse } from "./calibrationPredictions"
+import type { CalibrationSamples } from "./calibrationSamples"
+import { buildCalibrationBins, getMemorisedDays } from "./MemorisedBar"
+import { calculateRevlogStats } from "./revlogGraphs"
+import { buildRocData } from "./rocData"
+import { buildRwkvDailyData } from "./rwkvDailyData"
+import { buildUmPlusData } from "./umPlusData"
+
+function calibrationPredictions(samples: CalibrationSamples, responseText: string) {
+    const parsed = parseReviewRetrievabilityResponse(responseText, samples)
+    return { ...parsed, bins: buildCalibrationBins(samples, parsed.predictions) }
+}
+
+function comparison(samples: CalibrationSamples, fsrs: Float64Array, rwkv: Float64Array) {
+    return {
+        umPlus: buildUmPlusData(samples, fsrs, rwkv),
+        roc: buildRocData(samples, fsrs, rwkv),
+        rwkvDaily: buildRwkvDailyData(samples, rwkv),
+    }
+}
+
+const tasks = {
+    revlog: calculateRevlogStats,
+    memorised: getMemorisedDays,
+    calibrationPredictions,
+    calibrationReplay: buildCalibrationBins,
+    comparison,
+}
+
+export type Tasks = typeof tasks
+
+const dispatch: {
+    [K in keyof Tasks]: (...args: Parameters<Tasks[K]>) => ReturnType<Tasks[K]>
+} = tasks
+
+export function runStatsTaskLocally<K extends keyof Tasks>(
+    task: K,
+    args: Parameters<Tasks[K]>
+): ReturnType<Tasks[K]> {
+    const calculate = dispatch[task]
+    if (!calculate) throw new Error(`Unknown stats calculation: ${task}`)
+    return calculate(...args)
+}

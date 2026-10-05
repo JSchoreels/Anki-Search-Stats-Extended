@@ -1,4 +1,4 @@
-import type { CalibrationSample } from "./MemorisedBar"
+import { type CalibrationSamples, sampleCount } from "./calibrationSamples"
 
 export const ROC_POINT_RESOLUTION = 1 / 1000
 
@@ -92,27 +92,27 @@ function buildRocSeries(
  * compared on an identical positive/negative sample.
  */
 export function buildRocData(
-    samples: CalibrationSample[],
-    fsrsPredictions: Record<number, number>,
-    rwkvPredictions: Record<number, number>
+    samples: CalibrationSamples,
+    fsrsPredictions: Float64Array,
+    rwkvPredictions: Float64Array
 ): RocData {
     const fsrsOutcomes: ScoredOutcome[] = []
     const rwkvOutcomes: ScoredOutcome[] = []
     let positiveCount = 0
     let negativeCount = 0
 
-    for (const sample of samples) {
-        const fsrs = fsrsPredictions[sample.revlogId]
-        const rwkv = rwkvPredictions[sample.revlogId]
+    for (let i = 0; i < sampleCount(samples); i++) {
+        const fsrs = fsrsPredictions[i]
+        const rwkv = rwkvPredictions[i]
         if (
             !isProbability(fsrs) ||
             !isProbability(rwkv) ||
-            (sample.actual !== 0 && sample.actual !== 1)
+            (samples.actual[i] !== 0 && samples.actual[i] !== 1)
         ) {
             continue
         }
 
-        const actual = sample.actual as 0 | 1
+        const actual = samples.actual[i] as 0 | 1
         fsrsOutcomes.push({ score: fsrs, actual })
         rwkvOutcomes.push({ score: rwkv, actual })
         if (actual === 1) {

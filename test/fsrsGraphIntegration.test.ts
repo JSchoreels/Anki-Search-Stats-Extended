@@ -66,10 +66,11 @@ test("Memorised and rating replay preserve the fast trace after a same-day revie
     const memorised = await getMemorisedDays(history, cards, { 1: config }, { 1: 1 })
     const stats = calculateRevlogStats(history, cards)
 
-    expect(memorised.fsrs_calibration_predictions_by_revlog_id[reviews[2].id]).toBeCloseTo(
-        expected,
-        9
-    )
+    expect(
+        memorised.fsrs_calibration_replay_predictions[
+            memorised.calibration_samples.revlogIds.indexOf(reviews[2].id)
+        ]
+    ).toBeCloseTo(expected, 9)
     expect(memorised.time_by_retrievability_mean[Math.floor(expected * 100)]).toBe(5)
     expect(stats.grade_by_retrievability[Math.floor(expected * 100)]).toEqual([0, 0, 20, 0])
     expect(memorised.day_means[dayFromMs(start)]).toBeCloseTo(core.next_interval(second, 0.9), 9)
@@ -87,11 +88,16 @@ test("a manual reset rebuilds both traces from the next rated review", async () 
     const { cards, history } = population(reviews)
     const memorised = await getMemorisedDays(history, cards, { 1: config }, { 1: 1 })
     const expected = core.curve(1, core.next_state(null, 0, 4)).retrievability
-    expect(memorised.fsrs_calibration_predictions_by_revlog_id[reviews[4].id]).toBeCloseTo(
-        expected,
-        9
-    )
-    expect(memorised.fsrs_calibration_predictions_by_revlog_id[reviews[3].id]).toBeUndefined()
+    expect(
+        memorised.fsrs_calibration_replay_predictions[
+            memorised.calibration_samples.revlogIds.indexOf(reviews[4].id)
+        ]
+    ).toBeCloseTo(expected, 9)
+    expect(
+        memorised.fsrs_calibration_replay_predictions[
+            memorised.calibration_samples.revlogIds.indexOf(reviews[3].id)
+        ]
+    ).toBeUndefined()
 })
 
 test("S90 deduplication keeps states in the same slow-stability bucket with different difficulty", async () => {

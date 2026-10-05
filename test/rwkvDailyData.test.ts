@@ -1,5 +1,6 @@
 import { dayToMs } from "../src/ts/revlogGraphs"
 import { buildRwkvDailyData } from "../src/ts/rwkvDailyData"
+import { calibrationInputs } from "./calibrationInputs"
 
 const firstDay = 20000
 const review = (day: number, index: number, actual: number) => ({
@@ -11,10 +12,12 @@ const review = (day: number, index: number, actual: number) => ({
 test("daily scores use each review's probability and average recall on the identical sample", () => {
     const remembered = review(firstDay, 0, 1)
     const forgotten = review(firstDay, 1, 0)
-    const [point] = buildRwkvDailyData([remembered, forgotten], {
-        [remembered.revlogId]: 0.9,
-        [forgotten.revlogId]: 0.5,
-    })
+    const [point] = buildRwkvDailyData(
+        ...calibrationInputs([remembered, forgotten], {
+            [remembered.revlogId]: 0.9,
+            [forgotten.revlogId]: 0.5,
+        })
+    )
 
     expect(point).toMatchObject({
         day: firstDay,
@@ -33,7 +36,7 @@ test("the same retention gap is more unexpected across more reviews while averag
         )
     )
     const predictions = Object.fromEntries(samples.map((sample) => [sample.revlogId, 0.9]))
-    const [small, large] = buildRwkvDailyData(samples, predictions)
+    const [small, large] = buildRwkvDailyData(...calibrationInputs(samples, predictions))
 
     expect(small.standardizedGap).toBeCloseTo(-1.490712)
     expect(large.standardizedGap).toBeCloseTo(-4.714045)
@@ -42,11 +45,13 @@ test("the same retention gap is more unexpected across more reviews while averag
 
 test("confident mistakes and unlikely successes both increase surprise", () => {
     const samples = [0, 0, 1].map((actual, index) => review(firstDay + index, 0, actual))
-    const points = buildRwkvDailyData(samples, {
-        [samples[0].revlogId]: 0.99,
-        [samples[1].revlogId]: 0.6,
-        [samples[2].revlogId]: 0.01,
-    })
+    const points = buildRwkvDailyData(
+        ...calibrationInputs(samples, {
+            [samples[0].revlogId]: 0.99,
+            [samples[1].revlogId]: 0.6,
+            [samples[2].revlogId]: 0.01,
+        })
+    )
 
     expect(points[0].logLoss).toBeCloseTo(6.643856)
     expect(points[1].logLoss).toBeCloseTo(1.321928)
@@ -68,10 +73,12 @@ test("missing and invalid predictions or outcomes are excluded, leaving sorted s
         [samples[6].revlogId]: 0.5,
     }
     expect(
-        buildRwkvDailyData([...samples].reverse(), predictions).map((point) => point.day)
+        buildRwkvDailyData(...calibrationInputs([...samples].reverse(), predictions)).map(
+            (point) => point.day
+        )
     ).toEqual([firstDay, firstDay + 2])
-    expect(buildRwkvDailyData(samples, {})).toEqual([])
-    expect(buildRwkvDailyData([], predictions)).toEqual([])
+    expect(buildRwkvDailyData(...calibrationInputs(samples, {}))).toEqual([])
+    expect(buildRwkvDailyData(...calibrationInputs([], predictions))).toEqual([])
 })
 
 test("deterministic probabilities retain exact recall and finite loss but have no standardized gap", () => {
@@ -79,9 +86,11 @@ test("deterministic probabilities retain exact recall and finite loss but have n
         review(firstDay + Math.floor(index / 2), index, actual)
     )
     const [correct, wrong] = buildRwkvDailyData(
-        samples,
-        Object.fromEntries(
-            samples.map((sample, index) => [sample.revlogId, index % 2 === 0 ? 1 : 0])
+        ...calibrationInputs(
+            samples,
+            Object.fromEntries(
+                samples.map((sample, index) => [sample.revlogId, index % 2 === 0 ? 1 : 0])
+            )
         )
     )
 
@@ -106,11 +115,13 @@ test("reviews on either side of Anki's 4am rollover belong to different days", (
             const before = boundary - 60000
             const after = boundary + 60000
             const data = buildRwkvDailyData(
-                [
-                    { revlogId: before, cardId: 1, actual: 1 },
-                    { revlogId: after, cardId: 2, actual: 0 },
-                ],
-                { [before]: 0.8, [after]: 0.8 }
+                ...calibrationInputs(
+                    [
+                        { revlogId: before, cardId: 1, actual: 1 },
+                        { revlogId: after, cardId: 2, actual: 0 },
+                    ],
+                    { [before]: 0.8, [after]: 0.8 }
+                )
             )
             expect(
                 data.map((point: { day: number; count: number }) => [point.day, point.count])

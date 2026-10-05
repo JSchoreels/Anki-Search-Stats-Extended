@@ -1,11 +1,4 @@
-import type { buildCalibrationBins, getMemorisedDays } from "./MemorisedBar"
-import type { calculateRevlogStats } from "./revlogGraphs"
-
-type Tasks = {
-    revlog: typeof calculateRevlogStats
-    memorised: typeof getMemorisedDays
-    calibration: typeof buildCalibrationBins
-}
+import type { Tasks } from "./statsTasks"
 
 export function runStatsTask<K extends keyof Tasks>(
     task: K,

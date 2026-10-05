@@ -1,3 +1,5 @@
+import { ankiDaySnapshotMs } from "../src/ts/ankiDay"
+import { alignPredictions, calibrationSamplesFrom } from "../src/ts/calibrationSamples"
 import type { DeckConfig, ResolvedFsrsPreset } from "../src/ts/config"
 import { getFsrsForParams, type FsrsModel } from "../src/ts/fsrsModel"
 import { selectResolvedFsrsPresetParams, selectTsFsrsParams } from "../src/ts/fsrsParams"
@@ -7,9 +9,9 @@ import {
     intervalAtRetrievability,
     type S90BatchResolver,
 } from "../src/ts/MemorisedBar"
-import { ankiDaySnapshotMs } from "../src/ts/ankiDay"
 import { day_ms, dayFromMs, today } from "../src/ts/revlogGraphs"
 import { Revlog } from "../src/ts/search"
+import { calibrationInputs } from "./calibrationInputs"
 import { RevlogBuilder } from "./revlogBuilder"
 
 const weights = [
@@ -264,7 +266,8 @@ test("FSRS7 params are accepted in memorised graph pipeline", async () => {
     expect(memorised.length).not.toBe(0)
     const fsrs = getFsrsForParams(weights7)
     let state = fsrs.nextState(null, 0, 3)
-    for (let i = 1; i < revlogs.length; i++) state = fsrs.nextState(state, (revlogs[i].id - revlogs[i-1].id) / day_ms, revlogs[i].ease)
+    for (let i = 1; i < revlogs.length; i++)
+        state = fsrs.nextState(state, (revlogs[i].id - revlogs[i - 1].id) / day_ms, revlogs[i].ease)
     const elapsed = (ankiDaySnapshotMs(0, 0, Date.now()) - revlogs[revlogs.length - 1].id) / day_ms
     expect(memorised[0]).toBeCloseTo(fsrs.retrievability(state, elapsed), 8)
 })
@@ -382,15 +385,22 @@ test("Calibration samples can be reused with alternate review-time predictions",
     const revlogs = [card.review(1, 3), card.review(3, 3)] as Revlog[]
     const stats = await getMemorisedDaysForTest(revlogs, cards, configs, mappings, [], 2, 2)
     const rwkvPrediction = 0.42
-    const rwkvBins = buildCalibrationBins(stats.calibration_samples, {
-        [revlogs[1].id]: rwkvPrediction,
-    })
+    const rwkvBins = buildCalibrationBins(
+        stats.calibration_samples,
+        alignPredictions(stats.calibration_samples, {
+            [revlogs[1].id]: rwkvPrediction,
+        })
+    )
     const rwkvEntry = rwkvBins.find((entry) => !!entry && entry.count > 0)
 
-    expect(stats.calibration_samples).toEqual([
-        { revlogId: revlogs[1].id, cardId: revlogs[1].cid, actual: 1 },
-    ])
-    expect(stats.fsrs_calibration_predictions_by_revlog_id[revlogs[1].id]).toBeGreaterThan(0)
+    expect(stats.calibration_samples).toEqual(
+        calibrationSamplesFrom([{ revlogId: revlogs[1].id, cardId: revlogs[1].cid, actual: 1 }])
+    )
+    expect(
+        stats.fsrs_calibration_replay_predictions[
+            stats.calibration_samples.revlogIds.indexOf(revlogs[1].id)
+        ]
+    ).toBeGreaterThan(0)
     expect(rwkvEntry).toBeTruthy()
     expect(rwkvEntry!.count).toBe(1)
     expect(rwkvEntry!.predicted).toBeCloseTo(rwkvPrediction, 6)
@@ -399,15 +409,17 @@ test("Calibration samples can be reused with alternate review-time predictions",
 
 test("Alternate calibration bins ignore missing and invalid predictions", () => {
     const bins = buildCalibrationBins(
-        [
-            { revlogId: 1, cardId: 1, actual: 1 },
-            { revlogId: 2, cardId: 2, actual: 0 },
-            { revlogId: 3, cardId: 3, actual: 1 },
-        ],
-        {
-            1: 0.25,
-            2: 1.5,
-        }
+        ...calibrationInputs(
+            [
+                { revlogId: 1, cardId: 1, actual: 1 },
+                { revlogId: 2, cardId: 2, actual: 0 },
+                { revlogId: 3, cardId: 3, actual: 1 },
+            ],
+            {
+                1: 0.25,
+                2: 1.5,
+            }
+        )
     )
     const entries = bins.filter((entry) => !!entry && entry.count > 0)
 

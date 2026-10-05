@@ -1,7 +1,8 @@
 import { writable } from "svelte/store"
+import { calibrationSamplesFrom } from "../src/ts/calibrationSamples"
 
 const ids = [Date.UTC(2026, 6, 2), Date.UTC(2026, 9, 5)]
-const predictions = Object.fromEntries(ids.map((id) => [id, 0.9]))
+const predictions = new Float64Array(ids.map(() => 0.9))
 const stores = {
     cids: writable([12]),
     searchLimit: writable(0),
@@ -18,19 +19,21 @@ test("export reads current graph inputs and emits an aggregate report without fe
     global.window = { bridgeCommand } as never
     const fetchSpy = jest.spyOn(global, "fetch")
     stores.memorised_stats.set({
-        calibration_samples: ids.map((revlogId) => ({ cardId: 12, revlogId, actual: 1 })),
-        fsrs_calibration_predictions_by_revlog_id: predictions,
+        calibration_samples: calibrationSamplesFrom(
+            ids.map((revlogId) => ({ cardId: 12, revlogId, actual: 1 }))
+        ),
+        fsrs_calibration_replay_predictions: predictions,
     })
     stores.fsrsCalibrationStats.set({
         column: "fsrs-cache",
         roles: ["validation_fold"],
         cachedPredictionCount: 2,
-        predictionsByRevlogId: predictions,
+        predictions: predictions,
         warnings: [],
     })
     stores.rwkvCalibrationStats.set({
         column: "rwkv-cache",
-        predictionsByRevlogId: predictions,
+        predictions: predictions,
         warnings: [],
     })
     stores.fsrsCalibrationGeneration.set({ phase: "ready", generated: false, warnings: [] })

@@ -6,6 +6,7 @@ import {
     type CalibrationBootstrapObservation,
     cardBootstrapConfidenceIntervals,
 } from "./calibrationBootstrap"
+import { type CalibrationSamples, sampleCount } from "./calibrationSamples"
 import {
     type CardData,
     getFsrsInternalStabilityFromCard,
@@ -31,12 +32,6 @@ export interface LossBin {
     predicted: number
     count: number
     confidenceInterval?: [number, number]
-}
-
-export type CalibrationSample = {
-    revlogId: number
-    cardId: number
-    actual: number
 }
 
 export const CALIBRATION_BIN_COUNT = 20
@@ -74,20 +69,17 @@ export function addCalibrationSample(bins: LossBin[], predicted: number, actual:
     return true
 }
 
-export function buildCalibrationBins(
-    samples: CalibrationSample[],
-    predictionsByRevlogId: Record<number, number>
-) {
+export function buildCalibrationBins(samples: CalibrationSamples, predictions: Float64Array) {
     const bins = <LossBin[]>Array(CALIBRATION_BIN_COUNT)
     const observations: CalibrationBootstrapObservation[] = []
 
-    for (const sample of samples) {
-        const predicted = predictionsByRevlogId[sample.revlogId]
-        if (addCalibrationSample(bins, predicted, sample.actual)) {
+    for (let i = 0; i < sampleCount(samples); i++) {
+        const predicted = predictions[i]
+        if (addCalibrationSample(bins, predicted, samples.actual[i])) {
             observations.push({
-                cardId: sample.cardId,
+                cardId: samples.cardIds[i],
                 bin: calibrationBinIndex(predicted),
-                actual: sample.actual,
+                actual: samples.actual[i],
             })
         }
     }
@@ -379,8 +371,10 @@ export async function getMemorisedDays(
     let difficulty_day_bins: number[][] = []
 
     let calibration = <LossBin[]>Array(CALIBRATION_BIN_COUNT)
-    let calibration_samples: CalibrationSample[] = []
-    let fsrs_calibration_predictions_by_revlog_id: Record<number, number> = {}
+    const calibration_revlog_ids: number[] = []
+    const calibration_card_ids: number[] = []
+    const calibration_actual: number[] = []
+    const calibration_replay_predictions: number[] = []
 
     function forgetting_curve(
         fsrs: FsrsModel,
@@ -666,12 +660,10 @@ export async function getMemorisedDays(
 
                     // Calibration graph
                     if (!excludedRevlogIds.has(revlog.id)) {
-                        calibration_samples.push({
-                            revlogId: revlog.id,
-                            cardId: revlog.cid,
-                            actual: y,
-                        })
-                        fsrs_calibration_predictions_by_revlog_id[revlog.id] = p
+                        calibration_revlog_ids.push(revlog.id)
+                        calibration_card_ids.push(revlog.cid)
+                        calibration_actual.push(y)
+                        calibration_replay_predictions.push(p)
                         addCalibrationSample(calibration, p, y)
                         /* log.push({
                             d: card.difficulty,
@@ -876,8 +868,12 @@ export async function getMemorisedDays(
         leech_probabilities,
         difficulty_days: difficulty_day_bins,
         calibration,
-        calibration_samples,
-        fsrs_calibration_predictions_by_revlog_id,
+        calibration_samples: {
+            revlogIds: new Float64Array(calibration_revlog_ids),
+            cardIds: new Float64Array(calibration_card_ids),
+            actual: new Uint8Array(calibration_actual),
+        },
+        fsrs_calibration_replay_predictions: new Float64Array(calibration_replay_predictions),
         time_by_retrievability_samples,
         time_by_retrievability_samples_exclude_same_day,
         time_by_retrievability_samples_success_only,

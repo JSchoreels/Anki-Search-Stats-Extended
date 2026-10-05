@@ -9,7 +9,7 @@ current Disagreement), in this order:
 
 Both respect the statistics search and review date range. They reuse
 `memorised_stats.calibration_samples` and
-`rwkvCalibrationStats.predictionsByRevlogId`, independently of the calibration
+`rwkvCalibrationStats.predictions` (an index-aligned `Float64Array`), independently of the calibration
 source selector and without requiring matching FSRS predictions. Their input
 eligibility and historical prediction provenance are the same as
 [RWKV Calibration](FSRS_CALIBRATION_GRAPH.MD). No additional requests, stored
@@ -31,7 +31,10 @@ have no value and break the plotted line, rather than being filled with zero.
 Tooltips show the date, graph score, actual R (`sum(y)/n`), predicted R
 (`sum(p)/n`), and eligible review count. Hover and keyboard focus expose the
 same information. No eligible data shows an explicit no-data message; the
-existing prediction source's loading state and warnings are retained.
+existing prediction source's warnings are retained. The shared comparison worker
+computes daily scores once history and both prediction stores are ready; the
+panels show loading until the comparison result arrives. Daily scores still use
+every eligible RWKV prediction, including reviews absent from FSRS predictions.
 
 ## Daily recall gap
 

@@ -73,7 +73,31 @@ source.
       `post_optimization`, and suppressing `final_fit` rows, then returns only
       `validation_fold` and `post_optimization` predictions.
     - If no role-aware rows are available, FSRS mode falls back to the browser
-      replay used by `getMemorisedDays()`.
+      worker replay used by `getMemorisedDays()`.
+
+## Frontend Worker Inputs and Results
+
+`getMemorisedDays()` returns calibration samples as three index-aligned typed
+columns: `revlogIds` and `cardIds` (`Float64Array`) and `actual` (`Uint8Array`).
+Its `fsrs_calibration_replay_predictions` is a `Float64Array` aligned to those
+samples. FSRS and RWKV endpoint helpers return raw response text; the
+`calibrationPredictions` worker task parses and validates it, aligns predictions
+by review ID, and computes calibration bins with confidence intervals.
+
+Each calibration store exposes `predictions: Float64Array`, with `NaN` for
+samples absent from the response. Response prediction counts retain all unique
+review IDs with finite validated values, including IDs outside the selected
+samples and values outside `[0, 1]`. A non-empty FSRS response keeps priority
+over replay even if none of its values can contribute to bins. Only an empty
+validated response uses replay through the `calibrationReplay` task. Graph
+calculations continue to accept only finite probabilities within `[0, 1]`.
+
+Once history and both calibration stores load, the `comparison` worker task
+builds UM+, ROC, and RWKV daily results. The page displays loading until this
+result is ready and cancels obsolete computations through `latestResult`.
+Warnings remain logged on the main thread and displayed by the existing panels.
+Endpoint request bodies, automatic preparation, revision triggers, and the
+`refresh_after_fsrs` handshake are unchanged.
 
 ## Persistent Prediction Cache
 

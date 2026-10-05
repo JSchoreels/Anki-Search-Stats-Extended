@@ -1,4 +1,5 @@
 import { derived, get, writable, type Readable } from "svelte/store"
+import { EMPTY_CALIBRATION_SAMPLES, sampleCount } from "./calibrationSamples"
 import { calculateCardDataPies } from "./CardDataPies"
 import { DEFAULT_ORDER, type SSEconfig, type SSEother } from "./config"
 import { latestResult } from "./latestResult"
@@ -21,6 +22,7 @@ import {
     type FsrsCalibrationProgress,
     type Revlog,
 } from "./search"
+import type { Tasks } from "./statsTasks"
 import { runStatsTask } from "./statsWorkerClient"
 import type { Tooltip } from "./tooltip"
 
@@ -298,7 +300,7 @@ export type FsrsCalibrationStats = {
     roles: string[]
     column: string | null
     bins: ReturnType<typeof buildCalibrationBins>
-    predictionsByRevlogId: Record<number, number>
+    predictions: Float64Array
     warnings: string[]
 }
 export let fsrsCalibrationGeneration = writable<FsrsCalibrationProgress | null>(null)
@@ -342,13 +344,19 @@ async function prepareFsrsCalibration(cardIds: number[]) {
     }
     calibrationRunning = false
     const currentCards = get(cids)
-    if (currentCards?.length && get(memorised_stats)?.calibration_samples?.length) {
+    if (
+        currentCards?.length &&
+        sampleCount(get(memorised_stats)?.calibration_samples ?? EMPTY_CALIBRATION_SAMPLES)
+    ) {
         void prepareFsrsCalibration(currentCards)
     }
 }
 
 derived([cids, memorised_stats], ([$cids, $memorised]) => {
-    if ($cids?.length && $memorised?.calibration_samples?.length) {
+    if (
+        $cids?.length &&
+        sampleCount($memorised?.calibration_samples ?? EMPTY_CALIBRATION_SAMPLES)
+    ) {
         void prepareFsrsCalibration([...$cids])
     }
 }).subscribe(() => {})
@@ -365,12 +373,12 @@ derived(
             return
         }
 
-        const samples = $memorised_stats.calibration_samples ?? []
-        if (samples.length === 0) {
+        const samples = $memorised_stats.calibration_samples ?? EMPTY_CALIBRATION_SAMPLES
+        if (sampleCount(samples) === 0) {
             set({
                 column: null,
                 bins: [],
-                predictionsByRevlogId: {},
+                predictions: new Float64Array(0),
                 warnings: [],
                 cachedPredictionCount: 0,
                 roles: [],
@@ -379,23 +387,26 @@ derived(
         }
 
         return latestResult(set, async (signal) => {
-            const { column, predictionsByRevlogId, warnings, roles } =
-                await getFsrsReviewRetrievability(
-                    $cids,
-                    $searchLimit,
-                    samples.map((sample) => sample.revlogId)
-                )
-            const effectivePredictions =
-                Object.keys(predictionsByRevlogId).length > 0
-                    ? predictionsByRevlogId
-                    : $memorised_stats.fsrs_calibration_predictions_by_revlog_id
+            const text = await getFsrsReviewRetrievability(
+                $cids,
+                $searchLimit,
+                Array.from(samples.revlogIds)
+            )
+            const parsed = await runStatsTask("calibrationPredictions", [samples, text], signal)
+            for (const warning of parsed.warnings) console.warn("Search Stats Extended:", warning)
+            const usesCache = parsed.responsePredictionCount > 0
+            const predictions = usesCache
+                ? parsed.predictions
+                : $memorised_stats.fsrs_calibration_replay_predictions
             return {
-                column,
-                cachedPredictionCount: Object.keys(predictionsByRevlogId).length,
-                roles,
-                bins: await runStatsTask("calibration", [samples, effectivePredictions], signal),
-                predictionsByRevlogId: effectivePredictions,
-                warnings,
+                column: parsed.column,
+                cachedPredictionCount: parsed.responsePredictionCount,
+                roles: parsed.roles,
+                bins: usesCache
+                    ? parsed.bins
+                    : await runStatsTask("calibrationReplay", [samples, predictions], signal),
+                predictions,
+                warnings: parsed.warnings,
             }
         })
     }
@@ -404,7 +415,7 @@ derived(
 export type RwkvCalibrationStats = {
     column: string | null
     bins: ReturnType<typeof buildCalibrationBins>
-    predictionsByRevlogId: Record<number, number>
+    predictions: Float64Array
     warnings: string[]
     roles?: string[]
     roleCounts?: Record<string, number>
@@ -422,28 +433,29 @@ derived(
             return
         }
 
-        const samples = $memorised_stats.calibration_samples ?? []
-        if (samples.length === 0) {
-            set({ column: null, bins: [], predictionsByRevlogId: {}, warnings: [] })
+        const samples = $memorised_stats.calibration_samples ?? EMPTY_CALIBRATION_SAMPLES
+        if (sampleCount(samples) === 0) {
+            set({ column: null, bins: [], predictions: new Float64Array(0), warnings: [] })
             return
         }
 
         return latestResult(set, async (signal) => {
-            const { column, predictionsByRevlogId, warnings, roles, roleCounts, refreshAfterFsrs } =
-                await getRwkvReviewRetrievability(
-                    $cids,
-                    $searchLimit,
-                    samples.map((sample) => sample.revlogId),
-                    true
-                )
+            const text = await getRwkvReviewRetrievability(
+                $cids,
+                $searchLimit,
+                Array.from(samples.revlogIds),
+                true
+            )
+            const parsed = await runStatsTask("calibrationPredictions", [samples, text], signal)
+            for (const warning of parsed.warnings) console.warn("Search Stats Extended:", warning)
             return {
-                column,
-                bins: await runStatsTask("calibration", [samples, predictionsByRevlogId], signal),
-                predictionsByRevlogId,
-                warnings,
-                roles,
-                roleCounts,
-                refreshAfterFsrs,
+                column: parsed.column,
+                bins: parsed.bins,
+                predictions: parsed.predictions,
+                warnings: parsed.warnings,
+                roles: parsed.roles,
+                roleCounts: parsed.roleCounts,
+                refreshAfterFsrs: parsed.refreshAfterFsrs,
             }
         })
     }
@@ -460,3 +472,20 @@ derived([rwkvCalibrationStats, fsrsCalibrationGeneration], ([$rwkv, $generation]
         rwkvCalibrationRevision.update((revision) => revision + 1)
     }
 }).subscribe(() => {})
+
+export const calibrationComparison = writable<ReturnType<Tasks["comparison"]> | null>(null)
+derived(
+    [memorised_stats, fsrsCalibrationStats, rwkvCalibrationStats],
+    ([$memorised, $fsrs, $rwkv], set: typeof calibrationComparison.set) => {
+        set(null)
+        if ($memorised && $fsrs && $rwkv) {
+            return latestResult(set, (signal) =>
+                runStatsTask(
+                    "comparison",
+                    [$memorised.calibration_samples, $fsrs.predictions, $rwkv.predictions],
+                    signal
+                )
+            )
+        }
+    }
+).subscribe(calibrationComparison.set)

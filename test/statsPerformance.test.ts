@@ -1,3 +1,4 @@
+import { EMPTY_CALIBRATION_SAMPLES } from "../src/ts/calibrationSamples"
 import { intervalHistogram, type CardData } from "../src/ts/cardData"
 import { latestResult } from "../src/ts/latestResult"
 import { runStatsTask } from "../src/ts/statsWorkerClient"
@@ -41,7 +42,11 @@ test("a cancelled worker stops computing and cannot publish its result", async (
     global.Worker = jest.fn(() => worker) as any
     try {
         const controller = new AbortController()
-        const promise = runStatsTask("calibration", [[], {}], controller.signal)
+        const promise = runStatsTask(
+            "calibrationReplay",
+            [EMPTY_CALIBRATION_SAMPLES, new Float64Array(0)],
+            controller.signal
+        )
         const result = expect(promise).rejects.toMatchObject({ name: "AbortError" })
         controller.abort()
         worker.onmessage({ data: { result: ["stale"] } })

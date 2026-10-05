@@ -96,7 +96,7 @@ test("a missing-history first grade is represented once by its post-review state
         model.retrievability(expected, 1),
         9
     )
-    expect(stats.calibration_samples.some((s) => s.revlogId === logs[0].id)).toBe(false)
+    expect(stats.calibration_samples.revlogIds.includes(logs[0].id)).toBe(false)
     expect(stats.day_means[dayFromMs(start)]).toBeCloseTo(30, 4)
 })
 
