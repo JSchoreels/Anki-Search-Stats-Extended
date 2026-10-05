@@ -60,6 +60,7 @@ test("getRwkvReviewRetrievability sends calibration revlog ids", async () => {
             column: "cache",
             predictionsByRevlogId: { 123: 0.42 },
             warnings: [],
+            roles: [],
         })
     } finally {
         global.fetch = originalFetch
@@ -91,6 +92,7 @@ test("getRwkvReviewRetrievability reports endpoint warnings", async () => {
             column: "cache",
             predictionsByRevlogId: { 123: 0.42 },
             warnings: [warning],
+            roles: [],
         })
         expect(warnMock).toHaveBeenCalledWith("Search Stats Extended:", warning)
     } finally {
@@ -104,7 +106,7 @@ test("getFsrsReviewRetrievability sends calibration revlog ids", async () => {
     const originalFetch = global.fetch
     const fetchMock = jest.fn().mockResolvedValue({
         ok: true,
-        text: async () => JSON.stringify({ column: "cache", data: [[321, "0.62"]] }),
+        text: async () => JSON.stringify({ column: "cache", data: [[321, "0.62"]], roles: ["post_optimization", null, 123] }),
     })
 
     jest.resetModules()
@@ -128,6 +130,7 @@ test("getFsrsReviewRetrievability sends calibration revlog ids", async () => {
             column: "cache",
             predictionsByRevlogId: { 321: 0.62 },
             warnings: [],
+            roles: ["post_optimization"],
         })
     } finally {
         global.fetch = originalFetch

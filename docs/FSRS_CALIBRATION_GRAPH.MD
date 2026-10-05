@@ -68,8 +68,8 @@ pre-binned graph data. This keeps the persisted data reusable across search
 queries, date ranges, and future graph variants.
 
 The add-on can create these tables lazily when running without a core
-producer, but the Anki fork may also create and populate them during FSRS
-optimization and RWKV state-cache builds. On adapted Anki builds, Anki attaches
+producer, but the Anki fork may also create and populate them through explicit FSRS
+calibration generation and RWKV calibration replay. On adapted Anki builds, Anki attaches
 `collection.retrievability-cache.sqlite` as `retrievability_cache`, and the
 add-on creates/writes these tables in that sidecar instead of the synced
 collection DB. Older Anki builds without the attached database fall back to the
@@ -113,8 +113,13 @@ Anki-side producers should store pre-answer predictions for the same
 `revlog.id`. The stats graph will use those rows before falling back to legacy
 `revlog` columns. Current producers are:
 
-- FSRS optimization writes `search_stats_fsrs_review_retrievability` with source
-  `fsrs_optimization`, including `final_fit` and `validation_fold` rows.
+- Current adapted Anki exposes `ComputeFsrsReviewRetrievabilityCalibration`
+  for explicit historical calibration generation, writing
+  `search_stats_fsrs_review_retrievability` with source
+  `fsrs_calibration_recompute`. Ordinary optimization does not populate this
+  cache. Older builds wrote `fsrs_optimization` rows during optimization.
+  The current SSE data-loading path reads the FSRS cache but does not call this
+  generation API, so later answer-time rows alone can activate cache selection.
 - FSRS answer handling writes `search_stats_fsrs_review_retrievability` with
   source `fsrs_review` and role `post_optimization`.
 - RWKV state-cache build/update maintains recurrent review state without
@@ -156,6 +161,28 @@ Dynamic Desired Retention fields are carried with resolved presets so the graph
 data path stays aligned with Anki's current preset shape. Calibration and
 Memorised retrievability predictions use FSRS params and memory state; desired
 retention does not directly enter the model's retrievability calculation.
+
+## Diagnostic build 2026-10-05.1
+
+The calibration panel includes a selectable aggregate report. It reports eligible
+historical samples, browser-replay predictions, returned FSRS cache prediction
+count and role names, the selected prediction source, used FSRS/RWKV reviews,
+their UTC date ranges, paired review count, and UM+ buckets visible under the
+200-review default threshold. Missing role metadata is explicitly identified;
+it is not interpreted as proof of a missing validation cache. Counts apply to
+the current search and review range. Reports contain no card text or review IDs.
+No extra backend requests or database operations are added.
+
+The optional **Use full-history FSRS replay (diagnostic)** checkbox bypasses the
+FSRS cache for Calibration, UM+ and ROC in this stats view. It uses the existing
+browser replay predictions and bins, respecting existing history eligibility
+and cutoffs. It does not merge sources, change cached data, or regenerate
+validation predictions. It defaults off and does not persist. While enabled,
+the UI identifies that current parameters replayed over past reviews are not
+held-out validation. The report continues to show the cache count and roles,
+so reports with the checkbox off and on can identify a sparse-cache selection.
+
+This is a diagnostic package, not a change to the default calibration policy.
 
 ## Calibration Source Toggle
 

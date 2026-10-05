@@ -7,6 +7,8 @@
     import MemorisedBar from "../MemorisedBar.svelte"
     import MemorisedGraphContainer from "../MemorisedGraphContainer.svelte"
     import FsrsCalibration from "../FSRSCalibration.svelte"
+    import CalibrationDiagnostics from "../CalibrationDiagnostics.svelte"
+    import { calibrationDiagnosticReport } from "../calibrationDiagnostics"
     import UMPlus from "../UMPlus.svelte"
     import ROC from "../ROC.svelte"
     import CurrentDisagreement from "../CurrentDisagreement.svelte"
@@ -49,6 +51,11 @@
         MEDIAN,
         MEAN,
     }
+
+    let useHistoricalReplay = false
+    $: selectedFsrsPredictions = useHistoricalReplay
+        ? ($memorised_stats?.fsrs_calibration_predictions_by_revlog_id ?? {})
+        : ($fsrsCalibrationStats?.predictionsByRevlogId ?? {})
 
     let average_type = Average.MEDIAN
     let interval_bin_size = 1
@@ -101,9 +108,20 @@
 
     $: review_leftmost = minIndex($revlogStats?.intervals ?? {}) - today
     $: time_machine_min = review_leftmost
+    $: calibrationReport =
+        $memorised_stats && $fsrsCalibrationStats && $rwkvCalibrationStats
+            ? calibrationDiagnosticReport(
+                  $memorised_stats.calibration_samples ?? [],
+                  $memorised_stats.fsrs_calibration_predictions_by_revlog_id,
+                  { ...$fsrsCalibrationStats, predictionsByRevlogId: selectedFsrsPredictions },
+                  $rwkvCalibrationStats,
+                  $searchLimit,
+                  useHistoricalReplay
+              )
+            : "SSE calibration diagnostic build 2026-10-05.1\nLoading calibration data..."
     $: cachedFsrsCalibrationData = $fsrsCalibrationStats?.bins ?? []
     $: fsrsCalibrationData =
-        _.sumBy(cachedFsrsCalibrationData, (bin) => bin?.count ?? 0) > 0
+        !useHistoricalReplay && _.sumBy(cachedFsrsCalibrationData, (bin) => bin?.count ?? 0) > 0
             ? cachedFsrsCalibrationData
             : ($memorised_stats?.calibration ?? [])
     $: rwkvCalibrationData = $rwkvCalibrationStats?.bins ?? []
@@ -151,12 +169,12 @@
               : ($fsrsCalibrationStats?.warnings ?? [])
     $: umPlusData = buildUmPlusData(
         $memorised_stats?.calibration_samples ?? [],
-        $fsrsCalibrationStats?.predictionsByRevlogId ?? {},
+        selectedFsrsPredictions,
         $rwkvCalibrationStats?.predictionsByRevlogId ?? {}
     )
     $: rocData = buildRocData(
         $memorised_stats?.calibration_samples ?? [],
-        $fsrsCalibrationStats?.predictionsByRevlogId ?? {},
+        selectedFsrsPredictions,
         $rwkvCalibrationStats?.predictionsByRevlogId ?? {}
     )
     $: umPlusLoading = !!$memorised_stats && (!$fsrsCalibrationStats || !$rwkvCalibrationStats)
@@ -227,6 +245,7 @@
                     )}
                 </div>
             {/if}
+            <CalibrationDiagnostics report={calibrationReport} bind:useHistoricalReplay />
         </div>
         <p>
             {i18n("fsrs-calibration-help")}

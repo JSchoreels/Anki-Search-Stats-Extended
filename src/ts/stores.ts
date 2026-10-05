@@ -292,6 +292,8 @@ export async function cancelRwkvMemorisedComputation() {
 }
 
 export type FsrsCalibrationStats = {
+    cachedPredictionCount: number
+    roles: string[]
     column: string | null
     bins: ReturnType<typeof buildCalibrationBins>
     predictionsByRevlogId: Record<number, number>
@@ -311,12 +313,12 @@ derived(
 
         const samples = $memorised_stats.calibration_samples ?? []
         if (samples.length === 0) {
-            set({ column: null, bins: [], predictionsByRevlogId: {}, warnings: [] })
+            set({ column: null, bins: [], predictionsByRevlogId: {}, warnings: [], cachedPredictionCount: 0, roles: [] })
             return
         }
 
         return latestResult(set, async (signal) => {
-            const { column, predictionsByRevlogId, warnings } = await getFsrsReviewRetrievability(
+            const { column, predictionsByRevlogId, warnings, roles } = await getFsrsReviewRetrievability(
                 $cids,
                 $searchLimit,
                 samples.map((sample) => sample.revlogId)
@@ -327,6 +329,8 @@ derived(
                     : $memorised_stats.fsrs_calibration_predictions_by_revlog_id
             return {
                 column,
+                cachedPredictionCount: Object.keys(predictionsByRevlogId).length,
+                roles,
                 bins: await runStatsTask("calibration", [samples, effectivePredictions], signal),
                 predictionsByRevlogId: effectivePredictions,
                 warnings,

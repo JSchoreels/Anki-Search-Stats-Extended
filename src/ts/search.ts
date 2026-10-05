@@ -264,7 +264,11 @@ async function getReviewRetrievability(
         column?: string | null
         data?: [number, number | string | null][]
         warnings?: unknown[]
+        roles?: unknown[]
     }
+    const roles = (response.roles ?? []).filter(
+        (role): role is string => typeof role === "string"
+    )
     const predictionsByRevlogId: Record<number, number> = {}
     const warnings = (response.warnings ?? []).filter(
         (warning): warning is string => typeof warning === "string" && warning.length > 0
@@ -285,6 +289,7 @@ async function getReviewRetrievability(
         column: response.column ?? null,
         predictionsByRevlogId,
         warnings,
+        roles,
     }
 }
 
