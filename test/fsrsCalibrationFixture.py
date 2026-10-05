@@ -5,6 +5,7 @@ import copy
 import importlib.util
 import json
 import re
+import sqlite3
 import sys
 import tempfile
 from pathlib import Path
@@ -31,9 +32,10 @@ class Collection:
 
     def __init__(self):
         self.rows = [[100, 10, 3, 1, 2, 2500], [200, 13, 1, 1, 3, 2500]]
-        self.cards = [[10, 1, 0], [11, 1, 0], [12, 2, 0], [13, 99, 1]]
+        self.cards = [[10, 1, 0], [11, 3, 0], [12, 2, 0], [13, 99, 1]]
         self.overlay = True
         self.resolver_calls = 0
+        self.batch_calls = 0
         self.config_calls = 0
         self.cache = {}
         self.calls = []
@@ -42,10 +44,17 @@ class Collection:
         self.params = [1.0] * 34
         self._backend = NS(
             compute_fsrs_review_retrievability_calibration=self.compute,
-            get_fsrs_preset_ids_for_cards=lambda ids: None,
+            get_fsrs_preset_ids_for_cards=self.preset_ids,
         )
         self.decks = NS(config_dict_for_deck_id=self.config)
-        self.db = NS(all=self.query)
+        self.db = NS(all=self.query, first=self.first)
+
+    def preset_ids(self, ids):
+        self.batch_calls += 1
+        return [NS(card_id=cid, preset_id=self.preset_id(cid)) for cid in ids]
+
+    def preset_id(self, cid):
+        return "six" if cid == 12 else "shared"
 
     def config(self, did):
         self.config_calls += 1
@@ -68,7 +77,7 @@ class Collection:
     def fsrs_preset_for_card(self, cid):
         self.resolver_calls += 1
         return NS(
-            id="six" if cid == 12 else "shared",
+            id=self.preset_id(cid),
             fsrs_version="six" if cid == 12 else "seven",
             params=[1.0] * 21
             if cid == 12
@@ -95,6 +104,13 @@ class Collection:
                     roles[role] = roles.get(role, 0) + 1
             return list(roles.items())
         return copy.deepcopy(rows)
+
+    def first(self, sql):
+        # Execute the module's real aggregate SQL against these revlog rows.
+        db = sqlite3.connect(":memory:")
+        db.execute("CREATE TABLE revlog (id, cid, ease, type, ivl, factor)")
+        db.executemany("INSERT INTO revlog VALUES (?, ?, ?, ?, ?, ?)", self.rows)
+        return db.execute(sql).fetchone()
 
     def compute(self, request):
         if self.fail:
@@ -198,6 +214,16 @@ result["ordinary"] = {
 with tempfile.TemporaryDirectory() as root:
     ensure(col, root)
     result["ordinary_api_search"] = col.calls[-1]["search"]
+
+# Overlay rules: one batch routing call, settings resolved once per (preset, home deck).
+col = Collection()
+col.cards = [[1000 + i, 1 + i % 2, 0] for i in range(10000)]
+groups = module._groups(col, [1000], lambda: None)
+result["overlay"] = {
+    "cards": sum(len(group["cids"]) for _, group in groups),
+    "batch_calls": col.batch_calls,
+    "resolver_calls": col.resolver_calls,
+}
 
 # Actual endpoint control flow must force recompute if an existing RWKV cache lacks validation coverage.
 source = ast.parse((Path(__file__).parents[1] / "__init__.py").read_text())

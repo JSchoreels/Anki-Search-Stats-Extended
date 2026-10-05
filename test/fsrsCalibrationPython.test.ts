@@ -60,6 +60,10 @@ test("10,000 ordinary cards resolve once per deck and use a short preset search"
     expect(results.ordinary_api_search).toBe('preset:"Mining" (-is:suspended)')
 })
 
+test("10,000 overlay-routed cards use one batch call and resolve once per preset and deck", () => {
+    expect(results.overlay).toEqual({ cards: 10000, batch_calls: 1, resolver_calls: 2 })
+})
+
 test("an existing partial RWKV cache triggers the real recompute API and reports remaining gaps", () => {
     expect(results.alignment_force_calls).toEqual([true, false])
     expect(results.alignment_api_calls).toEqual(["ensure", "recompute"])

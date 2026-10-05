@@ -9,6 +9,10 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
+# Version 2: history signatures are SQL aggregates. Older records are ignored, so
+# existing validation caches are adopted again instead of being regenerated.
+RECORDS_VERSION = 2
+
 
 def _digest(value):
     return hashlib.sha256(json.dumps(value, sort_keys=True).encode()).hexdigest()
@@ -66,20 +70,26 @@ def _groups(col, requested_cids, check_cancel):
     # Generation is explicit. Ordinary stats loads do not scan cards or history.
     cards = col.db.all("SELECT id, did, odid FROM cards ORDER BY id")
     has_overrides = bool((col.get_config("fsrsPresetOverlay", {}) or {}).get("rules"))
+    preset_by_card = {}
     if has_overrides:
-        # Prepare the native search-based preset resolver without computing R.
-        col._backend.get_fsrs_preset_ids_for_cards([row[0] for row in cards])
+        # One native batch call routes every card. An overlay preset is fixed by its
+        # id and a deck preset by its home deck, so settings resolve once per route.
+        preset_by_card = {
+            item.card_id: item.preset_id
+            for item in col._backend.get_fsrs_preset_ids_for_cards(
+                [row[0] for row in cards]
+            )
+        }
     requested = set(requested_cids)
-    groups, wanted, by_deck, configs = {}, set(), {}, {}
+    groups, wanted, by_route, configs = {}, set(), {}, {}
     for cid, did, odid in cards:
         check_cancel()
         home_deck = odid or did
-        if has_overrides or home_deck not in by_deck:
+        route = (preset_by_card.get(cid), home_deck)
+        if route not in by_route:
             settings = _settings(col, cid, home_deck, configs)
-            key = _digest(settings)
-            by_deck[home_deck] = (key, settings)
-        else:
-            key, settings = by_deck[home_deck]
+            by_route[route] = (_digest(settings), settings)
+        key, settings = by_route[route]
         group = groups.setdefault(key, {"settings": settings, "cids": []})
         if not has_overrides:
             name = configs[home_deck]["name"]
@@ -109,13 +119,17 @@ def missing_rwkv_validation_reviews(fsrs_rows, rwkv_rows):
 def _history(col, cids, boundary=None):
     cards = ",".join(str(cid) for cid in cids)
     limit = f"AND id <= {int(boundary)}" if boundary is not None else ""
-    rows = col.db.all(f"""
-        SELECT id, cid, ease, type, ivl, factor
-        FROM revlog WHERE cid IN ({cards}) {limit} ORDER BY id
+    # Aggregate in SQLite instead of transferring and hashing every row. The
+    # checksum stays exact in a double for large collections and changes when a
+    # rating, type, interval or factor is edited; only offsetting edits could cancel.
+    count, last_id, checksum = col.db.first(f"""
+        SELECT COUNT(*), MAX(id),
+            TOTAL((id % 1000003) * (ease + 7) * (type + 3) + cid % 997 + ivl * 31 + factor)
+        FROM revlog WHERE cid IN ({cards}) {limit}
     """)
     return {
-        "boundary": int(rows[-1][0]) if rows else 0,
-        "signature": _digest(rows),
+        "boundary": int(last_id or 0),
+        "signature": _digest([count, last_id, checksum]),
     }
 
 
@@ -138,7 +152,7 @@ def _coverage(col, table, cids, boundary):
 def _load_records(path, created):
     try:
         data = json.loads(path.read_text())
-        if data.get("version") == 1 and data.get("created") == created:
+        if data.get("version") == RECORDS_VERSION and data.get("created") == created:
             return data.get("groups", {})
     except (OSError, ValueError):
         pass
@@ -149,7 +163,7 @@ def _save_records(path, created, records):
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(".tmp")
     temporary.write_text(
-        json.dumps({"version": 1, "created": created, "groups": records})
+        json.dumps({"version": RECORDS_VERSION, "created": created, "groups": records})
     )
     temporary.replace(path)
 
