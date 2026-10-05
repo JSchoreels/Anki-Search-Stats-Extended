@@ -4,6 +4,8 @@ import { buildUmPlusData, visibleUmPlusBins } from "./umPlusData"
 type PredictionSource = {
     column: string | null
     predictionsByRevlogId: Record<number, number>
+    roles?: string[]
+    roleCounts?: Record<string, number>
 }
 
 type FsrsDiagnosticSource = PredictionSource & {
@@ -43,7 +45,7 @@ export function calibrationDiagnosticReport(
     const paired = buildUmPlusData(samples, fsrs.predictionsByRevlogId, rwkv.predictionsByRevlogId)
     const usesCache = !useHistoricalReplay && fsrs.cachedPredictionCount > 0
     return [
-        "SSE calibration diagnostic build 2026-10-05.3",
+        "SSE calibration diagnostic build 2026-10-05.4",
         `Review range: ${dayRange === 0 ? "all history" : `${dayRange} days`}; current stats search`,
         `Eligible historical calibration samples: ${samples.length}`,
         `FSRS historical replay predictions: ${replay.count}`,
@@ -54,9 +56,16 @@ export function calibrationDiagnosticReport(
         `FSRS reviews used: ${selected.count}; eligible without selected FSRS prediction: ${samples.length - selected.count}`,
         `FSRS selected review dates (UTC): ${selected.range}`,
         `RWKV source: ${rwkv.column ?? "none"}; reviews used: ${rwkvSelected.count}`,
+        `RWKV cache roles returned: ${rwkv.roles?.join(", ") || "none / not reported"}`,
+        `RWKV cached post-optimization reviews: ${rwkv.roleCounts?.post_optimization ?? 0}; post-optimization replay reviews: ${rwkv.roleCounts?.post_optimization_replay ?? 0}`,
         `RWKV selected review dates (UTC): ${rwkvSelected.range}`,
         `Paired FSRS + RWKV reviews: ${paired.count}`,
         `UM+ populated buckets: ${paired.bins.length}; buckets visible with default >=200 filter: ${visibleUmPlusBins(paired.bins, false).length}`,
+        ...((rwkv.roleCounts?.post_optimization_replay ?? 0) > 0
+            ? [
+                  "Recent RWKV replay covers the active FSRS post-optimization cohort; these are not historical validation folds.",
+              ]
+            : []),
         ...(usesCache && selected.count < replay.count
             ? [
                   "Cache selection reduces the FSRS sample. Historical replay is not merged into a non-empty cache.",

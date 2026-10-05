@@ -593,12 +593,51 @@ def _read_rwkv_calibration_retrievability_cache(
     suppressor_sources = ",".join(
         f"'{source}'" for source in RWKV_CALIBRATION_SUPPRESSOR_SOURCES
     )
+    # Some core builds mark every review outside FSRS validation folds as RWKV
+    # final_fit, including later answers. Only recover the active FSRS
+    # post-optimization cohort; never expose the historical training population.
+    post_review_ids = {
+        row[0]
+        for row in _read_fsrs_calibration_retrievability_cache(cids, day_range, revlog_ids)
+        if row[2] == "post_optimization" and _valid_probability(row[1])
+    }
+    post_clause = (
+        f"cache.revlog_id IN ({','.join(str(rid) for rid in sorted(post_review_ids))})"
+        if post_review_ids
+        else "0"
+    )
+    table = _cache_table_name(RWKV_RETRIEVABILITY_CACHE_TABLE)
+    captured_answer = f"""
+        EXISTS (
+            SELECT 1 FROM {table} captured
+            WHERE captured.revlog_id = cache.revlog_id
+                AND captured.sample_role = 'post_optimization'
+                AND captured.source = 'rwkv_review'
+                AND captured.prediction BETWEEN 0 AND 1
+        )
+    """
+    recent_replay = f"""
+        {post_clause}
+        AND cache.sample_role = 'final_fit'
+        AND cache.source = 'rwkv_calibration_recompute'
+        AND NOT EXISTS (
+            SELECT 1 FROM {table} training
+            WHERE training.revlog_id = cache.revlog_id
+                AND training.sample_role = 'final_fit'
+                AND training.source = 'rwkv_calibration_train'
+        )
+    """
     role_clause = f"""
         (
             cache.sample_role IN ({calibration_roles})
             OR (
                 cache.sample_role = 'final_fit'
                 AND cache.source IN ({suppressor_sources})
+                AND NOT (
+                    {post_clause}
+                    AND cache.source = 'rwkv_calibration_recompute'
+                    AND {captured_answer}
+                )
             )
         )
     """
@@ -616,7 +655,6 @@ def _read_rwkv_calibration_retrievability_cache(
             )
         """
 
-    table = _cache_table_name(RWKV_RETRIEVABILITY_CACHE_TABLE)
     return mw.col.db.all(f"""
     WITH latest AS (
         SELECT revlog_id, MAX(updated_at) AS updated_at
@@ -626,12 +664,14 @@ def _read_rwkv_calibration_retrievability_cache(
             AND {role_clause}
         GROUP BY revlog_id
     )
-    SELECT cache.revlog_id, cache.prediction, cache.sample_role
+    SELECT cache.revlog_id, cache.prediction,
+        CASE WHEN ({recent_replay}) THEN 'post_optimization_replay'
+            ELSE cache.sample_role END
     FROM {table} cache
     JOIN latest
         ON latest.revlog_id = cache.revlog_id
         AND latest.updated_at = cache.updated_at
-    WHERE cache.sample_role IN ({calibration_roles})
+    WHERE cache.sample_role IN ({calibration_roles}) OR ({recent_replay})
     ORDER BY cache.revlog_id
     """)
 
@@ -653,6 +693,16 @@ def _ensure_rwkv_calibration_data(*, force=False) -> bool:
     except Exception as error:
         print(f"Search Stats Extended: RWKV calibration generation failed: {error}")
         return False
+
+
+def _missing_rwkv_post_optimization_reviews(fsrs_rows, rwkv_rows):
+    post_ids = {
+        row[0]
+        for row in fsrs_rows
+        if row[2] == "post_optimization" and _valid_probability(row[1])
+    }
+    available = {row[0] for row in rwkv_rows or [] if _valid_probability(row[1])}
+    return post_ids - available
 
 
 def _rwkv_retrievability_column():
@@ -748,9 +798,10 @@ def rwkv_review_retrievability() -> bytes:
         if req.get("ensure_fsrs_alignment") else []
     )
     missing_validation = missing_rwkv_validation_reviews(fsrs_rows, role_aware_rows)
+    missing_post = _missing_rwkv_post_optimization_reviews(fsrs_rows, role_aware_rows)
     if (
         not role_aware_rows or fsrs_rows
-    ) and _ensure_rwkv_calibration_data(force=bool(missing_validation)):
+    ) and _ensure_rwkv_calibration_data(force=bool(missing_validation or missing_post)):
         role_aware_rows = _read_rwkv_calibration_retrievability_cache(
             cids,
             day_range,
@@ -770,6 +821,14 @@ def rwkv_review_retrievability() -> bytes:
     if remaining_validation:
         warnings.append(
             f"RWKV calibration is missing {len(remaining_validation)} FSRS validation review(s) "
+            "after the alignment refresh. Only available paired reviews are compared."
+        )
+    remaining_post = (
+        _missing_rwkv_post_optimization_reviews(fsrs_rows, role_aware_rows) & target_review_ids
+    )
+    if remaining_post:
+        warnings.append(
+            f"RWKV calibration is missing {len(remaining_post)} post-optimization review(s) "
             "after the alignment refresh. Only available paired reviews are compared."
         )
     if not target_review_ids:
@@ -792,6 +851,14 @@ def rwkv_review_retrievability() -> bytes:
         for row in cache_rows
         if row[0] in target_review_ids and _valid_probability(row[1])
     }
+    roles_by_revlog_id = {
+        row[0]: row[2]
+        for row in cache_rows
+        if len(row) > 2 and row[0] in predictions_by_revlog_id and _valid_probability(row[1])
+    }
+    role_counts = {}
+    for role in roles_by_revlog_id.values():
+        role_counts[role] = role_counts.get(role, 0) + 1
     source_parts = []
     if predictions_by_revlog_id:
         source_parts.append(RWKV_RETRIEVABILITY_CACHE_TABLE)
@@ -847,7 +914,10 @@ def rwkv_review_retrievability() -> bytes:
     review_entries = sorted(predictions_by_revlog_id.items())
     source = "+".join(source_parts) if source_parts else None
     return Response(
-        orjson.dumps({"column": source, "data": review_entries, "warnings": warnings})
+        orjson.dumps({
+            "column": source, "data": review_entries, "warnings": warnings,
+            "roles": sorted(role_counts), "role_counts": role_counts,
+        })
     )
 
 

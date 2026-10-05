@@ -36,7 +36,13 @@ test("getRwkvReviewRetrievability sends calibration revlog ids", async () => {
     const originalFetch = global.fetch
     const fetchMock = jest.fn().mockResolvedValue({
         ok: true,
-        text: async () => JSON.stringify({ column: "cache", data: [[123, "0.42"]] }),
+        text: async () =>
+            JSON.stringify({
+                column: "cache",
+                data: [[123, "0.42"]],
+                roles: ["post_optimization_replay"],
+                role_counts: { post_optimization_replay: 1, invalid: -1, string: "2" },
+            }),
     })
 
     jest.resetModules()
@@ -60,7 +66,8 @@ test("getRwkvReviewRetrievability sends calibration revlog ids", async () => {
             column: "cache",
             predictionsByRevlogId: { 123: 0.42 },
             warnings: [],
-            roles: [],
+            roles: ["post_optimization_replay"],
+            roleCounts: { post_optimization_replay: 1 },
         })
     } finally {
         global.fetch = originalFetch
@@ -93,6 +100,7 @@ test("getRwkvReviewRetrievability reports endpoint warnings", async () => {
             predictionsByRevlogId: { 123: 0.42 },
             warnings: [warning],
             roles: [],
+            roleCounts: {},
         })
         expect(warnMock).toHaveBeenCalledWith("Search Stats Extended:", warning)
     } finally {
@@ -106,7 +114,12 @@ test("getFsrsReviewRetrievability sends calibration revlog ids", async () => {
     const originalFetch = global.fetch
     const fetchMock = jest.fn().mockResolvedValue({
         ok: true,
-        text: async () => JSON.stringify({ column: "cache", data: [[321, "0.62"]], roles: ["post_optimization", null, 123] }),
+        text: async () =>
+            JSON.stringify({
+                column: "cache",
+                data: [[321, "0.62"]],
+                roles: ["post_optimization", null, 123],
+            }),
     })
 
     jest.resetModules()
@@ -131,6 +144,7 @@ test("getFsrsReviewRetrievability sends calibration revlog ids", async () => {
             predictionsByRevlogId: { 321: 0.62 },
             warnings: [],
             roles: ["post_optimization"],
+            roleCounts: {},
         })
     } finally {
         global.fetch = originalFetch

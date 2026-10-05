@@ -119,7 +119,7 @@
                   $searchLimit,
                   useHistoricalReplay
               )
-            : "SSE calibration diagnostic build 2026-10-05.3\nLoading calibration data..."
+            : "SSE calibration diagnostic build 2026-10-05.4\nLoading calibration data..."
     $: cachedFsrsCalibrationData = $fsrsCalibrationStats?.bins ?? []
     $: fsrsCalibrationData =
         !useHistoricalReplay && _.sumBy(cachedFsrsCalibrationData, (bin) => bin?.count ?? 0) > 0

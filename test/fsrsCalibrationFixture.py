@@ -241,6 +241,7 @@ globals_ = {
     "_valid_probability": lambda value: 0 <= value <= 1,
     "RWKV_RETRIEVABILITY_CACHE_TABLE": "cache",
 }
+exec(endpoint_code("_missing_rwkv_post_optimization_reviews"), globals_)
 exec(endpoint_code("rwkv_review_retrievability"), globals_)
 response = json.loads(globals_["rwkv_review_retrievability"]())
 assert len(response["data"]) == 2 and not response["warnings"]

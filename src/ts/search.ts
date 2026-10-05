@@ -344,8 +344,15 @@ async function getReviewRetrievability(
         data?: [number, number | string | null][]
         warnings?: unknown[]
         roles?: unknown[]
+        role_counts?: Record<string, unknown>
     }
     const roles = (response.roles ?? []).filter((role): role is string => typeof role === "string")
+    const roleCounts: Record<string, number> = {}
+    for (const [role, count] of Object.entries(response.role_counts ?? {})) {
+        if (typeof count === "number" && Number.isInteger(count) && count >= 0) {
+            roleCounts[role] = count
+        }
+    }
     const predictionsByRevlogId: Record<number, number> = {}
     const warnings = (response.warnings ?? []).filter(
         (warning): warning is string => typeof warning === "string" && warning.length > 0
@@ -367,6 +374,7 @@ async function getReviewRetrievability(
         predictionsByRevlogId,
         warnings,
         roles,
+        roleCounts,
     }
 }
 

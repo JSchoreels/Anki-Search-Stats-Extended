@@ -27,9 +27,17 @@ source.
       On adapted Anki builds, this table lives in the attached
       `retrievability_cache` sidecar database, so it is not included in
       collection sync/full upload.
-      In role-aware tables, it returns only `test_fold` and
+      In role-aware tables, it ordinarily returns `test_fold` and
       `post_optimization` rows; calibration `final_fit` rows suppress older
       held-out rows for reviews that have since moved into the training split.
+      For the active FSRS `post_optimization` cohort, SSE also handles core builds
+      that incorrectly label later RWKV replay rows as `final_fit`. A valid
+      captured `rwkv_review` prediction keeps priority over that recompute row.
+      Without a captured answer, a `rwkv_calibration_recompute` prediction is
+      exposed as `post_optimization_replay` in the response only. Genuine
+      `rwkv_calibration_train` markers remain suppressors and prevent this replay
+      fallback. FSRS historical training rows and stale post-optimization markers
+      remain excluded. This selection changes no stored rows or cache schema.
     - When a role-aware table is present, those held-out/cache rows are treated
       as the complete graph sample. Training rows intentionally do not produce
       "missing cache" warnings.
@@ -213,13 +221,14 @@ unavailable warning when generation is requested.
 
 After successful explicit generation, RWKV cache refresh compares requested
 FSRS `validation_fold` review IDs with valid RWKV `test_fold` predictions.
-Missing held-out coverage calls the supported `recompute_rwkv_calibration_data`
+Missing held-out coverage or missing active FSRS post-optimization review
+predictions calls the supported `recompute_rwkv_calibration_data`
 API, rather than an ensure API that could accept an existing partial cache.
 Otherwise the existing ensure API verifies current data and fold alignment.
 The cache is reread after generation; remaining eligible coverage gaps produce
 a count-only warning. Graph comparisons include available paired reviews.
 
-## Diagnostic build 2026-10-05.3
+## Diagnostic build 2026-10-05.4
 
 The calibration panel includes a selectable aggregate report. It reports eligible
 historical samples, browser-replay predictions, returned FSRS cache prediction
@@ -229,6 +238,10 @@ their UTC date ranges, paired review count, and UM+ buckets visible under the
 it is not interpreted as proof of a missing validation cache. Counts apply to
 the current search and review range. Reports contain no card text or review IDs.
 The report itself adds no backend requests or database operations.
+RWKV role names and counts distinguish cached post-optimization predictions
+from recovered post-optimization replay predictions. The latter are not
+historical validation folds. The cohort follows current FSRS cache roles and
+has no hard-coded calendar cutoff.
 
 The optional **Use full-history FSRS replay (diagnostic)** checkbox bypasses the
 FSRS cache for Calibration, UM+ and ROC in this stats view. It uses the existing

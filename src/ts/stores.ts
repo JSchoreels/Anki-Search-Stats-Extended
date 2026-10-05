@@ -374,6 +374,8 @@ export type RwkvCalibrationStats = {
     bins: ReturnType<typeof buildCalibrationBins>
     predictionsByRevlogId: Record<number, number>
     warnings: string[]
+    roles?: string[]
+    roleCounts?: Record<string, number>
 }
 export let rwkvCalibrationStats = writable<RwkvCalibrationStats | null>(null)
 derived(
@@ -394,17 +396,21 @@ derived(
         }
 
         return latestResult(set, async (signal) => {
-            const { column, predictionsByRevlogId, warnings } = await getRwkvReviewRetrievability(
-                $cids,
-                $searchLimit,
-                samples.map((sample) => sample.revlogId),
-                $fsrsCalibrationRevision > 0 && get(fsrsCalibrationGeneration)?.phase === "ready"
-            )
+            const { column, predictionsByRevlogId, warnings, roles, roleCounts } =
+                await getRwkvReviewRetrievability(
+                    $cids,
+                    $searchLimit,
+                    samples.map((sample) => sample.revlogId),
+                    $fsrsCalibrationRevision > 0 &&
+                        get(fsrsCalibrationGeneration)?.phase === "ready"
+                )
             return {
                 column,
                 bins: await runStatsTask("calibration", [samples, predictionsByRevlogId], signal),
                 predictionsByRevlogId,
                 warnings,
+                roles,
+                roleCounts,
             }
         })
     }
