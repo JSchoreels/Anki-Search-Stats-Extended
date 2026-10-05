@@ -79,3 +79,35 @@ test("completed endpoint replays don't loop, but a changed cache allows repair o
 test("failed endpoint replays are retried rather than recorded as completed", () => {
     expect(results.failure_forces).toEqual([true, true])
 })
+
+test("identical FSRS reads reuse one row query", () => {
+    expect(results.memo_reuse.calls).toBe(1)
+    expect(results.memo_reuse.first).toEqual([[1, 0.8, "validation_fold"]])
+    expect(results.memo_reuse.second).toEqual(results.memo_reuse.first)
+})
+
+test("inserting an FSRS cache row invalidates the memo and returns the new row", () => {
+    expect(results.memo_insert.calls).toBe(2)
+    expect(results.memo_insert.rows).toEqual([
+        [1, 0.8, "validation_fold"],
+        [16, 0.6, "post_optimization"],
+    ])
+})
+
+test("changing the collection modification time invalidates the FSRS memo", () => {
+    expect(results.memo_mod.calls).toBe(3)
+    expect(results.memo_mod.rows).toEqual(results.memo_insert.rows)
+})
+
+test("different requested review IDs use a separate FSRS query", () => {
+    expect(results.memo_revlog_ids.calls).toBe(4)
+    expect(results.memo_revlog_ids.rows).toEqual([[16, 0.6, "post_optimization"]])
+})
+
+test("concurrent identical FSRS reads share one row query", () => {
+    expect(results.memo_concurrent.calls).toBe(1)
+    expect(results.memo_concurrent.rows).toEqual([
+        results.memo_insert.rows,
+        results.memo_insert.rows,
+    ])
+})

@@ -3,12 +3,16 @@
 import ast
 import json
 import sqlite3
+import threading
+import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from types import SimpleNamespace as NS
 
 source = ast.parse((Path(__file__).parents[1] / "__init__.py").read_text())
 names = {
     "_read_fsrs_calibration_retrievability_cache",
+    "_query_fsrs_calibration_retrievability_cache",
     "_read_rwkv_calibration_retrievability_cache",
     "_valid_probability",
     "_missing_rwkv_post_optimization_reviews",
@@ -24,14 +28,19 @@ code = compile(
         body=[
             node
             for node in source.body
-            if isinstance(node, ast.FunctionDef) and node.name in names
+            if (isinstance(node, ast.FunctionDef) and node.name in names)
+            or (isinstance(node, ast.Assign) and any(
+                isinstance(target, ast.Name)
+                and target.id in {"_fsrs_rows_memo", "_fsrs_rows_memo_lock"}
+                for target in node.targets
+            ))
         ],
         type_ignores=[],
     ),
     "endpoints",
     "exec",
 )
-db = sqlite3.connect(":memory:")
+db = sqlite3.connect(":memory:", check_same_thread=False)
 for table in ("fsrs", "rwkv"):
     db.execute(f"""CREATE TABLE {table} (
         revlog_id INTEGER, prediction REAL, source TEXT, updated_at INTEGER,
@@ -84,8 +93,10 @@ row("rwkv", 11, 0.9, "final_fit", "rwkv_calibration_recompute", 200)
 columns = {"sample_role", "fold_index"}
 forced = []
 globals_ = {
-    "mw": NS(col=NS(db=NS(
+    "threading": threading,
+    "mw": NS(col=NS(mod=1, db=NS(
         all=lambda sql: db.execute(sql).fetchall(),
+        first=lambda sql: db.execute(sql).fetchone(),
         list=lambda sql: [r[0] for r in db.execute(sql)],
     ))),
     "_rwkv_recompute_attempt": {"col": None, "reviews": {}},
@@ -218,6 +229,54 @@ globals_["request"].data = json.dumps({"cids": [10], "revlog_ids": [15], "ensure
 globals_["rwkv_review_retrievability"]()
 globals_["rwkv_review_retrievability"]()
 result["failure_forces"] = failure_forces
+
+# Count the actual FSRS row query independently of cheap fingerprint lookups.
+query_fsrs = globals_["_query_fsrs_calibration_retrievability_cache"]
+query_calls = []
+
+
+def counted_query(*args):
+    query_calls.append(args)
+    return query_fsrs(*args)
+
+
+globals_["_query_fsrs_calibration_retrievability_cache"] = counted_query
+first_rows = read_fsrs([10], 0, [1, 16])
+second_rows = read_fsrs([10], 0, [1, 16])
+result["memo_reuse"] = {
+    "calls": len(query_calls), "first": first_rows, "second": second_rows,
+}
+row("fsrs", 16, 0.6, "post_optimization", "fsrs_review")
+result["memo_insert"] = {"rows": read_fsrs([10], 0, [1, 16])}
+result["memo_insert"]["calls"] = len(query_calls)
+globals_["mw"].col.mod += 1
+result["memo_mod"] = {"rows": read_fsrs([10], 0, [1, 16])}
+result["memo_mod"]["calls"] = len(query_calls)
+result["memo_revlog_ids"] = {"rows": read_fsrs([10], 0, [16])}
+result["memo_revlog_ids"]["calls"] = len(query_calls)
+
+# Start both requests together and keep the first query busy while the other waits.
+query_calls.clear()
+start = threading.Barrier(2)
+
+
+def slow_query(*args):
+    query_calls.append(args)
+    time.sleep(0.05)
+    return query_fsrs(*args)
+
+
+def concurrent_read():
+    start.wait(timeout=5)
+    return read_fsrs([10], 0, [1, 16])
+
+
+globals_["_query_fsrs_calibration_retrievability_cache"] = slow_query
+with ThreadPoolExecutor(max_workers=2) as pool:
+    requests = [pool.submit(concurrent_read) for _ in range(2)]
+    concurrent_rows = [request.result(timeout=5) for request in requests]
+result["memo_concurrent"] = {"calls": len(query_calls), "rows": concurrent_rows}
+globals_["_query_fsrs_calibration_retrievability_cache"] = query_fsrs
 
 columns = set()
 result["legacy"] = read([10], 0, [3])

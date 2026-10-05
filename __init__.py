@@ -4,6 +4,7 @@ import json
 import os
 import os.path
 import sys
+import threading
 import time
 from array import array
 from pathlib import Path
@@ -468,7 +469,41 @@ def cache_fsrs_review_retrievability() -> bytes:
 post_handlers["cacheFsrsReviewRetrievability"] = cache_fsrs_review_retrievability
 
 
+_fsrs_rows_memo = {"col": None, "key": None, "rows": None}
+_fsrs_rows_memo_lock = threading.Lock()
+
+
 def _read_fsrs_calibration_retrievability_cache(
+    cids: list[int],
+    day_range: int,
+    revlog_ids=None,
+):
+    with _fsrs_rows_memo_lock:
+        try:
+            fingerprint = tuple(
+                mw.col.db.first(
+                    f"SELECT MAX(rowid), COUNT(*) FROM {_cache_table_name(FSRS_RETRIEVABILITY_CACHE_TABLE)}"
+                )
+            )
+        except Exception:
+            return _query_fsrs_calibration_retrievability_cache(cids, day_range, revlog_ids)
+
+        key = (
+            mw.col.mod,
+            fingerprint,
+            int(day_range),
+            hash(tuple(cids or [])),
+            hash(tuple(revlog_ids or [])),
+        )
+        if _fsrs_rows_memo["col"] is mw.col and _fsrs_rows_memo["key"] == key:
+            return _fsrs_rows_memo["rows"]
+
+        rows = _query_fsrs_calibration_retrievability_cache(cids, day_range, revlog_ids)
+        _fsrs_rows_memo.update(col=mw.col, key=key, rows=rows)
+        return rows
+
+
+def _query_fsrs_calibration_retrievability_cache(
     cids: list[int],
     day_range: int,
     revlog_ids=None,
