@@ -1,5 +1,7 @@
 import type { CalibrationSample } from "./MemorisedBar"
 
+export const ROC_POINT_RESOLUTION = 1 / 1000
+
 export type RocPoint = {
     falsePositiveRate: number
     truePositiveRate: number
@@ -69,7 +71,20 @@ function buildRocSeries(
         return area + (width * (point.truePositiveRate + previous.truePositiveRate)) / 2
     }, 0)
 
-    return { points, auc }
+    const sampledPoints = [points[0]]
+    for (let index = 1; index < points.length - 1; index++) {
+        const point = points[index]
+        const previous = sampledPoints[sampledPoints.length - 1]
+        if (
+            point.falsePositiveRate - previous.falsePositiveRate >= ROC_POINT_RESOLUTION ||
+            point.truePositiveRate - previous.truePositiveRate >= ROC_POINT_RESOLUTION
+        ) {
+            sampledPoints.push(point)
+        }
+    }
+    sampledPoints.push(points[points.length - 1])
+
+    return { points: sampledPoints, auc }
 }
 
 /**

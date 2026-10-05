@@ -80,3 +80,32 @@ test("an existing partial RWKV cache triggers the real recompute API and reports
     expect(results.available_cache_changed).toBe(false)
     expect(results.api_calls_after_available_cache).toEqual(["ensure", "recompute"])
 })
+
+
+test("successful generation and checks skip unchanged requests without queuing work", () => {
+    expect(results.service_fast_reopen).toEqual({
+        phase: "ready", generated: false, warnings: [], coversRequest: true,
+    })
+    expect(results.service_fast_reopen_queued).toBe(0)
+    expect(results.checked_reuse).toEqual({
+        state: { phase: "ready", generated: false, warnings: [], coversRequest: true },
+        queued: 0,
+        same_token: true,
+    })
+})
+
+test.each(["mod", "cache", "records", "cids", "collection", "fingerprint_error"])(
+    "%s changes require a fresh background check",
+    (change) => {
+        expect(results[`invalidated_${change}`].state.phase).toBe("queued")
+        expect(results[`invalidated_${change}`].queued).toBe(1)
+    }
+)
+
+test("failed or cancelled work launches again and obsolete runs cannot replace completion", () => {
+    expect(results.service_retry.phase).toBe("queued")
+    expect(results.service_retry_queued).toBe(1)
+    expect(results.obsolete_reuse.phase).toBe("ready")
+    expect(results.obsolete_reuse_queued).toBe(0)
+    expect(results.warning_reuse.warnings.join(" ")).toContain("cannot generate historical FSRS")
+})

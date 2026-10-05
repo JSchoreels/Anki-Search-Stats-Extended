@@ -59,30 +59,51 @@ export function cardBootstrapConfidenceIntervals(
         contribution.count += 1
     }
 
-    const cards = Array.from(contributionsByCard.values(), (contributions) =>
-        Array.from(contributions.values())
-    )
+    const cardCount = contributionsByCard.size
     const estimates = Array.from({ length: binCount }, () => <number[]>[])
-    if (cards.length === 0 || iterations <= 0) {
+    if (cardCount === 0 || iterations <= 0) {
         return Array(binCount)
     }
 
-    const random = seededRandom(seed)
-    for (let iteration = 0; iteration < iterations; iteration++) {
-        const successes = new Float64Array(binCount)
-        const counts = new Float64Array(binCount)
+    let total = 0
+    for (const contributions of contributionsByCard.values()) {
+        total += contributions.size
+    }
+    const offsets = new Uint32Array(cardCount + 1)
+    const bins = new Uint16Array(total)
+    const successes = new Float64Array(total)
+    const counts = new Float64Array(total)
+    let cardIndex = 0
+    let index = 0
+    for (const contributions of contributionsByCard.values()) {
+        offsets[cardIndex++] = index
+        for (const contribution of contributions.values()) {
+            bins[index] = contribution.bin
+            successes[index] = contribution.successes
+            counts[index] = contribution.count
+            index += 1
+        }
+    }
+    offsets[cardCount] = index
 
-        for (let draw = 0; draw < cards.length; draw++) {
-            const card = cards[Math.floor(random() * cards.length)]
-            for (const contribution of card) {
-                successes[contribution.bin] += contribution.successes
-                counts[contribution.bin] += contribution.count
+    const random = seededRandom(seed)
+    const iterationSuccesses = new Float64Array(binCount)
+    const iterationCounts = new Float64Array(binCount)
+    for (let iteration = 0; iteration < iterations; iteration++) {
+        iterationSuccesses.fill(0)
+        iterationCounts.fill(0)
+
+        for (let draw = 0; draw < cardCount; draw++) {
+            const card = Math.floor(random() * cardCount)
+            for (let index = offsets[card]; index < offsets[card + 1]; index++) {
+                iterationSuccesses[bins[index]] += successes[index]
+                iterationCounts[bins[index]] += counts[index]
             }
         }
 
         for (let bin = 0; bin < binCount; bin++) {
-            if (counts[bin] > 0) {
-                estimates[bin].push(successes[bin] / counts[bin])
+            if (iterationCounts[bin] > 0) {
+                estimates[bin].push(iterationSuccesses[bin] / iterationCounts[bin])
             }
         }
     }

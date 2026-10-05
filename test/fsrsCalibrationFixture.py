@@ -4,6 +4,7 @@ import ast
 import copy
 import importlib.util
 import json
+import os
 import re
 import sqlite3
 import sys
@@ -31,6 +32,7 @@ class Collection:
     crt = 1234
 
     def __init__(self):
+        self.mod = 1
         self.rows = [[100, 10, 3, 1, 2, 2500], [200, 13, 1, 1, 3, 2500]]
         self.cards = [[10, 1, 0], [11, 3, 0], [12, 2, 0], [13, 99, 1]]
         self.overlay = True
@@ -106,6 +108,9 @@ class Collection:
         return copy.deepcopy(rows)
 
     def first(self, sql):
+        if "SELECT MAX(rowid), COUNT(*)" in sql:
+            count = sum(len(roles) for roles in self.cache.values())
+            return (count or None, count)
         # Execute the module's real aggregate SQL against these revlog rows.
         db = sqlite3.connect(":memory:")
         db.execute("CREATE TABLE revlog (id, cid, ease, type, ivl, factor)")
@@ -354,6 +359,9 @@ with tempfile.TemporaryDirectory() as root:
     result["service_generation_modal"] = query.modal
     query.success(query.op(col))
     result["service"] = service.snapshot()
+    result["service_fast_reopen"] = service.start(mw, [10], root, "cache.fsrs")
+    result["service_fast_reopen_queued"] = len(queued)
+    col.mod += 1
     service.start(mw, [10], root, "cache.fsrs")
     queued.pop()()
     query = Query.instances[-1]
@@ -374,4 +382,75 @@ with tempfile.TemporaryDirectory() as root:
     except RuntimeError as error:
         query.error(error)
     result["service_failure"] = service.snapshot()
+
+    result["service_retry"] = service.start(mw, [10], root, "cache.fsrs")
+    result["service_retry_queued"] = len(queued)
+
+
+def finish_check(col, queued):
+    queued.pop()()
+    query = Query.instances[-1]
+    query.success(query.op(col))
+
+
+# Reuse a successful check without generation; independently invalidate each field.
+for change in ("mod", "cache", "records", "cids", "collection", "fingerprint_error"):
+    with tempfile.TemporaryDirectory() as root:
+        col = Collection()
+        col.cache = {
+            100: ["final_fit", "validation_fold"],
+            200: ["final_fit", "validation_fold"],
+        }
+        queued = []
+        mw = NS(col=col, taskman=NS(run_on_main=queued.append))
+        service = module.CalibrationService()
+        service.start(mw, [10], root, "cache.fsrs")
+        finish_check(col, queued)
+        token = service.token
+        reused = service.start(mw, [10], root, "cache.fsrs")
+        result["checked_reuse"] = {
+            "state": reused,
+            "queued": len(queued),
+            "same_token": token == service.token,
+        }
+        cids = [10]
+        if change == "mod":
+            col.mod += 1
+        elif change == "cache":
+            col.cache[300] = ["post_optimization"]
+        elif change == "records":
+            path = module._records_path(col, root)
+            stat = path.stat()
+            os.utime(path, ns=(stat.st_atime_ns, stat.st_mtime_ns + 1_000_000))
+        elif change == "cids":
+            cids = [10, 11]
+        elif change == "collection":
+            mw.col = Collection()
+        else:
+            del col.mod
+        result["invalidated_" + change] = {
+            "state": service.start(mw, cids, root, "cache.fsrs"),
+            "queued": len(queued),
+        }
+
+# Obsolete completions cannot cache or clear the current run's successful check.
+with tempfile.TemporaryDirectory() as root:
+    queued = []
+    col = Collection()
+    col._backend = NS()
+    mw = NS(col=col, taskman=NS(run_on_main=queued.append))
+    service = module.CalibrationService()
+    service.start(mw, [10], root, "cache.fsrs")
+    queued.pop()()
+    obsolete = Query.instances[-1]
+    mw.col = current = Collection()
+    current._backend = NS()
+    service.start(mw, [10], root, "cache.fsrs")
+    finish_check(current, queued)
+    obsolete.success({"generated": False, "warnings": []})
+    obsolete.error(RuntimeError("obsolete failure"))
+    result["obsolete_reuse"] = service.start(mw, [10], root, "cache.fsrs")
+    result["obsolete_reuse_queued"] = len(queued)
+    result["warning_reuse"] = service.start(mw, [], root, "cache.fsrs")
+
 print(json.dumps(result))

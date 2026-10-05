@@ -153,20 +153,22 @@
               ? ($rwkvCalibrationStats?.warnings ?? [])
               : ($fsrsCalibrationStats?.warnings ?? [])
     $: umPlusData = buildUmPlusData(
-        $memorised_stats?.calibration_samples ?? [],
+        umPlusLoading ? [] : ($memorised_stats?.calibration_samples ?? []),
         selectedFsrsPredictions,
         $rwkvCalibrationStats?.predictionsByRevlogId ?? {}
     )
     $: rocData = buildRocData(
-        $memorised_stats?.calibration_samples ?? [],
+        umPlusLoading ? [] : ($memorised_stats?.calibration_samples ?? []),
         selectedFsrsPredictions,
         $rwkvCalibrationStats?.predictionsByRevlogId ?? {}
     )
     $: umPlusLoading = !!$memorised_stats && (!$fsrsCalibrationStats || !$rwkvCalibrationStats)
-    $: rwkvDailyData = buildRwkvDailyData(
-        $memorised_stats?.calibration_samples ?? [],
-        $rwkvCalibrationStats?.predictionsByRevlogId ?? {}
-    )
+    $: rwkvDailyData = $rwkvCalibrationStats
+        ? buildRwkvDailyData(
+              $memorised_stats?.calibration_samples ?? [],
+              $rwkvCalibrationStats.predictionsByRevlogId
+          )
+        : []
     $: umPlusWarnings = Array.from(
         new Set([
             ...($fsrsCalibrationStats?.warnings ?? []),

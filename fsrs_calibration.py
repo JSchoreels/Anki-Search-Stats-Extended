@@ -18,6 +18,22 @@ def _digest(value):
     return hashlib.sha256(json.dumps(value, sort_keys=True).encode()).hexdigest()
 
 
+def _records_path(col, user_files):
+    return Path(user_files) / f"fsrs-calibration-{_digest(str(col.path))[:20]}.json"
+
+
+def calibration_fingerprint(col, user_files, table):
+    try:
+        cache = col.db.first(f"SELECT MAX(rowid), COUNT(*) FROM {table}")
+    except Exception:
+        cache = None
+    try:
+        modified = _records_path(col, user_files).stat().st_mtime_ns
+    except FileNotFoundError:
+        modified = None
+    return (col.mod, tuple(cache) if cache is not None else None, modified)
+
+
 def _settings(col, cid, home_deck=None, configs=None):
     preset = col.fsrs_preset_for_card(cid)
     if home_deck is None:
@@ -190,7 +206,7 @@ def ensure_calibration(
         }
     from anki import deck_config_pb2, scheduler_pb2
 
-    path = Path(user_files) / f"fsrs-calibration-{_digest(str(col.path))[:20]}.json"
+    path = _records_path(col, user_files)
     created = col.crt
     records = _load_records(path, created)
     progress("Checking historical FSRS calibration data", 0, 0)
@@ -290,6 +306,7 @@ class CalibrationService:
         self.col = None
         self.requested = set()
         self.token = 0
+        self.checked = None
         self.state = {"phase": "idle", "warnings": []}
 
     def snapshot(self):
@@ -303,6 +320,26 @@ class CalibrationService:
                     **self.state,
                     "coversRequest": set(cids).issubset(self.requested),
                 }
+            if (
+                self.checked
+                and self.checked["col"] is mw.col
+                and set(cids) <= self.checked["cids"]
+            ):
+                try:
+                    unchanged = (
+                        calibration_fingerprint(mw.col, user_files, table)
+                        == self.checked["fingerprint"]
+                    )
+                except Exception:
+                    unchanged = False
+                if unchanged:
+                    self.state = {
+                        "phase": "ready",
+                        "generated": False,
+                        "warnings": self.checked["warnings"],
+                    }
+                    return {**self.state, "coversRequest": True}
+            self.checked = None
             self.col = col = mw.col
             self.requested = set(cids)
             self.token += 1
@@ -348,6 +385,9 @@ class CalibrationService:
 
         def failure(error):
             logger.warning("FSRS calibration generation did not finish: %s", error)
+            with self.lock:
+                if self.token == token:
+                    self.checked = None
             update(
                 phase="failed",
                 warnings=[
@@ -356,11 +396,23 @@ class CalibrationService:
                 ],
             )
 
+        def ready(result):
+            with self.lock:
+                if self.token == token:
+                    self.state.update(phase="ready", **result)
+                    if not cancel.is_set():
+                        self.checked = {
+                            "col": col,
+                            "cids": set(cids),
+                            "fingerprint": calibration_fingerprint(col, user_files, table),
+                            "warnings": list(result.get("warnings", [])),
+                        }
+
         def checked(result):
             if result.pop("needsGeneration", False):
                 launch(check_only=False)
             else:
-                update(phase="ready", **result)
+                ready(result)
 
         def launch(*, check_only=True):
             from aqt.operations import QueryOp
@@ -369,10 +421,7 @@ class CalibrationService:
                 query = QueryOp(
                     parent=mw,
                     op=lambda current_col: operation(current_col, check_only=check_only),
-                    success=(
-                        checked if check_only
-                        else lambda result: update(phase="ready", **result)
-                    ),
+                    success=checked if check_only else ready,
                 ).failure(failure)
                 if not check_only:
                     query.with_progress(
