@@ -309,11 +309,19 @@ api_globals = {"mw": NS()}
 exec(endpoint_code("_ensure_rwkv_calibration_data"), api_globals)
 api_globals["_ensure_rwkv_calibration_data"]()
 api_globals["_ensure_rwkv_calibration_data"](force=True)
-result["alignment_api_calls"] = api_calls
+result["alignment_api_calls"] = list(api_calls)
 
 sys.modules["aqt"].rwkv_scheduler.rwkv_calibration_data_available = lambda mw: True
 result["available_cache_changed"] = api_globals["_ensure_rwkv_calibration_data"]()
 result["api_calls_after_available_cache"] = list(api_calls)
+# Stale data reported by Anki goes through ensure, which can relabel predictions.
+for name, available in (("forced_stale_calls", False), ("forced_complete_calls", True)):
+    calls_before = len(api_calls)
+    sys.modules["aqt"].rwkv_scheduler.rwkv_calibration_data_available = (
+        lambda mw, available=available: available
+    )
+    api_globals["_ensure_rwkv_calibration_data"](force=True)
+    result[name] = api_calls[calls_before:]
 
 
 # Exercise scheduling, concurrent-view deduplication and native progress with a mock QueryOp.

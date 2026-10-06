@@ -761,14 +761,24 @@ def _ensure_rwkv_calibration_data(*, force=False) -> bool:
         return False
 
     available = getattr(rwkv_scheduler, "rwkv_calibration_data_available", None)
-    if not force and callable(available):
+    data_available = None
+    if callable(available):
         try:
-            if available(mw):
-                # ensure_rwkv_calibration_data() would be a no-op.
-                return False
+            data_available = bool(available(mw))
         except Exception as error:
             print(f"Search Stats Extended: RWKV calibration check failed: {error}")
-    name = "recompute_rwkv_calibration_data" if force else "ensure_rwkv_calibration_data"
+    if not force and data_available:
+        # ensure_rwkv_calibration_data() would be a no-op.
+        return False
+    # Stale data goes through ensure, which on newer builds relabels existing
+    # predictions with new FSRS folds instead of replaying all history. Only
+    # data Anki reports complete, or builds that cannot tell, are forced.
+    force_replay = force and data_available is not False
+    name = (
+        "recompute_rwkv_calibration_data"
+        if force_replay
+        else "ensure_rwkv_calibration_data"
+    )
     ensure = getattr(rwkv_scheduler, name, None)
     if not callable(ensure):
         return False

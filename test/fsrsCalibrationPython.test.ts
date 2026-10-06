@@ -81,6 +81,11 @@ test("an existing partial RWKV cache triggers the real recompute API and reports
     expect(results.api_calls_after_available_cache).toEqual(["ensure", "recompute"])
 })
 
+test("forced alignment lets Anki relabel stale data and replays only complete data", () => {
+    expect(results.forced_stale_calls).toEqual(["ensure"])
+    expect(results.forced_complete_calls).toEqual(["recompute"])
+})
+
 
 test("successful generation and checks skip unchanged requests without queuing work", () => {
     expect(results.service_fast_reopen).toEqual({
