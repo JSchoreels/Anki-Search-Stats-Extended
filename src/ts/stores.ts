@@ -2,6 +2,7 @@ import { derived, get, writable, type Readable } from "svelte/store"
 import {
     alignPredictions,
     EMPTY_CALIBRATION_SAMPLES,
+    heldOutFsrsPredictions,
     sampleCount,
     type CalibrationSamples,
 } from "./calibrationSamples"
@@ -569,7 +570,11 @@ derived(
         calibrationComparison.set(null)
         if (samples && fsrs && rwkv) {
             comparisonInputs = [samples, fsrs.predictions, rwkv.predictions]
-            const inputs = comparisonInputs
+            const inputs: typeof comparisonInputs = [
+                samples,
+                heldOutFsrsPredictions(fsrs),
+                rwkv.predictions,
+            ]
             cancelComparison = latestResult(calibrationComparison.set, (signal) =>
                 runStatsTask("comparison", inputs, signal)
             )

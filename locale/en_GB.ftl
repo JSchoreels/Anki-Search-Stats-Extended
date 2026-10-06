@@ -439,10 +439,13 @@ um-plus-help-direction = Right of center, FSRS predicted higher recall than RWKV
 um-plus-help-volume = Larger bubbles and bars mean more reviews.
 um-plus-help-scores = Lower UM+ and a slope closer to zero are better.
 um-plus-help-small-buckets = Buckets under 200 reviews are hidden unless “Show Small Buckets” is enabled.
+comparison-fsrs-held-out-unavailable = UM+ and ROC need held-out FSRS predictions from the FSRS calibration cache, and none are available for this search. Replaying your current parameters would score FSRS on reviews it was usually optimised on, so it is not compared with RWKV. See the FSRS calibration status above.
 roc = FSRS vs RWKV ROC
 roc-x-axis = False positive rate
 roc-y-axis = True positive rate
 roc-legend = {$model}, AUC={$auc}
+roc-legend-interval = {$model}, AUC={$auc} (95% CI {$lower}–{$upper})
+roc-auc-difference = AUC difference (FSRS − RWKV): {$difference} (95% CI {$lower} to {$upper})
 roc-chance-legend = Chance, AUC=0.5000
 roc-auc-unavailable = n/a
 roc-tooltip-threshold = {$model} threshold ≥ {$threshold}%
@@ -450,7 +453,7 @@ roc-tooltip-tpr = True positive rate: {$value}%
 roc-tooltip-fpr = False positive rate: {$value}%
 roc-no-data = ROC requires paired predictions containing at least one remembered review and one forgotten review.
 roc-help-curve = Each curve plots true positive rate against false positive rate across all prediction thresholds. The orange diagonal is chance performance.
-roc-help-auc = Higher AUC is better: 1.0 perfectly ranks remembered reviews above forgotten reviews, while 0.5 is chance.
+roc-help-auc = Higher AUC is better: 1.0 perfectly ranks remembered reviews above forgotten reviews, while 0.5 is chance. Intervals are 95% confidence intervals clustered by card. When the difference interval includes 0, the two models are not distinguishable on this sample.
 roc-help-sample = Uses the same paired eligible reviews as UM+: Hard, Good, and Easy are positive; Again is negative.
 forgetting-curve = First Long-term Forgetting Curve
 forgetting-curve-help =

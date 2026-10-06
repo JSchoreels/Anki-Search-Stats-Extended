@@ -31,7 +31,7 @@ test("recent RWKV coverage reports saved and replayed counts separately", () => 
         },
         0
     )
-    expect(report).toContain("build 2026-10-05.7")
+    expect(report).toContain("build 2026-10-07.1")
     expect(report).toContain(
         "cached post-optimization reviews: 1; post-optimization replay reviews: 2"
     )
@@ -76,4 +76,45 @@ test("empty cache fallback and missing role metadata are distinguished from vali
     expect(report).toContain("Paired FSRS + RWKV reviews: 0")
     expect(report).not.toContain("no historical validation_fold predictions")
     expect(report).not.toContain("UM+ pairs exist")
+})
+
+test("replay-only FSRS predictions are not paired with RWKV in UM+ or ROC", () => {
+    const report = calibrationDiagnosticReport(
+        samples,
+        replay,
+        { column: null, cachedPredictionCount: 0, roles: [], predictions: replay },
+        rwkv,
+        0
+    )
+    expect(report).toContain(
+        "Paired FSRS + RWKV reviews: 0 (replay predictions are not compared with RWKV)"
+    )
+    expect(report).toContain("ROC AUC (card-clustered DeLong): FSRS unavailable; RWKV unavailable")
+    expect(report).toContain("AUC difference (FSRS − RWKV): unavailable")
+})
+
+test("ROC AUCs, intervals and the paired difference are reported", () => {
+    const rocSamples = calibrationSamplesFrom(
+        [1, 1, 0, 0, 1, 0].map((actual, i) => ({ revlogId: i + 1, cardId: i + 1, actual }))
+    )
+    const predictions = (values: number[]) =>
+        alignPredictions(rocSamples, Object.fromEntries(values.map((value, i) => [i + 1, value])))
+    const report = calibrationDiagnosticReport(
+        rocSamples,
+        predictions([0.9, 0.8, 0.3, 0.2, 0.4, 0.5]),
+        {
+            column: "fsrs-cache",
+            cachedPredictionCount: 6,
+            roles: ["validation_fold"],
+            predictions: predictions([0.9, 0.8, 0.3, 0.2, 0.4, 0.5]),
+        },
+        { column: "rwkv-cache", predictions: predictions([0.9, 0.8, 0.3, 0.2, 0.6, 0.5]) },
+        0
+    )
+    expect(report).toMatch(
+        /ROC AUC \(card-clustered DeLong\): FSRS 0\.8889 \(95% CI \d\.\d{4} to \d\.\d{4}\); RWKV 1\.0000 \(95% CI \d\.\d{4} to \d\.\d{4}\)/
+    )
+    expect(report).toMatch(
+        /AUC difference \(FSRS − RWKV\): -0\.1111 \(95% CI -\d\.\d{4} to [+-]?\d\.\d{4}\)/
+    )
 })

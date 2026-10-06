@@ -39,7 +39,7 @@ test("export reads current graph inputs and emits an aggregate report without fe
     stores.fsrsCalibrationGeneration.set({ phase: "ready", generated: false, warnings: [] })
     exportTroubleshootingInfo()
     const report = JSON.parse(bridgeCommand.mock.calls[0][0].split(":").slice(1).join(":"))
-    expect(report).toContain("SSE troubleshooting report build 2026-10-05.7")
+    expect(report).toContain("SSE troubleshooting report build 2026-10-07.1")
     expect(report).toContain("Paired FSRS + RWKV reviews: 2")
     expect(report).toContain("2026-07-02T00:00:00.000Z to 2026-10-05T00:00:00.000Z")
     expect(report).toContain("Automatic FSRS calibration: ready")

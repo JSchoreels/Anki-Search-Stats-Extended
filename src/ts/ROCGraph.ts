@@ -110,10 +110,17 @@ export function renderRocGraph(svg: SVGElement, data: RocData) {
 
     const legendData = [
         ...series.map((item) => ({
-            label: i18n("roc-legend", {
-                model: item.model,
-                auc: item.auc?.toFixed(4) ?? i18n("roc-auc-unavailable"),
-            }),
+            label: item.interval
+                ? i18n("roc-legend-interval", {
+                      model: item.model,
+                      auc: item.auc!.toFixed(4),
+                      lower: item.interval.lower.toFixed(4),
+                      upper: item.interval.upper.toFixed(4),
+                  })
+                : i18n("roc-legend", {
+                      model: item.model,
+                      auc: item.auc?.toFixed(4) ?? i18n("roc-auc-unavailable"),
+                  }),
             color: item.color,
             dashed: false,
         })),
@@ -126,7 +133,11 @@ export function renderRocGraph(svg: SVGElement, data: RocData) {
     const legend = axis
         .append("g")
         .attr("class", "roc-legend")
-        .attr("transform", `translate(${Math.max(0, width - 170)}, 8)`)
+        // Bottom right stays below the chance diagonal, clear of curves with AUC above 0.5.
+        .attr(
+            "transform",
+            `translate(${Math.max(0, width - 340)}, ${height - (legendData.length - 1) * 16 - 12})`
+        )
         .style("font-size", "11px")
     const legendItems = legend
         .selectAll("g")

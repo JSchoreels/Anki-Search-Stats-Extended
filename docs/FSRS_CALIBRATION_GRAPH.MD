@@ -93,7 +93,8 @@ validated response uses replay through the `calibrationReplay` task. Graph
 calculations continue to accept only finite probabilities within `[0, 1]`.
 
 Once history and both calibration stores load, the `comparison` worker task
-builds UM+, ROC, and RWKV daily results. The page displays loading until this
+builds UM+, ROC, and RWKV daily results, with replay-only FSRS predictions
+replaced by `NaN` (see the ROC section). The page displays loading until this
 result is ready and cancels obsolete computations through `latestResult`.
 Warnings remain logged on the main thread and displayed by the existing panels.
 Endpoint request bodies, automatic preparation, revision triggers, and the
@@ -503,6 +504,23 @@ chance baseline. FSRS uses the same steel-blue color and RWKV the same sea-green
 color as the Calibration and UM+ comparisons. Hover targets are sampled only
 for responsiveness on large histories; the visible curves and AUC still use all
 distinct thresholds.
+
+Each model's AUC and the paired AUC difference (`FSRS − RWKV`) include 95%
+card-clustered DeLong confidence intervals (Obuchowski 1997). Clustering by card
+accounts for correlated reviews of the same card, matching the card-level
+bootstrap used for calibration bands. When the difference interval includes
+zero, the two models are not distinguishable on this sample. Intervals and the
+paired difference are unavailable with fewer than two card clusters containing
+remembered reviews or fewer than two containing forgotten reviews; AUC remains
+available when both outcome classes are present.
+
+UM+ and ROC compare only held-out FSRS predictions from Anki's calibration
+cache. When that cache returns nothing, the in-browser replay still feeds the
+FSRS calibration graph, but the comparison receives `NaN` FSRS predictions:
+replaying current parameters, usually optimised on these same reviews, would
+favour FSRS against held-out RWKV predictions. Both panels show loading while
+FSRS calibration generation is queued or running, then a held-out-unavailable
+message if the cache stays empty. RWKV daily graphs are unaffected.
 
 ## Calibration Confidence Intervals
 

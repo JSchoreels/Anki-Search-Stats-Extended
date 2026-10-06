@@ -41,6 +41,17 @@ export function alignPredictions(
     return predictions
 }
 
+// Replay predictions come from parameters usually fitted on these reviews, so
+// FSRS vs RWKV comparisons only use held-out cached FSRS predictions.
+export function heldOutFsrsPredictions(fsrs: {
+    cachedPredictionCount: number
+    predictions: Float64Array
+}): Float64Array {
+    return fsrs.cachedPredictionCount > 0
+        ? fsrs.predictions
+        : new Float64Array(fsrs.predictions.length).fill(NaN)
+}
+
 export function countPredictions(predictions: Float64Array): number {
     let count = 0
     for (const value of predictions) {

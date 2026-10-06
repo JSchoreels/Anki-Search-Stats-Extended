@@ -1,4 +1,5 @@
-import { type CalibrationSamples, sampleCount } from "./calibrationSamples"
+import { type CalibrationSamples, heldOutFsrsPredictions, sampleCount } from "./calibrationSamples"
+import { type AucInterval, buildRocData, type RocSeries } from "./rocData"
 import { buildUmPlusData, visibleUmPlusBins } from "./umPlusData"
 
 type PredictionSource = {
@@ -12,6 +13,15 @@ type FsrsDiagnosticSource = PredictionSource & {
     cachedPredictionCount: number
     roles: string[]
 }
+
+const interval = ({ lower, upper }: AucInterval, format: (value: number) => string) =>
+    `95% CI ${format(lower)} to ${format(upper)}`
+const fixed = (value: number) => value.toFixed(4)
+const signed = (value: number) => `${value > 0 ? "+" : ""}${value.toFixed(4)}`
+const aucSummary = ({ auc, interval: ci }: RocSeries) =>
+    auc === undefined
+        ? "unavailable"
+        : `${fixed(auc)}${ci ? ` (${interval(ci, fixed)})` : " (CI unavailable)"}`
 
 function predictionSummary(samples: CalibrationSamples, predictions: Float64Array) {
     let count = 0
@@ -41,10 +51,12 @@ export function calibrationDiagnosticReport(
     const replay = predictionSummary(samples, replayPredictions)
     const selected = predictionSummary(samples, fsrs.predictions)
     const rwkvSelected = predictionSummary(samples, rwkv.predictions)
-    const paired = buildUmPlusData(samples, fsrs.predictions, rwkv.predictions)
+    const heldOutFsrs = heldOutFsrsPredictions(fsrs)
+    const paired = buildUmPlusData(samples, heldOutFsrs, rwkv.predictions)
+    const roc = buildRocData(samples, heldOutFsrs, rwkv.predictions)
     const usesCache = fsrs.cachedPredictionCount > 0
     return [
-        "SSE troubleshooting report build 2026-10-05.7",
+        "SSE troubleshooting report build 2026-10-07.1",
         `Review range: ${dayRange === 0 ? "all history" : `${dayRange} days`}; current stats search`,
         `Eligible historical calibration samples: ${sampleCount(samples)}`,
         `FSRS historical replay predictions: ${replay.count}`,
@@ -58,7 +70,9 @@ export function calibrationDiagnosticReport(
         `RWKV cache roles returned: ${rwkv.roles?.join(", ") || "none / not reported"}`,
         `RWKV cached post-optimization reviews: ${rwkv.roleCounts?.post_optimization ?? 0}; post-optimization replay reviews: ${rwkv.roleCounts?.post_optimization_replay ?? 0}`,
         `RWKV selected review dates (UTC): ${rwkvSelected.range}`,
-        `Paired FSRS + RWKV reviews: ${paired.count}`,
+        `Paired FSRS + RWKV reviews: ${paired.count}${usesCache ? "" : " (replay predictions are not compared with RWKV)"}`,
+        `ROC AUC (card-clustered DeLong): FSRS ${aucSummary(roc.fsrs)}; RWKV ${aucSummary(roc.rwkv)}`,
+        `AUC difference (FSRS − RWKV): ${roc.difference ? `${signed(roc.difference.value)} (${interval(roc.difference.interval, signed)})` : "unavailable"}`,
         `UM+ populated buckets: ${paired.bins.length}; buckets visible with default >=200 filter: ${visibleUmPlusBins(paired.bins, false).length}`,
         ...((rwkv.roleCounts?.post_optimization_replay ?? 0) > 0
             ? [

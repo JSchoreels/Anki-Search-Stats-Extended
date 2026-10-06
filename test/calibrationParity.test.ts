@@ -4,7 +4,7 @@ import {
     buildCalibrationBins,
     withConfidenceIntervals,
 } from "../src/ts/MemorisedBar"
-import { buildRocData } from "../src/ts/rocData"
+import { buildRocData, type RocData } from "../src/ts/rocData"
 import { buildRwkvDailyData } from "../src/ts/rwkvDailyData"
 import { runStatsTaskLocally } from "../src/ts/statsTasks"
 import { buildUmPlusData } from "../src/ts/umPlusData"
@@ -12,6 +12,13 @@ import { buildCalibrationBins as referenceBins } from "./reference/calibrationBi
 import { buildRocData as referenceRoc } from "./reference/rocData"
 import { buildRwkvDailyData as referenceDaily } from "./reference/rwkvDailyData"
 import { buildUmPlusData as referenceUmPlus } from "./reference/umPlusData"
+
+function withoutRocUncertainty(data: RocData) {
+    const { difference, fsrs, rwkv, ...counts } = data
+    const { interval: fsrsInterval, ...fsrsSeries } = fsrs
+    const { interval: rwkvInterval, ...rwkvSeries } = rwkv
+    return { ...counts, fsrs: fsrsSeries, rwkv: rwkvSeries }
+}
 
 test.each([0, 1, 4_096, 20_000])(
     "columnar calculations exactly match object/map loops for %i samples",
@@ -61,9 +68,12 @@ test.each([0, 1, 4_096, 20_000])(
         expect(buildUmPlusData(samples, fsrs, rwkv)).toEqual(
             referenceUmPlus(list, fsrsMap, rwkvMap)
         )
-        expect(buildRocData(samples, fsrs, rwkv)).toEqual(referenceRoc(list, fsrsMap, rwkvMap))
+        expect(withoutRocUncertainty(buildRocData(samples, fsrs, rwkv))).toEqual(
+            referenceRoc(list, fsrsMap, rwkvMap)
+        )
         expect(buildRwkvDailyData(samples, rwkv)).toEqual(referenceDaily(list, rwkvMap))
-        expect(runStatsTaskLocally("comparison", [samples, fsrs, rwkv])).toEqual({
+        const comparison = runStatsTaskLocally("comparison", [samples, fsrs, rwkv])
+        expect({ ...comparison, roc: withoutRocUncertainty(comparison.roc) }).toEqual({
             umPlus: referenceUmPlus(list, fsrsMap, rwkvMap),
             roc: referenceRoc(list, fsrsMap, rwkvMap),
             rwkvDaily: referenceDaily(list, rwkvMap),

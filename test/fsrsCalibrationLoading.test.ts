@@ -143,12 +143,14 @@ test("RWKV cache loads even when the FSRS cache request remains pending", async 
 })
 
 test.each([
-    { rows: [], cached: 0, prediction: 0.9, count: 1 },
-    { rows: [[999, 0.8]], cached: 1, prediction: NaN, count: 0 },
-    { rows: [[100, 1.2]], cached: 1, prediction: 1.2, count: 0 },
+    // Replay feeds calibration bins, but never the held-out UM+/ROC comparison.
+    { rows: [], cached: 0, prediction: 0.9, count: 1, paired: 0 },
+    { rows: [[999, 0.8]], cached: 1, prediction: NaN, count: 0, paired: 0 },
+    { rows: [[100, 1.2]], cached: 1, prediction: 1.2, count: 0, paired: 0 },
+    { rows: [[100, 0.7]], cached: 1, prediction: 0.7, count: 1, paired: 1 },
 ])(
     "FSRS fallback uses the response-wide validated count: $rows",
-    async ({ rows, cached, prediction, count }) => {
+    async ({ rows, cached, prediction, count, paired }) => {
         const originalFetch = global.fetch
         global.fetch = jest.fn(async (url: string) => {
             if (url.endsWith("startFsrsCalibration"))
@@ -179,7 +181,8 @@ test.each([
             expect(fsrs.cachedPredictionCount).toBe(cached)
             expect(fsrs.predictions).toEqual(new Float64Array([prediction]))
             expect(fsrs.bins.reduce((sum, bin) => sum + (bin?.count ?? 0), 0)).toBe(count)
-            expect(get(stores.calibrationComparison)?.umPlus.count).toBe(count)
+            expect(get(stores.calibrationComparison)?.umPlus.count).toBe(paired)
+            expect(get(stores.calibrationComparison)?.roc.count).toBe(paired)
             // Daily RWKV eligibility remains independent of paired FSRS eligibility.
             expect(get(stores.calibrationComparison)?.rwkvDaily[0].count).toBe(1)
             stores.cids.set(null)

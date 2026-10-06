@@ -21,6 +21,7 @@
     import {
         calibrationMode,
         calibrationComparison,
+        fsrsCalibrationGeneration,
         fsrsCalibrationStats,
         memorised_stats,
         rwkvCalibrationStats,
@@ -161,8 +162,17 @@
               : ($fsrsCalibrationStats?.warnings ?? [])
     $: umPlusData = $calibrationComparison?.umPlus
     $: rocData = $calibrationComparison?.roc
-    $: umPlusLoading = $calibrationComparison === null
     $: rwkvDailyData = $calibrationComparison?.rwkvDaily ?? []
+    // UM+ and ROC only use held-out cached FSRS predictions, never the replay fallback.
+    $: fsrsHeldOutMissing =
+        !!$fsrsCalibrationStats &&
+        $fsrsCalibrationStats.cachedPredictionCount === 0 &&
+        $fsrsCalibrationStats.predictions.length > 0
+    $: fsrsHeldOutGenerating =
+        $fsrsCalibrationGeneration?.phase === "queued" ||
+        $fsrsCalibrationGeneration?.phase === "running"
+    $: umPlusLoading =
+        $calibrationComparison === null || (fsrsHeldOutMissing && fsrsHeldOutGenerating)
     $: umPlusWarnings = Array.from(
         new Set([
             ...($fsrsCalibrationStats?.warnings ?? []),
@@ -248,6 +258,10 @@
             {/if}
             {#if umPlusLoading}
                 <div class="calibration-message">{i18n("loading")}</div>
+            {:else if fsrsHeldOutMissing}
+                <div class="calibration-message">
+                    {i18n("comparison-fsrs-held-out-unavailable")}
+                </div>
             {:else if umPlusData && umPlusData.count > 0}
                 <UMPlus data={umPlusData} />
             {:else}
@@ -270,6 +284,10 @@
             {/if}
             {#if umPlusLoading}
                 <div class="calibration-message">{i18n("loading")}</div>
+            {:else if fsrsHeldOutMissing}
+                <div class="calibration-message">
+                    {i18n("comparison-fsrs-held-out-unavailable")}
+                </div>
             {:else if rocData && rocData.positiveCount > 0 && rocData.negativeCount > 0}
                 <ROC data={rocData} />
             {:else}
