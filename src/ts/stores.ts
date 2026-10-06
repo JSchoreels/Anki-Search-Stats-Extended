@@ -1,11 +1,20 @@
 import { derived, get, writable, type Readable } from "svelte/store"
-import { EMPTY_CALIBRATION_SAMPLES, sampleCount } from "./calibrationSamples"
+import {
+    alignPredictions,
+    EMPTY_CALIBRATION_SAMPLES,
+    sampleCount,
+    type CalibrationSamples,
+} from "./calibrationSamples"
 import { calculateCardDataPies } from "./CardDataPies"
 import { DEFAULT_ORDER, type SSEconfig, type SSEother } from "./config"
 import { latestResult } from "./latestResult"
-import type { buildCalibrationBins, getMemorisedDays } from "./MemorisedBar"
+import {
+    withConfidenceIntervals,
+    type buildCalibrationBins,
+    type getMemorisedDays,
+} from "./MemorisedBar"
 import type { GraphsRequest, GraphsResponse } from "./proto/anki/stats_pb"
-import { today, type calculateRevlogStats } from "./revlogGraphs"
+import { lastForgetByCard, today, type calculateRevlogStats } from "./revlogGraphs"
 import {
     cancelRwkvMemorisedHistory,
     catchErrors,
@@ -179,7 +188,9 @@ derived(
         }
     }
 ).subscribe(revlogStats.set)
-export let last_forget = derived([revlogStats], ([$revlogStats]) => $revlogStats?.last_forget)
+export let last_forget = derived([revlogs], ([$revlogs]) =>
+    $revlogs ? lastForgetByCard($revlogs) : undefined
+)
 export let memorised_stats = writable<Awaited<ReturnType<typeof getMemorisedDays>> | null>()
 derived(
     [card_data, revlogs, showFsrsStats, last_forget, fsrsPresetData],
@@ -208,6 +219,52 @@ derived(
         }
     }
 ).subscribe(memorised_stats.set)
+
+export const calibration_samples = writable<CalibrationSamples | null>(null)
+derived(
+    [card_data, revlogs, showFsrsStats, fsrsPresetData],
+    ([$cards, $revlogs, $show, $presets], set: typeof calibration_samples.set) => {
+        set(null)
+        if ($cards && $revlogs && $show && $presets) {
+            return latestResult(set, (signal) =>
+                runStatsTask(
+                    "calibrationSamples",
+                    [
+                        $revlogs,
+                        $cards,
+                        SSEother.deck_configs,
+                        SSEother.deck_config_ids,
+                        $presets.presetsByCard,
+                    ],
+                    signal
+                )
+            )
+        }
+    }
+).subscribe(calibration_samples.set)
+
+function waitForMemorised(
+    signal: AbortSignal
+): Promise<Awaited<ReturnType<typeof getMemorisedDays>>> {
+    return new Promise((resolve, reject) => {
+        let unsubscribe = () => {}
+        const abort = () => {
+            unsubscribe()
+            reject(new DOMException("Aborted", "AbortError"))
+        }
+        if (signal.aborted) return abort()
+        signal.addEventListener("abort", abort, { once: true })
+        const stop = memorised_stats.subscribe((value) => {
+            if (value) {
+                signal.removeEventListener("abort", abort)
+                resolve(value)
+                unsubscribe()
+            }
+        })
+        unsubscribe = stop
+        if (get(memorised_stats)) stop()
+    })
+}
 
 export type RwkvMemorisedStats = {
     phase: string
@@ -302,6 +359,7 @@ export type FsrsCalibrationStats = {
     bins: ReturnType<typeof buildCalibrationBins>
     predictions: Float64Array
     warnings: string[]
+    bandsPending?: boolean
 }
 export let fsrsCalibrationGeneration = writable<FsrsCalibrationProgress | null>(null)
 export let fsrsCalibrationRevision = writable(0)
@@ -346,34 +404,27 @@ async function prepareFsrsCalibration(cardIds: number[]) {
     const currentCards = get(cids)
     if (
         currentCards?.length &&
-        sampleCount(get(memorised_stats)?.calibration_samples ?? EMPTY_CALIBRATION_SAMPLES)
+        sampleCount(get(calibration_samples) ?? EMPTY_CALIBRATION_SAMPLES)
     ) {
         void prepareFsrsCalibration(currentCards)
     }
 }
 
-derived([cids, memorised_stats], ([$cids, $memorised]) => {
-    if (
-        $cids?.length &&
-        sampleCount($memorised?.calibration_samples ?? EMPTY_CALIBRATION_SAMPLES)
-    ) {
+derived([cids, calibration_samples], ([$cids, $samples]) => {
+    if ($cids?.length && sampleCount($samples ?? EMPTY_CALIBRATION_SAMPLES)) {
         void prepareFsrsCalibration([...$cids])
     }
 }).subscribe(() => {})
 
 export let fsrsCalibrationStats = writable<FsrsCalibrationStats | null>(null)
 derived(
-    [cids, searchLimit, memorised_stats, fsrsCalibrationRevision],
-    (
-        [$cids, $searchLimit, $memorised_stats],
-        set: (value: FsrsCalibrationStats | null) => void
-    ) => {
+    [cids, searchLimit, calibration_samples, fsrsCalibrationRevision],
+    ([$cids, $searchLimit, samples], set: (value: FsrsCalibrationStats | null) => void) => {
         set(null)
-        if (!$cids || !$memorised_stats) {
+        if (!$cids || !samples) {
             return
         }
 
-        const samples = $memorised_stats.calibration_samples ?? EMPTY_CALIBRATION_SAMPLES
         if (sampleCount(samples) === 0) {
             set({
                 column: null,
@@ -394,19 +445,34 @@ derived(
             )
             const parsed = await runStatsTask("calibrationPredictions", [samples, text], signal)
             for (const warning of parsed.warnings) console.warn("Search Stats Extended:", warning)
-            const usesCache = parsed.responsePredictionCount > 0
-            const predictions = usesCache
-                ? parsed.predictions
-                : $memorised_stats.fsrs_calibration_replay_predictions
-            return {
+            const stats = {
                 column: parsed.column,
                 cachedPredictionCount: parsed.responsePredictionCount,
                 roles: parsed.roles,
-                bins: usesCache
-                    ? parsed.bins
-                    : await runStatsTask("calibrationReplay", [samples, predictions], signal),
-                predictions,
+                bins: parsed.bins,
+                predictions: parsed.predictions,
                 warnings: parsed.warnings,
+            }
+            if (parsed.responsePredictionCount === 0) {
+                const memorised = await waitForMemorised(signal)
+                const byId = new Map<number, number>()
+                memorised.calibration_samples.revlogIds.forEach((id, i) =>
+                    byId.set(id, memorised.fsrs_calibration_replay_predictions[i])
+                )
+                const predictions = alignPredictions(samples, byId)
+                const bins = await runStatsTask("calibrationReplay", [samples, predictions], signal)
+                return { ...stats, predictions, bins, bandsPending: false }
+            }
+            if (!signal.aborted) set({ ...stats, bandsPending: true })
+            const intervals = await runStatsTask(
+                "calibrationBands",
+                [samples, parsed.predictions],
+                signal
+            )
+            return {
+                ...stats,
+                bins: withConfidenceIntervals(parsed.bins, intervals),
+                bandsPending: false,
             }
         })
     }
@@ -419,21 +485,18 @@ export type RwkvCalibrationStats = {
     warnings: string[]
     roles?: string[]
     roleCounts?: Record<string, number>
+    bandsPending?: boolean
     refreshAfterFsrs?: boolean
 }
 export let rwkvCalibrationStats = writable<RwkvCalibrationStats | null>(null)
 derived(
-    [cids, searchLimit, memorised_stats, rwkvStatsGeneration, rwkvCalibrationRevision],
-    (
-        [$cids, $searchLimit, $memorised_stats],
-        set: (value: RwkvCalibrationStats | null) => void
-    ) => {
+    [cids, searchLimit, calibration_samples, rwkvStatsGeneration, rwkvCalibrationRevision],
+    ([$cids, $searchLimit, samples], set: (value: RwkvCalibrationStats | null) => void) => {
         set(null)
-        if (!$cids || !$memorised_stats) {
+        if (!$cids || !samples) {
             return
         }
 
-        const samples = $memorised_stats.calibration_samples ?? EMPTY_CALIBRATION_SAMPLES
         if (sampleCount(samples) === 0) {
             set({ column: null, bins: [], predictions: new Float64Array(0), warnings: [] })
             return
@@ -448,13 +511,25 @@ derived(
             )
             const parsed = await runStatsTask("calibrationPredictions", [samples, text], signal)
             for (const warning of parsed.warnings) console.warn("Search Stats Extended:", warning)
-            return {
+            const stats = {
                 column: parsed.column,
                 bins: parsed.bins,
                 predictions: parsed.predictions,
                 warnings: parsed.warnings,
                 roles: parsed.roles,
                 roleCounts: parsed.roleCounts,
+                refreshAfterFsrs: false,
+            }
+            if (!signal.aborted) set({ ...stats, bandsPending: true })
+            const intervals = await runStatsTask(
+                "calibrationBands",
+                [samples, parsed.predictions],
+                signal
+            )
+            return {
+                ...stats,
+                bins: withConfidenceIntervals(parsed.bins, intervals),
+                bandsPending: false,
                 refreshAfterFsrs: parsed.refreshAfterFsrs,
             }
         })
@@ -474,18 +549,30 @@ derived([rwkvCalibrationStats, fsrsCalibrationGeneration], ([$rwkv, $generation]
 }).subscribe(() => {})
 
 export const calibrationComparison = writable<ReturnType<Tasks["comparison"]> | null>(null)
+let comparisonInputs: [CalibrationSamples, Float64Array, Float64Array] | null = null
+let cancelComparison: (() => void) | undefined
 derived(
-    [memorised_stats, fsrsCalibrationStats, rwkvCalibrationStats],
-    ([$memorised, $fsrs, $rwkv], set: typeof calibrationComparison.set) => {
-        set(null)
-        if ($memorised && $fsrs && $rwkv) {
-            return latestResult(set, (signal) =>
-                runStatsTask(
-                    "comparison",
-                    [$memorised.calibration_samples, $fsrs.predictions, $rwkv.predictions],
-                    signal
-                )
+    [calibration_samples, fsrsCalibrationStats, rwkvCalibrationStats],
+    ([samples, fsrs, rwkv]) => {
+        if (
+            samples &&
+            fsrs &&
+            rwkv &&
+            comparisonInputs?.[0] === samples &&
+            comparisonInputs[1] === fsrs.predictions &&
+            comparisonInputs[2] === rwkv.predictions
+        )
+            return
+        cancelComparison?.()
+        cancelComparison = undefined
+        comparisonInputs = null
+        calibrationComparison.set(null)
+        if (samples && fsrs && rwkv) {
+            comparisonInputs = [samples, fsrs.predictions, rwkv.predictions]
+            const inputs = comparisonInputs
+            cancelComparison = latestResult(calibrationComparison.set, (signal) =>
+                runStatsTask("comparison", inputs, signal)
             )
         }
     }
-).subscribe(calibrationComparison.set)
+).subscribe(() => {})

@@ -754,3 +754,11 @@ export function easeBarChart(
         extraStats: normalize ? retentionStats : totalCalc,
     }
 }
+
+export function lastForgetByCard(revlogs: Revlog[]): number[] {
+    const result: number[] = []
+    for (const revlog of revlogs) {
+        if (revlog.factor == 0 && revlog.type == 4) result[revlog.cid] = revlog.id
+    }
+    return result
+}

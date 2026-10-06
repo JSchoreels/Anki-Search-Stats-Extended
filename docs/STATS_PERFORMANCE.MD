@@ -15,6 +15,14 @@ object arrays/maps and parsing prediction JSON on the main thread. Changing the 
 workers and ignores obsolete endpoint responses. Worker failures are reported;
 they do not fall back to blocking the page.
 
+Calibration samples are selected in a cheap worker independently of the full
+Memorised replay. Last-forget markers come directly from review history, so
+Memorised replay also starts without waiting for review-history aggregation.
+Each calibration line appears as soon as its cache predictions and bins are
+ready; card-bootstrap confidence bands arrive separately. Comparison calculations
+reuse the same predictions when bands arrive. Only an empty FSRS cache waits for
+Memorised replay, aligning its predictions to the selected review IDs.
+
 Historical FSRS calibration preparation starts automatically once eligible
 history loads. Ordinary Statistics loads read caches immediately while preparation
 runs. FSRS and RWKV cache reads are independent, so RWKV is available while FSRS

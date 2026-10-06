@@ -61,6 +61,7 @@ test("Statistics reads both caches immediately while automatic generation refres
             ),
             fsrs_calibration_replay_predictions: new Float64Array(ids.map(() => 0.85)),
         } as never)
+        stores.calibration_samples.set(get(stores.memorised_stats)!.calibration_samples)
         await flush()
         expect(get(stores.fsrsCalibrationStats)?.cachedPredictionCount).toBe(1)
         expect(get(stores.rwkvCalibrationStats)).not.toBeNull()
@@ -129,6 +130,7 @@ test("RWKV cache loads even when the FSRS cache request remains pending", async 
             calibration_samples: calibrationSamplesFrom([{ cardId: 10, revlogId: 100, actual: 1 }]),
             fsrs_calibration_replay_predictions: new Float64Array([0.9]),
         } as never)
+        stores.calibration_samples.set(get(stores.memorised_stats)!.calibration_samples)
         await flush()
         expect(get(stores.fsrsCalibrationStats)).toBeNull()
         expect(get(stores.calibrationComparison)).toBeNull()
@@ -171,6 +173,7 @@ test.each([
                 ]),
                 fsrs_calibration_replay_predictions: new Float64Array([0.9]),
             } as never)
+            stores.calibration_samples.set(get(stores.memorised_stats)!.calibration_samples)
             await flush()
             const fsrs = get(stores.fsrsCalibrationStats)!
             expect(fsrs.cachedPredictionCount).toBe(cached)
@@ -204,6 +207,7 @@ test("comparison remains null until all inputs load and discards obsolete worker
         calibration_samples: calibrationSamplesFrom([{ revlogId: 100, cardId: 10, actual: 1 }]),
         fsrs_calibration_replay_predictions: new Float64Array([0.9]),
     } as never)
+    stores.calibration_samples.set(get(stores.memorised_stats)!.calibration_samples)
     const fsrs = {
         column: null,
         cachedPredictionCount: 1,
@@ -236,7 +240,7 @@ test("comparison remains null until all inputs load and discards obsolete worker
     pending[0].finish()
     await flush()
     expect(get(stores.calibrationComparison)).toBe(current)
-    stores.memorised_stats.set(null)
+    stores.calibration_samples.set(null)
     expect(get(stores.calibrationComparison)).toBeNull()
 })
 
@@ -294,6 +298,117 @@ test("an unavailable progress endpoint ends the loading label and reports the fa
         const warnings = await pending
         expect(warnings.join(" ")).toContain("progress endpoint unavailable")
         expect(progress).toHaveBeenLastCalledWith({ phase: "failed", warnings })
+    } finally {
+        global.fetch = originalFetch
+    }
+})
+
+test("FSRS bins publish before bands and a pending RWKV fetch; bands preserve comparison", async () => {
+    const originalFetch = global.fetch
+    let finishRwkv!: () => void
+    const rwkvResponse = new Promise((resolve) => {
+        finishRwkv = () => resolve(response({ data: [[100, 0.8]] }))
+    })
+    global.fetch = jest.fn(async (url: string) => {
+        if (url.endsWith("startFsrsCalibration"))
+            return response({ phase: "ready", generated: false, warnings: [] })
+        if (url.endsWith("fsrsReviewRetrievability")) return response({ data: [[100, 0.9]] })
+        if (url.endsWith("rwkvReviewRetrievability")) return rwkvResponse
+        return response({ columns: [], data: [], presets: [], cards: {}, retrievability: {} })
+    }) as typeof fetch
+    const bands: (() => void)[] = []
+    const tasks: string[] = []
+    jest.doMock("../src/ts/statsWorkerClient", () => ({
+        runStatsTask: async (task: keyof import("../src/ts/statsTasks").Tasks, args: never) => {
+            tasks.push(task)
+            const { runStatsTaskLocally } = await import("../src/ts/statsTasks")
+            const result = runStatsTaskLocally(task, args)
+            if (task === "calibrationBands")
+                return new Promise((resolve) => bands.push(() => resolve(result)))
+            return result
+        },
+    }))
+    try {
+        const stores = await import("../src/ts/stores")
+        const published: import("../src/ts/stores").FsrsCalibrationStats[] = []
+        const stop = stores.fsrsCalibrationStats.subscribe((value) => {
+            if (value) published.push(value)
+        })
+        stores.cids.set([10])
+        await flush()
+        stores.calibration_samples.set(
+            calibrationSamplesFrom([{ cardId: 10, revlogId: 100, actual: 1 }])
+        )
+        await flush()
+        const partial = get(stores.fsrsCalibrationStats)!
+        expect(partial.bandsPending).toBe(true)
+        expect(partial.bins.filter(Boolean)).toHaveLength(1)
+        partial.bins.forEach((bin) => expect(bin).not.toHaveProperty("confidenceInterval"))
+        expect(get(stores.rwkvCalibrationStats)).toBeNull()
+        expect(get(stores.memorised_stats)).toBeNull()
+        finishRwkv()
+        await flush()
+        expect(get(stores.rwkvCalibrationStats)?.bandsPending).toBe(true)
+        const comparison = get(stores.calibrationComparison)
+        expect(comparison).not.toBeNull()
+        expect(tasks.filter((task) => task === "comparison")).toHaveLength(1)
+        expect(bands).toHaveLength(2)
+        bands[0]()
+        bands[1]()
+        await flush()
+        const final = get(stores.fsrsCalibrationStats)!
+        expect(final.bandsPending).toBe(false)
+        expect(final.predictions).toBe(partial.predictions)
+        final.bins.forEach((bin) => expect(bin.confidenceInterval).toEqual([1, 1]))
+        expect(partial.bins.every((bin) => !bin?.confidenceInterval)).toBe(true)
+        expect(published.map((stats) => stats.bandsPending)).toEqual([true, false])
+        expect(get(stores.calibrationComparison)).toBe(comparison)
+        expect(tasks.filter((task) => task === "comparison")).toHaveLength(1)
+        stop()
+        stores.cids.set(null)
+    } finally {
+        global.fetch = originalFetch
+    }
+})
+
+test("empty FSRS cache waits for replay and aligns predictions by review ID", async () => {
+    const originalFetch = global.fetch
+    global.fetch = jest.fn(async (url: string) => {
+        if (url.endsWith("startFsrsCalibration"))
+            return response({ phase: "ready", generated: false, warnings: [] })
+        if (url.endsWith("fsrsReviewRetrievability")) return response({ data: [] })
+        if (url.endsWith("rwkvReviewRetrievability")) return response({ data: [[100, 0.8]] })
+        return response({ columns: [], data: [], presets: [], cards: {}, retrievability: {} })
+    }) as typeof fetch
+    jest.doMock("../src/ts/statsWorkerClient", () => ({
+        runStatsTask: async (task: keyof import("../src/ts/statsTasks").Tasks, args: never) => {
+            const { runStatsTaskLocally } = await import("../src/ts/statsTasks")
+            return runStatsTaskLocally(task, args)
+        },
+    }))
+    try {
+        const stores = await import("../src/ts/stores")
+        stores.cids.set([10])
+        await flush()
+        const samples = calibrationSamplesFrom(
+            [200, 100, 300].map((revlogId) => ({ revlogId, cardId: 10, actual: 1 }))
+        )
+        stores.calibration_samples.set(samples)
+        await flush()
+        expect(get(stores.fsrsCalibrationStats)).toBeNull()
+        stores.memorised_stats.set({
+            calibration_samples: calibrationSamplesFrom(
+                [100, 200, 999].map((revlogId) => ({ revlogId, cardId: 10, actual: 1 }))
+            ),
+            fsrs_calibration_replay_predictions: new Float64Array([0.9, 0.7, 0.2]),
+        } as never)
+        await flush()
+        const fsrs = get(stores.fsrsCalibrationStats)!
+        expect(fsrs.predictions).toEqual(new Float64Array([0.7, 0.9, NaN]))
+        expect(fsrs.bandsPending).toBe(false)
+        expect(fsrs.bins.reduce((sum, bin) => sum + (bin?.count ?? 0), 0)).toBe(2)
+        fsrs.bins.forEach((bin) => expect(bin.confidenceInterval).toEqual([1, 1]))
+        stores.cids.set(null)
     } finally {
         global.fetch = originalFetch
     }

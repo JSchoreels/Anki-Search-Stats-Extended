@@ -1,6 +1,12 @@
 import { parseReviewRetrievabilityResponse } from "./calibrationPredictions"
 import type { CalibrationSamples } from "./calibrationSamples"
-import { buildCalibrationBins, getMemorisedDays } from "./MemorisedBar"
+import { selectCalibrationSamples } from "./calibrationSampleSelection"
+import {
+    buildCalibrationBinCounts,
+    buildCalibrationBins,
+    calibrationConfidenceIntervals,
+    getMemorisedDays,
+} from "./MemorisedBar"
 import { calculateRevlogStats } from "./revlogGraphs"
 import { buildRocData } from "./rocData"
 import { buildRwkvDailyData } from "./rwkvDailyData"
@@ -8,7 +14,7 @@ import { buildUmPlusData } from "./umPlusData"
 
 function calibrationPredictions(samples: CalibrationSamples, responseText: string) {
     const parsed = parseReviewRetrievabilityResponse(responseText, samples)
-    return { ...parsed, bins: buildCalibrationBins(samples, parsed.predictions) }
+    return { ...parsed, bins: buildCalibrationBinCounts(samples, parsed.predictions) }
 }
 
 function comparison(samples: CalibrationSamples, fsrs: Float64Array, rwkv: Float64Array) {
@@ -22,6 +28,8 @@ function comparison(samples: CalibrationSamples, fsrs: Float64Array, rwkv: Float
 const tasks = {
     revlog: calculateRevlogStats,
     memorised: getMemorisedDays,
+    calibrationSamples: selectCalibrationSamples,
+    calibrationBands: calibrationConfidenceIntervals,
     calibrationPredictions,
     calibrationReplay: buildCalibrationBins,
     comparison,

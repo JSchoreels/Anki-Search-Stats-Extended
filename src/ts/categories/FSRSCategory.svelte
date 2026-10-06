@@ -2,6 +2,7 @@
     import RevlogGraphContainer from "../RevlogGraphContainer.svelte"
     import BarScrollable from "../BarScrollable.svelte"
     import Bar from "../Bar.svelte"
+    import CalibrationGraphContainer from "../CalibrationGraphContainer.svelte"
     import GraphCategory from "../GraphCategory.svelte"
     import Warning from "../Warning.svelte"
     import MemorisedBar from "../MemorisedBar.svelte"
@@ -108,6 +109,8 @@
             : ($memorised_stats?.calibration ?? [])
     $: rwkvCalibrationData = $rwkvCalibrationStats?.bins ?? []
     $: calibrationData = $calibrationMode === "rwkv" ? rwkvCalibrationData : fsrsCalibrationData
+    $: fsrsPending = !$fsrsCalibrationStats
+    $: rwkvPending = !$rwkvCalibrationStats
     $: calibrationSeries =
         $calibrationMode === "both"
             ? [
@@ -121,7 +124,7 @@
                       bins: rwkvCalibrationData,
                       color: RWKV_COMPARISON_COLOUR,
                   },
-              ]
+              ].filter((_, i) => !(i === 0 ? fsrsPending : rwkvPending))
             : $calibrationMode === "rwkv"
               ? [
                     {
@@ -131,11 +134,18 @@
                     },
                 ]
               : undefined
+    $: calibrationPending =
+        $calibrationMode === "both"
+            ? fsrsPending || rwkvPending
+            : $calibrationMode === "rwkv"
+              ? rwkvPending
+              : fsrsPending
     $: calibrationLoading =
-        (($calibrationMode === "fsrs" || $calibrationMode === "both") &&
-            $memorised_stats &&
-            !$fsrsCalibrationStats) ||
-        (($calibrationMode === "rwkv" || $calibrationMode === "both") && !$rwkvCalibrationStats)
+        $calibrationMode === "both"
+            ? fsrsPending && rwkvPending
+            : $calibrationMode === "rwkv"
+              ? rwkvPending
+              : fsrsPending
     $: calibrationCount = _.sumBy(
         calibrationSeries?.flatMap((series) => series.bins) ?? calibrationData,
         (bin) => bin?.count ?? 0
@@ -175,7 +185,7 @@
             {i18n("memorised-help2")}
         </p>
     </MemorisedGraphContainer>
-    <MemorisedGraphContainer>
+    <CalibrationGraphContainer>
         <h1 slot="title">
             {i18n(
                 $calibrationMode === "rwkv"
@@ -207,7 +217,7 @@
                 <div class="calibration-message">{i18n("loading")}</div>
             {:else if calibrationCount > 0}
                 <FsrsCalibration data={calibrationData} series={calibrationSeries} />
-            {:else}
+            {:else if !calibrationPending}
                 <div class="calibration-message">
                     {i18n(
                         $calibrationMode === "rwkv" || $calibrationMode === "both"
@@ -216,13 +226,21 @@
                     )}
                 </div>
             {/if}
+            {#if $calibrationMode === "both" && !calibrationLoading}
+                {#if fsrsPending}<small>
+                        {i18n("calibration-legend-fsrs")}: {i18n("loading")}
+                    </small>{/if}
+                {#if rwkvPending}<small>
+                        {i18n("calibration-legend-rwkv")}: {i18n("loading")}
+                    </small>{/if}
+            {/if}
             <FsrsCalibrationStatus />
         </div>
         <p>
             {i18n("fsrs-calibration-help")}
         </p>
-    </MemorisedGraphContainer>
-    <MemorisedGraphContainer>
+    </CalibrationGraphContainer>
+    <CalibrationGraphContainer>
         <h1 slot="title">{i18n("um-plus")}</h1>
         <div slot="graph" class="calibration-panel">
             {#if umPlusWarnings.length > 0}
@@ -243,8 +261,8 @@
             <li>{i18n("um-plus-help-scores")}</li>
             <li>{i18n("um-plus-help-small-buckets")}</li>
         </ul>
-    </MemorisedGraphContainer>
-    <MemorisedGraphContainer>
+    </CalibrationGraphContainer>
+    <CalibrationGraphContainer>
         <h1 slot="title">{i18n("roc")}</h1>
         <div slot="graph" class="calibration-panel">
             {#if umPlusWarnings.length > 0}
@@ -263,10 +281,10 @@
             <li>{i18n("roc-help-auc")}</li>
             <li>{i18n("roc-help-sample")}</li>
         </ul>
-    </MemorisedGraphContainer>
+    </CalibrationGraphContainer>
     <CurrentDisagreement />
     {#each rwkvDailyMetrics as metric}
-        <MemorisedGraphContainer>
+        <CalibrationGraphContainer>
             <h1 slot="title">{i18n(`rwkv-daily-${metric}`)}</h1>
             <div slot="graph" class="calibration-panel">
                 {#if $rwkvCalibrationStats?.warnings.length}
@@ -282,7 +300,7 @@
             </div>
             <p>{i18n(`rwkv-daily-${metric}-help`)}</p>
             <p>{i18n("rwkv-daily-sample-help")}</p>
-        </MemorisedGraphContainer>
+        </CalibrationGraphContainer>
     {/each}
     <MemorisedGraphContainer>
         <h1 slot="title">{i18n("stability-time-machine")}</h1>

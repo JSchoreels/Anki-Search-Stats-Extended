@@ -1,5 +1,9 @@
 import { alignPredictions, calibrationSamplesFrom } from "../src/ts/calibrationSamples"
-import { buildCalibrationBins } from "../src/ts/MemorisedBar"
+import {
+    buildCalibrationBinCounts,
+    buildCalibrationBins,
+    withConfidenceIntervals,
+} from "../src/ts/MemorisedBar"
 import { buildRocData } from "../src/ts/rocData"
 import { buildRwkvDailyData } from "../src/ts/rwkvDailyData"
 import { runStatsTaskLocally } from "../src/ts/statsTasks"
@@ -74,7 +78,11 @@ test("prediction and replay tasks share alignment and calibration bin calculatio
         { revlogId: 30, cardId: 1, actual: 1 },
     ])
     const predictions = alignPredictions(samples, { 10: 0.9, 20: 0.2, 999: 0.5 })
-    const bins = runStatsTaskLocally("calibrationReplay", [samples, predictions])
+    const bins = buildCalibrationBinCounts(samples, predictions)
+    const intervals = runStatsTaskLocally("calibrationBands", [samples, predictions])
+    expect(withConfidenceIntervals(bins, intervals)).toEqual(
+        runStatsTaskLocally("calibrationReplay", [samples, predictions])
+    )
     expect(
         runStatsTaskLocally("calibrationPredictions", [
             samples,

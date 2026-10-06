@@ -122,6 +122,7 @@ test("calibration stores report endpoint warnings after worker parsing", async (
             calibration_samples: calibrationSamplesFrom([{ revlogId: 123, cardId: 10, actual: 1 }]),
             fsrs_calibration_replay_predictions: new Float64Array([0.9]),
         } as never)
+        stores.calibration_samples.set(get(stores.memorised_stats)!.calibration_samples)
         for (let i = 0; i < 40; i++) await Promise.resolve()
         expect(get(stores.rwkvCalibrationStats)).toMatchObject({
             column: "cache",

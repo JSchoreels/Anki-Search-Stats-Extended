@@ -69,13 +69,25 @@ export function addCalibrationSample(bins: LossBin[], predicted: number, actual:
     return true
 }
 
-export function buildCalibrationBins(samples: CalibrationSamples, predictions: Float64Array) {
+export function buildCalibrationBinCounts(
+    samples: CalibrationSamples,
+    predictions: Float64Array
+): LossBin[] {
     const bins = <LossBin[]>Array(CALIBRATION_BIN_COUNT)
-    const observations: CalibrationBootstrapObservation[] = []
+    for (let i = 0; i < sampleCount(samples); i++) {
+        addCalibrationSample(bins, predictions[i], samples.actual[i])
+    }
+    return bins
+}
 
+export function calibrationConfidenceIntervals(
+    samples: CalibrationSamples,
+    predictions: Float64Array
+): Array<[number, number] | undefined> {
+    const observations: CalibrationBootstrapObservation[] = []
     for (let i = 0; i < sampleCount(samples); i++) {
         const predicted = predictions[i]
-        if (addCalibrationSample(bins, predicted, samples.actual[i])) {
+        if (isValidProbability(predicted) && isValidProbability(samples.actual[i])) {
             observations.push({
                 cardId: samples.cardIds[i],
                 bin: calibrationBinIndex(predicted),
@@ -83,18 +95,24 @@ export function buildCalibrationBins(samples: CalibrationSamples, predictions: F
             })
         }
     }
+    return cardBootstrapConfidenceIntervals(observations, CALIBRATION_BIN_COUNT)
+}
 
-    const confidenceIntervals = cardBootstrapConfidenceIntervals(
-        observations,
-        CALIBRATION_BIN_COUNT
+export function withConfidenceIntervals(
+    bins: LossBin[],
+    intervals: Array<[number, number] | undefined>
+): LossBin[] {
+    return bins.map((bin, i) => ({
+        ...bin,
+        ...(intervals[i] ? { confidenceInterval: intervals[i] } : {}),
+    }))
+}
+
+export function buildCalibrationBins(samples: CalibrationSamples, predictions: Float64Array) {
+    return withConfidenceIntervals(
+        buildCalibrationBinCounts(samples, predictions),
+        calibrationConfidenceIntervals(samples, predictions)
     )
-    for (let bin = 0; bin < bins.length; bin++) {
-        if (bins[bin] && confidenceIntervals[bin]) {
-            bins[bin].confidenceInterval = confidenceIntervals[bin]
-        }
-    }
-
-    return bins
 }
 
 /**
@@ -104,7 +122,7 @@ export function buildCalibrationBins(samples: CalibrationSamples, predictions: F
  * @param revlogs The full list of review logs.
  * @returns A Set containing the IDs of all revlogs for cards deemed outliers.
  */
-function applyOutlierFilter(revlogs: Revlog[]): Set<number> {
+export function applyOutlierFilter(revlogs: Revlog[]): Set<number> {
     // Step 1: Group revlogs by card and identify the first review interval.
     // An "item" here represents a card's second review and its history.
     type SecondReviewItem = {
