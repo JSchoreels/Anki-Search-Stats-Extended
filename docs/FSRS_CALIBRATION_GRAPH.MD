@@ -214,6 +214,9 @@ displayed. A successful unchanged check (`generated: false`) neither reloads the
 FSRS cache nor recalculates calibration bins, UM+ or ROC. Native training progress
 opens only when the check finds missing/stale validation data requiring generation.
 The generation operation rechecks the current collection before invoking the API.
+The worker computes the completion fingerprint before returning to Qt. The Qt
+success callback only publishes that result. Media-server cache-reuse queries run
+outside the service state lock so native progress can read the state while SQL waits.
 
 Existing FSRS and RWKV caches load independently and remain usable during
 preparation. Empty RWKV caches wait for a pending FSRS job before starting
@@ -254,7 +257,11 @@ offsetting edits can collide. Matching records reuse generation; new answers
 alone do not require retraining. Changed settings, edited/removed historical
 reviews or lost cache coverage trigger regeneration. Existing validation caches
 are adopted initially; their original parameter freshness cannot be established
-retrospectively. Metadata remains local and is preserved by runtime sync.
+retrospectively. Before generation, the group record is persisted with `pending:
+true`; successful completion replaces it with a completed record. Pending groups
+always regenerate, including on first-run retries with partially saved validation
+rows. This supports Anki's cancellable batched cache writes and survives cancellation
+or process exit. Metadata remains local and is preserved by runtime sync.
 
 RWKV requests with `ensure_fsrs_alignment` check FSRS validation IDs against valid
 RWKV test-fold predictions and check active FSRS post-optimization coverage.

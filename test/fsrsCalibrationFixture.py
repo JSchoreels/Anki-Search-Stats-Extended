@@ -9,6 +9,7 @@ import re
 import sqlite3
 import sys
 import tempfile
+import threading
 from pathlib import Path
 from types import SimpleNamespace as NS
 
@@ -205,8 +206,19 @@ with tempfile.TemporaryDirectory() as root:
     except RuntimeError:
         pass
     result["failure_records"] = len(list(Path(root).glob("*.json")))
+    result["failure_pending"] = all(
+        record.get("pending")
+        for record in module._load_records(module._records_path(col, root), col.crt).values()
+    )
+    # Simulate cancellation after the backend has committed its first batch.
+    col.cache[100] = ["final_fit", "validation_fold"]
     col.fail = False
     result["retry"] = ensure(col, root)
+    result["retry_calls"] = len(col.calls)
+    result["retry_pending"] = any(
+        record.get("pending")
+        for record in module._load_records(module._records_path(col, root), col.crt).values()
+    )
     col._backend = NS()
     result["unsupported"] = ensure(col, root)
 
@@ -455,10 +467,54 @@ with tempfile.TemporaryDirectory() as root:
     current._backend = NS()
     service.start(mw, [10], root, "cache.fsrs")
     finish_check(current, queued)
-    obsolete.success({"generated": False, "warnings": []})
+    obsolete.success(({"generated": False, "warnings": []}, None))
+    count_before = len(Query.instances)
+    obsolete.success(({"generated": False, "needsGeneration": True, "warnings": []}, None))
+    result["obsolete_generation_queries"] = len(Query.instances) - count_before
     obsolete.error(RuntimeError("obsolete failure"))
     result["obsolete_reuse"] = service.start(mw, [10], root, "cache.fsrs")
     result["obsolete_reuse_queued"] = len(queued)
     result["warning_reuse"] = service.start(mw, [], root, "cache.fsrs")
+
+# Completion callbacks must only publish values already computed on the worker.
+with tempfile.TemporaryDirectory() as root:
+    col = Collection()
+    col._backend = NS()
+    queued = []
+    mw = NS(col=col, taskman=NS(run_on_main=queued.append))
+    service = module.CalibrationService()
+    service.start(mw, [10], root, "cache.fsrs")
+    queued.pop()()
+    query = Query.instances[-1]
+    outcome = query.op(col)
+    original_first = col.db.first
+    def unexpected_sql(sql):
+        raise AssertionError("SQL on completion callback")
+    col.db.first = unexpected_sql
+    query.success(outcome)
+    result["completion_without_sql"] = service.snapshot()["phase"]
+    col.db.first = original_first
+
+    # A cache-reuse query may wait for the backend, but snapshot() must remain
+    # available to Qt while that media-server worker is blocked.
+    entered, release = threading.Event(), threading.Event()
+    def blocked_first(sql):
+        entered.set()
+        assert release.wait(5)
+        return original_first(sql)
+    col.db.first = blocked_first
+    worker = threading.Thread(target=lambda: service.start(mw, [10], root, "cache.fsrs"))
+    worker.start()
+    assert entered.wait(5)
+    snapshot_ready = threading.Event()
+    reader = threading.Thread(target=lambda: (service.snapshot(), snapshot_ready.set()))
+    reader.start()
+    try:
+        result["snapshot_during_sql"] = snapshot_ready.wait(1)
+    finally:
+        release.set()
+        worker.join(5)
+        reader.join(5)
+    assert not worker.is_alive() and not reader.is_alive()
 
 print(json.dumps(result))

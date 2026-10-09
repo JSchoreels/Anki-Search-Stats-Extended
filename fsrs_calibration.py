@@ -222,6 +222,7 @@ def ensure_calibration(
         coverage = _coverage(col, table, cids, history["boundary"])
         if (
             record
+            and not record.get("pending", False)
             and history["signature"] == record["signature"]
             and coverage == record["coverage"]
         ):
@@ -276,6 +277,16 @@ def ensure_calibration(
             len(cids),
         )
         check_cancel()
+        # A cancelled backend operation may have saved only some cache batches.
+        # Persist this before starting, so even a first-run retry cannot adopt
+        # those partial validation rows as an already complete historical cache.
+        records[key] = {
+            **history,
+            "coverage": coverage,
+            "preset_id": settings["preset_id"],
+            "pending": True,
+        }
+        _save_records(path, created, records)
         backend(
             scheduler_pb2.ComputeFsrsReviewRetrievabilityCalibrationRequest(**arguments)
         )
@@ -314,34 +325,45 @@ class CalibrationService:
             return dict(self.state)
 
     def start(self, mw, cids, user_files, table):
+        requested = set(cids)
         with self.lock:
             if self.col is mw.col and self.state["phase"] in {"queued", "running"}:
                 return {
                     **self.state,
-                    "coversRequest": set(cids).issubset(self.requested),
+                    "coversRequest": requested.issubset(self.requested),
                 }
-            if (
+            candidate = self.checked if (
                 self.checked
                 and self.checked["col"] is mw.col
-                and set(cids) <= self.checked["cids"]
-            ):
-                try:
-                    unchanged = (
-                        calibration_fingerprint(mw.col, user_files, table)
-                        == self.checked["fingerprint"]
-                    )
-                except Exception:
-                    unchanged = False
-                if unchanged:
-                    self.state = {
-                        "phase": "ready",
-                        "generated": False,
-                        "warnings": self.checked["warnings"],
-                    }
-                    return {**self.state, "coversRequest": True}
+                and requested <= self.checked["cids"]
+            ) else None
+        # Stats requests run on the media-server worker. Never hold the state
+        # lock during SQL: Qt's progress callback also needs snapshot().
+        unchanged = False
+        if candidate:
+            try:
+                unchanged = (
+                    calibration_fingerprint(candidate["col"], user_files, table)
+                    == candidate["fingerprint"]
+                )
+            except Exception:
+                pass
+        with self.lock:
+            if self.col is mw.col and self.state["phase"] in {"queued", "running"}:
+                return {
+                    **self.state,
+                    "coversRequest": requested.issubset(self.requested),
+                }
+            if unchanged and self.checked is candidate and candidate["col"] is mw.col:
+                self.state = {
+                    "phase": "ready",
+                    "generated": False,
+                    "warnings": candidate["warnings"],
+                }
+                return {**self.state, "coversRequest": True}
             self.checked = None
             self.col = col = mw.col
-            self.requested = set(cids)
+            self.requested = requested
             self.token += 1
             token = self.token
             self.state = {
@@ -366,10 +388,14 @@ class CalibrationService:
                     "Anki profile changed before FSRS calibration started."
                 )
             update(phase="running")
-            return ensure_calibration(
+            result = ensure_calibration(
                 col, cids, user_files, table, progress, cancel.is_set,
                 check_only=check_only,
             )
+            fingerprint = None
+            if not result.get("needsGeneration") and not cancel.is_set():
+                fingerprint = calibration_fingerprint(col, user_files, table)
+            return result, fingerprint
 
         def on_progress(value, ui):
             if ui.user_wants_abort:
@@ -396,23 +422,28 @@ class CalibrationService:
                 ],
             )
 
-        def ready(result):
+        def ready(outcome):
             with self.lock:
                 if self.token == token:
+                    result, fingerprint = outcome
                     self.state.update(phase="ready", **result)
                     if not cancel.is_set():
                         self.checked = {
                             "col": col,
                             "cids": set(cids),
-                            "fingerprint": calibration_fingerprint(col, user_files, table),
+                            "fingerprint": fingerprint,
                             "warnings": list(result.get("warnings", [])),
                         }
 
-        def checked(result):
+        def checked(outcome):
+            with self.lock:
+                if self.token != token:
+                    return
+            result, _fingerprint = outcome
             if result.pop("needsGeneration", False):
                 launch(check_only=False)
             else:
-                ready(result)
+                ready(outcome)
 
         def launch(*, check_only=True):
             from aqt.operations import QueryOp

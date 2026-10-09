@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Keep calibration completion fingerprints off Qt's main thread and allow progress updates while a cache-reuse query waits for the collection.
+- Retry interrupted FSRS generation even when Anki saved some validation batches before cancellation.
+
 - Preserve recent RWKV replay predictions after lazy cache generation, including requests without the alignment flag.
 - Reuse completed RWKV repair attempts only while the cache is unchanged. Cache updates, clears, table replacement and profile changes allow another repair; failed attempts remain retryable.
 - Avoid repeated RWKV replay for training reviews and unchanged unfillable gaps. Report training reviews separately from missing held-out predictions.

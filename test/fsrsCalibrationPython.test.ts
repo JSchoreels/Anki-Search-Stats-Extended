@@ -38,7 +38,10 @@ test("history edits, cache loss and parameter changes require regeneration", () 
 })
 
 test("failure never records completion, retry succeeds, and unavailable APIs produce a warning", () => {
-    expect(results.failure_records).toBe(0)
+    expect(results.failure_records).toBe(1)
+    expect(results.failure_pending).toBe(true)
+    expect(results.retry_calls).toBe(1)
+    expect(results.retry_pending).toBe(false)
     expect(results.retry.generated).toBe(true)
     expect(results.unsupported.warnings.join(" ")).toContain("cannot generate historical FSRS")
 })
@@ -48,6 +51,11 @@ test("background service shares pending work, completes, reuses cache and report
     expect(results.service_calls_after_reopen).toBe(1)
     expect(results.service_failure.phase).toBe("failed")
     expect(results.service_failure.warnings.join(" ")).toContain("cancelled by user")
+})
+
+test("completion does no SQL and progress remains readable during a blocked cache check", () => {
+    expect(results.completion_without_sql).toBe("ready")
+    expect(results.snapshot_during_sql).toBe(true)
 })
 
 test("unchanged cache checks stay non-modal and only actual generation opens training progress", () => {
@@ -112,5 +120,6 @@ test("failed or cancelled work launches again and obsolete runs cannot replace c
     expect(results.service_retry_queued).toBe(1)
     expect(results.obsolete_reuse.phase).toBe("ready")
     expect(results.obsolete_reuse_queued).toBe(0)
+    expect(results.obsolete_generation_queries).toBe(0)
     expect(results.warning_reuse.warnings.join(" ")).toContain("cannot generate historical FSRS")
 })
