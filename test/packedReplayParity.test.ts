@@ -4,6 +4,7 @@ import type { Revlog } from "../src/ts/cardData"
 import type { ResolvedFsrsPreset } from "../src/ts/config"
 import { prepareFsrsReplay } from "../src/ts/fsrsHistory"
 import { packRevlogs, RevlogHistory } from "../src/ts/packedRevlogs"
+import { loadRevlogPages } from "../src/ts/revlogPages"
 import { prepareFsrsReplay as referenceReplay } from "./reference/fsrsReplay"
 import { reviewSnapshot } from "./reviewSnapshot"
 
@@ -33,7 +34,7 @@ const snapshot = (step: {
 
 test.each(["ordered", "shuffled", "duplicate timestamps"])(
     "packed replay matches previous selection, bridges, resets and order for %s history",
-    (order) => {
+    async (order) => {
         const reviews: Revlog[] = []
         for (let cid = 1; cid <= 4; cid++) {
             for (let i = 0; i < 80; i++) {
@@ -55,9 +56,17 @@ test.each(["ordered", "shuffled", "duplicate timestamps"])(
         reviews.sort((a, b) => a.id - b.id)
         if (order === "shuffled") reviews.reverse()
         const expected = referenceReplay(reviews, source).map(snapshot)
-        const history = new RevlogHistory(packRevlogs(reviews))
-        expect(Array.from(prepareFsrsReplay(history, source), snapshot)).toEqual(expected)
-        const selected = Array.from(prepareFsrsReplay(history, source, false), snapshot)
-        expect(selected).toEqual(expected.map((step) => ({ ...step, startingState: undefined })))
+        const columns = ["id", "cid", "ease", "ivl", "lastIvl", "time", "factor", "type"]
+        const native = await loadRevlogPages(async () => ({
+            columns,
+            data: reviews.map((review) => columns.map((field) => review[field])),
+        }))
+        for (const history of [new RevlogHistory(packRevlogs(reviews)), native]) {
+            expect(Array.from(prepareFsrsReplay(history, source), snapshot)).toEqual(expected)
+            const selected = Array.from(prepareFsrsReplay(history, source, false), snapshot)
+            expect(selected).toEqual(
+                expected.map((step) => ({ ...step, startingState: undefined }))
+            )
+        }
     }
 )

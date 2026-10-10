@@ -6,7 +6,11 @@ import {
     type CalibrationBootstrapObservation,
     cardBootstrapConfidenceIntervals,
 } from "./calibrationBootstrap"
-import { type CalibrationSamples, sampleCount } from "./calibrationSamples"
+import {
+    CalibrationSampleBuilder,
+    type CalibrationSamples,
+    sampleCount,
+} from "./calibrationSamples"
 import { type CardData, getFsrsInternalStabilityFromCard, getFsrsS90FromCard } from "./cardData"
 import type { DeckConfig, ResolvedFsrsPreset } from "./config"
 import { DailyTransitions } from "./dailyTransitions"
@@ -371,10 +375,7 @@ export async function getMemorisedDays(
     let difficulty_day_bins: number[][] = []
 
     let calibration = <LossBin[]>Array(CALIBRATION_BIN_COUNT)
-    const calibration_revlog_ids: number[] = []
-    const calibration_card_ids: number[] = []
-    const calibration_actual: number[] = []
-    const calibration_replay_predictions: number[] = []
+    const calibration_samples = new CalibrationSampleBuilder(true)
 
     function forgetting_curve(
         fsrs: FsrsModel,
@@ -657,10 +658,7 @@ export async function getMemorisedDays(
 
                     // Calibration graph
                     if (!excludedRevlogIds.has(revlog.id)) {
-                        calibration_revlog_ids.push(revlog.id)
-                        calibration_card_ids.push(revlog.cid)
-                        calibration_actual.push(y)
-                        calibration_replay_predictions.push(p)
+                        calibration_samples.add(revlog.id, revlog.cid, y, p)
                         addCalibrationSample(calibration, p, y)
                         /* log.push({
                             d: card.difficulty,
@@ -845,6 +843,7 @@ export async function getMemorisedDays(
         return current_card_s90_by_cid.get(card.id)
     })
     const averageIntervalByReps = meanByReps(cards, (card) => card.ivl)
+    const collectedCalibration = calibration_samples.finish()
     console.timeEnd("Calculating memorised days")
     return {
         retrievabilityDays,
@@ -860,12 +859,8 @@ export async function getMemorisedDays(
         leech_probabilities,
         difficulty_days: difficulty_day_bins,
         calibration,
-        calibration_samples: {
-            revlogIds: new Float64Array(calibration_revlog_ids),
-            cardIds: new Float64Array(calibration_card_ids),
-            actual: new Uint8Array(calibration_actual),
-        },
-        fsrs_calibration_replay_predictions: new Float64Array(calibration_replay_predictions),
+        calibration_samples: collectedCalibration.samples,
+        fsrs_calibration_replay_predictions: collectedCalibration.predictions,
         time_by_retrievability_samples,
         time_by_retrievability_samples_exclude_same_day,
         time_by_retrievability_samples_success_only,

@@ -1,7 +1,8 @@
-import { asRevlogHistory, type RevlogInput } from "./packedRevlogs"
+import { asRevlogHistory, copyRevlogValues, type RevlogInput } from "./packedRevlogs"
 import { StatsHistory } from "./statsHistory"
 import type { Tasks } from "./statsTasks"
 import { scheduleStatsTask } from "./statsWorkerQueue"
+import { resultTransfers } from "./workerTransfers"
 export { loadStatsHistory } from "./statsHistory"
 
 type HistoryTask = "revlog" | "memorised" | "calibrationSamples"
@@ -61,10 +62,11 @@ function startStatsTask<K extends keyof Tasks>(
         worker.onmessageerror = () => fail(new Error("Could not read stats worker result"))
         try {
             if (task === "revlog" || task === "memorised" || task === "calibrationSamples") {
-                const reviews = asRevlogHistory(args[0] as RevlogInput).values.slice()
-                worker.postMessage({ task, args: [reviews, ...args.slice(1)], context: SSEother }, [
-                    reviews.buffer,
-                ])
+                const reviews = copyRevlogValues(asRevlogHistory(args[0] as RevlogInput).values)
+                worker.postMessage(
+                    { task, args: [reviews, ...args.slice(1)], context: SSEother },
+                    resultTransfers(reviews)
+                )
             } else if (task === "calibrationPredictions" && typeof args[1] !== "string") {
                 worker.postMessage({ task, args, context: SSEother }, [args[1] as ReadableStream])
             } else {

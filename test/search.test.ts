@@ -272,7 +272,7 @@ test("review history follows page cursors and maps columns without losing rows",
     try {
         const { getRevlogs } = await import("../src/ts/search")
         const history = await getRevlogs([10], 365)
-        expect(history?.values.byteLength).toBe(2 * 8 * 8)
+        expect(history?.byteLength).toBe(2 * 34)
         expect(Array.from(history!, reviewSnapshot)).toEqual([
             {
                 id: 1700000000001,

@@ -10,10 +10,61 @@ export type CalibrationBootstrapObservation = {
     actual: number
 }
 
-type CardBinContribution = {
-    bin: number
-    successes: number
-    count: number
+const CARD_CHUNK_SIZE = 1024
+
+// Dense counters for the small fixed bin set avoid a Map and contribution
+// object per card/bin. This frame releases counters/maps before resampling.
+function collectContributions(
+    observations: Iterable<CalibrationBootstrapObservation>,
+    binCount: number
+) {
+    const cards = new Map<number, number>()
+    const chunks: { successes: Float64Array; counts: Float64Array }[] = []
+    let total = 0
+    for (const observation of observations) {
+        let card = cards.get(observation.cardId)
+        if (card === undefined) {
+            card = cards.size
+            cards.set(observation.cardId, card)
+            if (card % CARD_CHUNK_SIZE === 0)
+                chunks.push({
+                    successes: new Float64Array(CARD_CHUNK_SIZE * binCount),
+                    counts: new Float64Array(CARD_CHUNK_SIZE * binCount),
+                })
+        }
+        // Out-of-range bins contribute no displayed estimate, but the card
+        // still belongs to the resampling population.
+        if (
+            !Number.isInteger(observation.bin) ||
+            observation.bin < 0 ||
+            observation.bin >= binCount
+        )
+            continue
+        const chunk = chunks[Math.floor(card / CARD_CHUNK_SIZE)]
+        const index = (card % CARD_CHUNK_SIZE) * binCount + observation.bin
+        if (chunk.counts[index] === 0) total++
+        chunk.successes[index] += observation.actual
+        chunk.counts[index]++
+    }
+    const cardCount = cards.size
+    const offsets = new Uint32Array(cardCount + 1)
+    const bins = new Uint16Array(total)
+    const successes = new Float64Array(total)
+    const counts = new Float64Array(total)
+    let index = 0
+    for (let card = 0; card < cardCount; card++) {
+        offsets[card] = index
+        const chunk = chunks[Math.floor(card / CARD_CHUNK_SIZE)]
+        const start = (card % CARD_CHUNK_SIZE) * binCount
+        for (let bin = 0; bin < binCount; bin++) {
+            if (!chunk.counts[start + bin]) continue
+            bins[index] = bin
+            successes[index] = chunk.successes[start + bin]
+            counts[index++] = chunk.counts[start + bin]
+        }
+    }
+    offsets[cardCount] = index
+    return { cardCount, offsets, bins, successes, counts }
 }
 
 function seededRandom(seed: number) {
@@ -41,50 +92,12 @@ export function cardBootstrapConfidenceIntervals(
     iterations = CALIBRATION_BOOTSTRAP_ITERATIONS,
     seed = BOOTSTRAP_SEED
 ): Array<[number, number] | undefined> {
-    const contributionsByCard = new Map<number, Map<number, CardBinContribution>>()
-
-    for (const observation of observations) {
-        let contributionsByBin = contributionsByCard.get(observation.cardId)
-        if (!contributionsByBin) {
-            contributionsByBin = new Map()
-            contributionsByCard.set(observation.cardId, contributionsByBin)
-        }
-
-        let contribution = contributionsByBin.get(observation.bin)
-        if (!contribution) {
-            contribution = { bin: observation.bin, successes: 0, count: 0 }
-            contributionsByBin.set(observation.bin, contribution)
-        }
-        contribution.successes += observation.actual
-        contribution.count += 1
-    }
-
-    const cardCount = contributionsByCard.size
+    const { cardCount, offsets, bins, successes, counts } = collectContributions(
+        observations,
+        binCount
+    )
     const estimates = Array.from({ length: binCount }, () => <number[]>[])
-    if (cardCount === 0 || iterations <= 0) {
-        return Array(binCount)
-    }
-
-    let total = 0
-    for (const contributions of contributionsByCard.values()) {
-        total += contributions.size
-    }
-    const offsets = new Uint32Array(cardCount + 1)
-    const bins = new Uint16Array(total)
-    const successes = new Float64Array(total)
-    const counts = new Float64Array(total)
-    let cardIndex = 0
-    let index = 0
-    for (const contributions of contributionsByCard.values()) {
-        offsets[cardIndex++] = index
-        for (const contribution of contributions.values()) {
-            bins[index] = contribution.bin
-            successes[index] = contribution.successes
-            counts[index] = contribution.count
-            index += 1
-        }
-    }
-    offsets[cardCount] = index
+    if (cardCount === 0 || iterations <= 0) return Array(binCount)
 
     const random = seededRandom(seed)
     const iterationSuccesses = new Float64Array(binCount)

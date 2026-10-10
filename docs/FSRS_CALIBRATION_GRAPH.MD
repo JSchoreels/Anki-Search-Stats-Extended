@@ -8,7 +8,7 @@ FSRS cache still requests that replay for the calibration fallback.
 
 ## History ownership
 
-The page loads a `StatsHistory` handle containing the review count and last-forget metadata. Its worker fetches paginated history and keeps the packed numeric rows. Calibration selection, review aggregation and Memorised use that same history through the global task queue. Each history task transfers ownership to a fresh worker after returning, releasing its temporary heap. Cancelling an active graph discards its result immediately and holds the queue until history returns; changing the search or history range terminates the owner immediately. Prediction parsing and comparison remain separate queued workers, with transferred result buffers. This changes no review selection, model formulas, cache schema or endpoint contract.
+The page loads a `StatsHistory` handle containing the review count and last-forget metadata. Its worker fetches paginated history and keeps eight mixed-width numeric columns, following native Anki types: Float64 IDs, signed Int32 intervals, Uint32 time/factor and Uint8 grade/type. All eight buffers transfer together between owners. Legacy Float64 rows remain supported for local calculation callers. Calibration selection, review aggregation and Memorised use that same history through the global task queue. Each history task transfers ownership to a fresh worker after returning, releasing its temporary heap. Cancelling an active graph discards its result immediately and holds the queue until history returns; changing the search or history range terminates the owner immediately. Prediction parsing and comparison remain separate queued workers, with transferred result buffers. This changes no review selection, model formulas, cache schema or endpoint contract.
 
 ## Source Data
 
@@ -85,6 +85,7 @@ The page loads a `StatsHistory` handle containing the review count and last-forg
 
 `getMemorisedDays()` returns calibration samples as three index-aligned typed
 columns: `revlogIds` and `cardIds` (`Float64Array`) and `actual` (`Uint8Array`).
+Selection and Memorised replay construct those columns from bounded numeric chunks, avoiding growing JavaScript sample arrays beside their final typed copies.
 Its `fsrs_calibration_replay_predictions` is a `Float64Array` aligned to those
 samples. Statistics requests FSRS and RWKV prediction streams independently.
 The `calibrationPredictions` worker consumes bounded pages, validates metadata,
@@ -581,7 +582,7 @@ then cards are sampled with replacement for 500 deterministic bootstrap iteratio
 This preserves the dependence between repeated reviews of the same card while
 keeping the graph stable across redraws. Aggregation consumes the numeric sample
 columns directly through a reusable observation; it does not build a retained
-per-review object array. Bootstrap sampling order and seed are unchanged.
+per-review object array. Card/bin contributions use dense numeric chunks and compact per-card ranges. The collection frame releases its map/counters before resampling. First-seen card order, random draws, seed and per-bin floating-point summation order are unchanged.
 
 ## Legacy RWKV Cache Fallback
 

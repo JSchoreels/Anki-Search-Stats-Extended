@@ -140,7 +140,6 @@ function referenceBootstrap(
     })
 }
 
-
 test("flattened card bootstrap exactly matches the original implementation", () => {
     let state = 0x12345678
     const random = () => {
@@ -158,5 +157,20 @@ test("flattened card bootstrap exactly matches the original implementation", () 
     )
     expect(cardBootstrapConfidenceIntervals(observations, 20, 37, 0xabcdef)).toEqual(
         referenceBootstrap(observations, 20, 37, 0xabcdef)
+    )
+})
+
+test("compact counters preserve exact deterministic intervals across card chunks and sparse bins", () => {
+    const observations = Array.from({ length: 2400 }, (_, i) => [
+        { cardId: 1730212469023 + i, bin: (i * 7) % 20, actual: i % 3 ? 1 : 0 },
+        { cardId: 1730212469023 + i, bin: (i * 7 + 3) % 20, actual: 1 },
+        { cardId: 1730212469023 + i, bin: (i * 7) % 20, actual: 0 },
+    ]).flat()
+    observations.reverse()
+    expect(cardBootstrapConfidenceIntervals(observations, 20)).toEqual(
+        referenceBootstrap(observations, 20)
+    )
+    expect(cardBootstrapConfidenceIntervals(observations, 20, 37, 123)).toEqual(
+        referenceBootstrap(observations, 20, 37, 123)
     )
 })

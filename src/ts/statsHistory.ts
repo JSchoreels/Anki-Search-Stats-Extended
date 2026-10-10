@@ -1,3 +1,4 @@
+import { resultTransfers } from "./workerTransfers"
 // A page retains only this handle. The packed history lives in one worker and
 // moves, without copying, to a fresh worker after each calculation to release its heap.
 export class StatsHistory {
@@ -26,7 +27,7 @@ export class StatsHistory {
                     this.worker = this.createWorker()
                     this.worker.postMessage(
                         { action: "adoptHistory", values: data.historyValues },
-                        [data.historyValues.buffer]
+                        resultTransfers(data.historyValues)
                     )
                     worker.terminate()
                 }

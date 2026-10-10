@@ -9,8 +9,12 @@ review ID as an exclusive cursor. Every page retains the same card selection
 and history cutoff. An obsolete search stops fetching further pages. Pages
 are converted and discarded as they arrive, avoiding a single full-history
 JSON response alongside the final history. The history owner worker fetches and
-converts pages to eight numeric columns, then concatenates them into one packed
-`Float64Array`. The page retains only its count and last-forget metadata in a
+converts pages to eight typed columns and concatenates each column once.
+Timestamp review/card IDs use `Float64Array`; grades and review types use
+`Uint8Array`; signed intervals use `Int32Array`; answer time and factor use
+`Uint32Array`. This follows Anki's native field widths, using 34 bytes per review
+instead of 64. Decoding rejects values that would truncate or wrap, rather than
+silently changing a review. The page retains only its count and last-forget metadata in a
 `StatsHistory` handle.
 
 Review-history aggregation, FSRS Memorised history, calibration response parsing,
@@ -18,13 +22,17 @@ prediction alignment, calibration bins/bootstrap, and UM+/ROC/RWKV daily
 calculations run in dedicated worker tasks. The shared `statsTasks.ts` dispatcher
 also serves tests. Calibration selection, review aggregation and Memorised run
 against the same worker-owned history. After each history task returns, including
-a calculator error, the page transfers the same buffer immediately to a fresh
+a calculator error, the page transfers all eight backing buffers immediately to a fresh
 owner worker and terminates the completed worker. This releases temporary
 calculation heaps without retaining or copying the full history on the page.
 Ownership transfers preserve timestamp IDs and signed intervals. Workers wrap
-the buffer without unpacking rows. Local callers can still supply packed history
+the columns without unpacking rows. Local callers can still supply packed history
 or review arrays; those callers retain their input and transfer a task copy. `RevlogHistory` iteration borrows one reusable cursor; callers
-must copy numeric fields if they retain a row. Replay groups retain row indices,
+must copy numeric fields if they retain a row. Legacy Float64 rows are read through
+shared strided views without repacking. Replay groups retain one `Uint32Array`
+of indices with per-card offsets, preserving first-seen card order. Learning
+cycles use views into each group instead of growing/copied arrays. Selection
+runs in a separate frame so grouped indices are released before numerical replay;
 selection/reset flags use bytes, and per-review stability uses a numeric column.
 Replay and cheap calibration selection share the same reset/cutoff/cycle rules;
 only replay computes missing-history starting states. Chronological history
@@ -37,7 +45,7 @@ prevents newly generated caches from starting additional large worker heaps
 while replay is running, at the cost of delaying refreshed graphs.
 Cancelling a queued task removes it before any worker or transfer is created.
 Cancelling an active graph rejects its public promise immediately but retains
-queue ownership until the history worker completes and returns its buffer; the
+queue ownership until the history worker completes and returns its buffers; the
 result is discarded. Changing the search, history range, or closing its store
 subscription aborts the history lifetime and terminates its owner immediately,
 including during loading or calculation. A replacement search starts a new
@@ -45,7 +53,9 @@ owner. Fatal worker/transport errors dispose the owner and release the queue;
 ordinary calculator errors preserve history for a later task.
 Calibration samples use index-aligned `Float64Array` review
 and card IDs, `Uint8Array` outcomes, and `Float64Array` predictions (`NaN` for
-missing values). The page transfers each unread FSRS/RWKV prediction body stream to its queued
+missing values). Selection and Memorised replay collect samples in 16,384-row
+numeric chunks, copy into exact-size result columns once and release the chunks.
+They do not retain three or four growing JavaScript arrays alongside the results. The page transfers each unread FSRS/RWKV prediction body stream to its queued
 worker. The endpoint yields response-wide metadata, pages of at most 25,000
 ordered rows, and a completion marker in one HTTP request. The worker parses
 one page at a time and merges directly into aligned values; it does not retain a
@@ -87,8 +97,11 @@ reuse the same predictions when bands arrive. Only an empty FSRS cache waits for
 Memorised replay, requesting it if needed and aligning its predictions to the
 selected review IDs. Confidence bands consume numeric samples through a borrowed
 observation and aggregate by card/bucket immediately; they do not retain an
-observation object per review. The 500 deterministic bootstrap iterations and
-card-cluster weighting are unchanged.
+observation object per review. Card/bin sums and counts use dense numeric chunks
+for the fixed bin set, followed by compact per-card contribution ranges. The
+collection frame ends before resampling, releasing its card map and counters.
+The 500 deterministic bootstrap iterations, first-seen card/draw order, per-bin
+summation order and card-cluster weighting are unchanged.
 
 Historical FSRS calibration preparation starts automatically once eligible
 history loads. Ordinary Statistics loads read caches immediately while preparation
@@ -267,3 +280,22 @@ Peak RSS falls by 30.8%, saving about 1.06 GiB, and elapsed time falls by 5.7% i
 The main regression has only 50 distinct synthetic probabilities. A separate Qt worker stress case processes 1,518,677 distinct probabilities per model and 79,387 card clusters to exercise ROC threshold allocation. Peak renderer RSS falls from 523,760 to 302,336 KiB (42.3%, about 216 MiB). Both runs return 1,002 plotted points per model and identical SHA-256 hashes of their complete ROC outputs, including AUC, both confidence intervals and the paired difference. The test generates outcomes/probabilities in memory without collection access; its timings of 0.869 and 0.905 seconds do not establish a speed improvement.
 
 Verification passes 436 tests in 60 suites and both frontend bundle/type checks. It includes exact equality of all 83 review/Memorised result fields on 3,443 reviews for 200 cards from the preserved copy, frozen full-threshold ROC point/AUC parity with ties and small endpoint steps, existing independent covariance/native FSRS checks, chunk boundaries and same-day daily-transition resets. Worker tests cover metadata-only loading, detached ownership transfers, calculator/fatal/transport errors, active and queued cancellation, and releasing the queue. Store tests reject obsolete search/range results. An actual Qt worker smoke loads paginated synthetic history, rotates it across repeated calculations, cancels active graphs and searches, replaces the search and confirms every owner is terminated. The Svelte/Qt Time smoke retains exact mean/median, success/same-day, merged-bar and scrolling behavior. No live collection is opened or modified.
+
+
+## Native-width history and compact sample/replay/bootstrap collection
+
+The next four improvements were compared with commit `089adca` in fresh runs of the same retained-result Qt WebEngine 6.11.2 workload. Both runs load 3,785,024 reviews for 79,387 cards, retain review and Memorised results and complete three prediction/comparison/confidence rounds, including refreshes during aggregation and Memorised replay. Predictions are synthetic at the real selected review IDs, checking allocation and integration rather than live-cache coverage or model accuracy.
+
+| Measurement | Before (`089adca`) | After |
+| --- | ---: | ---: |
+| Peak renderer RSS | 2,497,472 KiB (2.38 GiB) | 2,315,456 KiB (2.21 GiB) |
+| Whole sequence | 125.879 s | 116.114 s |
+| Review aggregation | 27.572 s | 25.233 s |
+| Memorised calculation | 49.225 s | 49.383 s |
+| Review-history buffers | 242,241,536 bytes (231.0 MiB) | 128,690,816 bytes (122.7 MiB) |
+| Selected calibration reviews | 1,518,677 | 1,518,677 |
+| Outlier exclusions | 20,788 | 20,788 |
+
+Peak renderer RSS falls by 7.3%, saving about 178 MiB, and whole-sequence time falls by 7.8% in this pair. The history columns use 34 bytes per review instead of 64, a 46.875% reduction saving 108.3 MiB for this snapshot. The overall peak includes sample construction, replay grouping, bootstrap collection and GC, so it cannot be attributed to history alone. Memorised calculation time is effectively unchanged. RSS is sampled every 250 ms with the same renderer PID method and excludes the Python backend. These are single before/after runs; timings and peaks vary with GC and system load, and full replay still requires substantial memory.
+
+Verification passes 448 tests in 61 suites and both frontend bundle/type checks. Independent old/new calculators return exactly equal values for all 83 review/Memorised result fields and calibration selection on the preserved 200-card, 3,443-review subset. Tests cover native signed/unsigned boundaries, invalid truncation/wrapping, exact ID precision, eight detached ownership buffers, legacy inputs, ordered/shuffled/duplicate replay, resets/cutoffs, sample chunk boundaries and deterministic bootstrap parity across card chunks. Actual Qt checks exercise history rotation and graph/search cancellation, all six Time graphs and their controls, and the separate comparison/Memorised Calculate actions. The full preserved-history sequence completes with unchanged selected/outlier counts. No live collection is opened or modified.

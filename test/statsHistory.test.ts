@@ -1,3 +1,4 @@
+import { allocateRevlogColumns } from "../src/ts/packedRevlogs"
 import { StatsHistory, loadStatsHistory } from "../src/ts/statsHistory"
 import { runStatsTask } from "../src/ts/statsWorkerClient"
 
@@ -188,4 +189,23 @@ test("cancelling initial history loading terminates its worker and an already ca
         name: "AbortError",
     })
     expect(FakeWorker.instances).toHaveLength(2)
+})
+
+test("native history rotates all eight mixed-width buffers with no page-owned copy", async () => {
+    const values = allocateRevlogColumns(1)
+    values.id[0] = 1791659375463
+    values.cid[0] = 1730212469023
+    values.ivl[0] = -60
+    values.time[0] = 4294967295
+    const active = task()
+    await flush()
+    FakeWorker.instances[0].send({ result: "columns", historyValues: values })
+    await expect(active).resolves.toBe("columns")
+    expect(Object.values(values).every((column) => column.byteLength === 0)).toBe(true)
+    const next = FakeWorker.instances[1]
+    expect(next.transfers[0]).toHaveLength(8)
+    expect(next.messages[0].values.id[0]).toBe(1791659375463)
+    expect(next.messages[0].values.cid[0]).toBe(1730212469023)
+    expect(next.messages[0].values.ivl[0]).toBe(-60)
+    expect(next.messages[0].values.time[0]).toBe(4294967295)
 })

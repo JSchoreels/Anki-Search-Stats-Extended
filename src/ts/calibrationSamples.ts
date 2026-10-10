@@ -24,6 +24,55 @@ export function calibrationSamplesFrom(list: CalibrationSampleInput[]): Calibrat
     return { revlogIds, cardIds, actual }
 }
 
+// Collect eligible samples in numeric chunks instead of retaining growing JS
+// arrays beside the final columns. Only Memorised replay supplies predictions.
+const SAMPLE_CHUNK_SIZE = 16384
+export class CalibrationSampleBuilder {
+    private chunks: { samples: CalibrationSamples; predictions?: Float64Array }[] = []
+    private length = 0
+    constructor(private withPredictions = false) {}
+
+    add(revlogId: number, cardId: number, actual: number, prediction = NaN) {
+        const offset = this.length % SAMPLE_CHUNK_SIZE
+        if (offset === 0)
+            this.chunks.push({
+                samples: {
+                    revlogIds: new Float64Array(SAMPLE_CHUNK_SIZE),
+                    cardIds: new Float64Array(SAMPLE_CHUNK_SIZE),
+                    actual: new Uint8Array(SAMPLE_CHUNK_SIZE),
+                },
+                predictions: this.withPredictions ? new Float64Array(SAMPLE_CHUNK_SIZE) : undefined,
+            })
+        const chunk = this.chunks[this.chunks.length - 1]
+        chunk.samples.revlogIds[offset] = revlogId
+        chunk.samples.cardIds[offset] = cardId
+        chunk.samples.actual[offset] = actual
+        if (chunk.predictions) chunk.predictions[offset] = prediction
+        this.length++
+    }
+
+    finish() {
+        const samples = {
+            revlogIds: new Float64Array(this.length),
+            cardIds: new Float64Array(this.length),
+            actual: new Uint8Array(this.length),
+        }
+        const predictions = new Float64Array(this.withPredictions ? this.length : 0)
+        let offset = 0
+        for (const chunk of this.chunks) {
+            const count = Math.min(SAMPLE_CHUNK_SIZE, this.length - offset)
+            samples.revlogIds.set(chunk.samples.revlogIds.subarray(0, count), offset)
+            samples.cardIds.set(chunk.samples.cardIds.subarray(0, count), offset)
+            samples.actual.set(chunk.samples.actual.subarray(0, count), offset)
+            if (chunk.predictions) predictions.set(chunk.predictions.subarray(0, count), offset)
+            offset += count
+        }
+        this.chunks = []
+        this.length = 0
+        return { samples, predictions }
+    }
+}
+
 export function sampleCount(samples: CalibrationSamples): number {
     return samples.revlogIds.length
 }

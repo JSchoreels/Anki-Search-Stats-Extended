@@ -1,6 +1,6 @@
 import type { Revlog } from "./cardData"
 import { getFsrs, type FsrsMemoryState, type FsrsModel, type FsrsSource } from "./fsrsModel"
-import { asRevlogHistory, type RevlogInput } from "./packedRevlogs"
+import { asRevlogHistory, type RevlogHistory, type RevlogInput } from "./packedRevlogs"
 
 const clamp = (value: number, low: number, high: number) => Math.min(high, Math.max(low, value))
 
@@ -71,16 +71,22 @@ function isReset(review: Revlog) {
 
 // Port of Anki's reviews_for_fsrs(..., training=false). Cutoff dates are UTC midnight.
 export function selectFsrsHistory(entries: Revlog[], cutoffMs: number) {
-    const selected = selectHistoryIndices(
+    const selected = historyStart(
         entries.map((_, i) => i),
         (i) => entries[i],
         cutoffMs
     )
-    return { reviews: selected.reviews.map((i) => entries[i]), complete: selected.complete }
+    return {
+        reviews:
+            selected.start === undefined
+                ? []
+                : entries.slice(selected.start).filter((e) => e.ease > 0 && !isCram(e)),
+        complete: selected.complete,
+    }
 }
 
-function selectHistoryIndices(
-    indices: number[],
+function historyStart(
+    indices: ArrayLike<number>,
     rowAt: (index: number) => Revlog,
     cutoffMs: number
 ) {
@@ -104,7 +110,7 @@ function selectHistoryIndices(
                 complete = false
                 break
             }
-            return { reviews: [], complete: false }
+            return { start: undefined, complete: false }
         } else if (firstLearning !== undefined) break
     }
     if (
@@ -115,17 +121,36 @@ function selectHistoryIndices(
         firstLearning = undefined
         complete = false
     }
-    const start = firstLearning ?? firstGrade
-    return {
-        reviews:
-            start === undefined
-                ? []
-                : indices.slice(start).filter((index) => {
-                      const e = rowAt(index)
-                      return e.ease > 0 && !isCram(e)
-                  }),
-        complete,
+    return { start: firstLearning ?? firstGrade, complete }
+}
+
+// First-seen cards and their rows retain the legacy traversal order, without
+// one growing JavaScript array per card or copied learning-cycle arrays.
+function groupReviewIndices(reviews: ReturnType<typeof asRevlogHistory>) {
+    const cardOrder = new Map<number, number>()
+    const counts: number[] = []
+    let chronological = true
+    for (let index = 0; index < reviews.length; index++) {
+        const cid = reviews.cid(index)
+        let card = cardOrder.get(cid)
+        if (card === undefined) {
+            card = cardOrder.size
+            cardOrder.set(cid, card)
+            counts.push(0)
+        }
+        counts[card]++
+        if (index > 0 && reviews.id(index) <= reviews.id(index - 1)) chronological = false
     }
+    const offsets = new Uint32Array(counts.length + 1)
+    for (let card = 0; card < counts.length; card++)
+        offsets[card + 1] = offsets[card] + counts[card]
+    const cursors = offsets.slice()
+    const indices = new Uint32Array(reviews.length)
+    for (let index = 0; index < reviews.length; index++) {
+        const card = cardOrder.get(reviews.cid(index))!
+        indices[cursors[card]++] = index
+    }
+    return { cardOrder, offsets, indices, chronological }
 }
 
 export type FsrsReplayStep = {
@@ -137,28 +162,14 @@ export type FsrsReplayStep = {
     reset: boolean
 }
 
-// Preserve earlier learning cycles for historical graphs while applying native initialization
-// independently to each cycle. The final cycle is the one native current-state replay uses.
-export function* prepareFsrsReplay(
-    input: RevlogInput,
+// Grouped row indices and cycle views are temporary selection state. Ending
+// this frame releases them before the numerical replay consumes its flags.
+function replaySelection(
+    reviews: RevlogHistory,
     sourceForCard: (cid: number) => FsrsSource | undefined,
-    includeStartingStates = true
-): Generator<FsrsReplayStep> {
-    const reviews = asRevlogHistory(input)
-    const byCard = new Map<number, number[]>()
-    const cardOrder = new Map<number, number>()
-    let chronological = true
-    for (let index = 0; index < reviews.length; index++) {
-        const cid = reviews.cid(index)
-        let group = byCard.get(cid)
-        if (!group) {
-            group = []
-            byCard.set(cid, group)
-            cardOrder.set(cid, cardOrder.size)
-        }
-        group.push(index)
-        if (index > 0 && reviews.id(index) <= reviews.id(index - 1)) chronological = false
-    }
+    includeStartingStates: boolean
+) {
+    const { cardOrder, offsets, indices, chronological } = groupReviewIndices(reviews)
     const flags = new Uint8Array(reviews.length)
     const models = new Map<number, FsrsModel>()
     const bridges = new Map<number, FsrsMemoryState>()
@@ -175,7 +186,8 @@ export function* prepareFsrsReplay(
         row.index = index
         return row
     }
-    for (const [cid, group] of byCard) {
+    for (const [cid, cardIndex] of cardOrder) {
+        const group = indices.subarray(offsets[cardIndex], offsets[cardIndex + 1])
         const source = sourceForCard(cid)
         if (!source) continue
         const model = getFsrs(source)
@@ -189,38 +201,42 @@ export function* prepareFsrsReplay(
                 ? source.historicalRetention
                 : (source.sm2Retention ?? 0.9)
         if (!chronological) group.sort((a, b) => reviews.id(a) - reviews.id(b))
-        let cycle: number[] = []
+        let cycleStart = 0
         let previousType: number | undefined
-        const flush = () => {
-            const selected = selectHistoryIndices(cycle, rowAt, cutoff)
-            selected.reviews.forEach((index, position) => {
-                flags[index] = position === 0 ? 3 : 1
-                if (includeStartingStates && !selected.complete && position === 0)
-                    bridges.set(index, startingState(model, rowAt(index), retention))
-            })
-            cycle = []
+        const flush = (end: number) => {
+            const cycle = group.subarray(cycleStart, end)
+            const selected = historyStart(cycle, rowAt, cutoff)
+            let first = true
+            if (selected.start !== undefined)
+                for (let position = selected.start; position < cycle.length; position++) {
+                    const index = cycle[position]
+                    row.index = index
+                    if (!(row.ease > 0) || isCram(row)) continue
+                    flags[index] = first ? 3 : 1
+                    if (includeStartingStates && !selected.complete && first)
+                        bridges.set(index, startingState(model, row, retention))
+                    first = false
+                }
+            cycleStart = end
         }
-        for (const index of group) {
+        for (let position = 0; position < group.length; position++) {
+            const index = group[position]
             row.index = index
             if (isReset(row)) {
                 // flush borrows the same cursor; retain the reset timestamp first.
                 const id = row.id
-                flush()
+                flush(position)
+                cycleStart = position + 1
                 if (id >= cutoff) flags[index] = 3
                 previousType = undefined
-            } else {
-                if (row.ease > 0 && !isCram(row)) {
-                    const type = row.type
-                    if (type === 0 && previousType !== undefined && previousType !== 0) flush()
-                    previousType = type
-                }
-                cycle.push(index)
+            } else if (row.ease > 0 && !isCram(row)) {
+                const type = row.type
+                if (type === 0 && previousType !== undefined && previousType !== 0) flush(position)
+                previousType = type
             }
         }
-        flush()
+        flush(group.length)
     }
-    // Release per-card index lists before the long numerical replay.
-    byCard.clear()
     const order = chronological
         ? undefined
         : Uint32Array.from({ length: reviews.length }, (_, i) => i)
@@ -230,6 +246,23 @@ export function* prepareFsrsReplay(
             cardOrder.get(reviews.cid(a))! - cardOrder.get(reviews.cid(b))! ||
             a - b
     )
+    return { flags, models, bridges, order }
+}
+
+// Preserve earlier learning cycles for historical graphs while applying native initialization
+// independently to each cycle. The final cycle is the one native current-state replay uses.
+export function* prepareFsrsReplay(
+    input: RevlogInput,
+    sourceForCard: (cid: number) => FsrsSource | undefined,
+    includeStartingStates = true
+): Generator<FsrsReplayStep> {
+    const reviews = asRevlogHistory(input)
+    const { flags, models, bridges, order } = replaySelection(
+        reviews,
+        sourceForCard,
+        includeStartingStates
+    )
+    const row = reviews.cursor()
     // The step and row are borrowed, consumed immediately by the calculation loops.
     const step = {
         review: row,

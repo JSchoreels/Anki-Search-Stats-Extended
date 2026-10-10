@@ -1,4 +1,9 @@
-import { RevlogHistory } from "./packedRevlogs"
+import {
+    allocateRevlogColumns,
+    REVLOG_FIELDS,
+    RevlogHistory,
+    type RevlogColumns,
+} from "./packedRevlogs"
 
 export class MissingRevlogColumnsError extends Error {
     constructor() {
@@ -16,7 +21,7 @@ export async function loadRevlogPages(
     fetchPage: (afterId: number) => Promise<RevlogPage>,
     signal?: AbortSignal
 ): Promise<RevlogHistory> {
-    const pages: Float64Array[] = []
+    const pages: RevlogColumns[] = []
     let total = 0
     let after_id = 0
     do {
@@ -28,21 +33,24 @@ export async function loadRevlogPages(
         }
         const idx: Record<string, number> = {}
         response.columns.forEach((col, i) => (idx[col] = i))
-        const fields = ["id", "cid", "ease", "ivl", "lastIvl", "time", "factor", "type"]
-        const values = new Float64Array(response.data.length * 8)
+        const values = allocateRevlogColumns(response.data.length)
         for (let i = 0; i < response.data.length; i++) {
-            for (let field = 0; field < fields.length; field++)
-                values[i * 8 + field] = response.data[i][idx[fields[field]]]
+            for (const field of REVLOG_FIELDS) {
+                const value = response.data[i][idx[field]]
+                values[field][i] = value
+                if (values[field][i] !== value)
+                    throw new Error(`Invalid review-history ${field}: ${value}`)
+            }
         }
         pages.push(values)
-        total += values.length
+        total += response.data.length
         after_id = response.next_after_id ?? 0
     } while (after_id)
-    const values = new Float64Array(total)
+    const values = allocateRevlogColumns(total)
     let offset = 0
     for (const page of pages) {
-        values.set(page, offset)
-        offset += page.length
+        for (const field of REVLOG_FIELDS) values[field].set(page[field], offset)
+        offset += page.id.length
     }
     return new RevlogHistory(values)
 }

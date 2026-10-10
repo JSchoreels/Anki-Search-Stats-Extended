@@ -1,4 +1,4 @@
-import type { CalibrationSamples } from "./calibrationSamples"
+import { CalibrationSampleBuilder, type CalibrationSamples } from "./calibrationSamples"
 import type { DeckConfig, ResolvedFsrsPreset } from "./config"
 import { prepareFsrsReplay } from "./fsrsHistory"
 import { elapsedFsrsDays, type FsrsSource } from "./fsrsModel"
@@ -26,9 +26,7 @@ export function selectCalibrationSamples(
     }
     const snapshotToday = dayFromMs(snapshotNow)
     const lastReview = new Map<number, number>()
-    const ids: number[] = [],
-        cids: number[] = [],
-        actual: number[] = []
+    const samples = new CalibrationSampleBuilder()
     for (const { review, model, reset } of prepareFsrsReplay(revlogs, source, false)) {
         if (dayFromMs(review.id) > snapshotToday || review.id > snapshotNow) continue
         if (reset) lastReview.delete(review.cid)
@@ -40,15 +38,9 @@ export function selectCalibrationSamples(
             (lastForget[review.cid] ?? 0) < review.id &&
             !excluded.has(review.id)
         ) {
-            ids.push(review.id)
-            cids.push(review.cid)
-            actual.push(review.ease > 1 ? 1 : 0)
+            samples.add(review.id, review.cid, review.ease > 1 ? 1 : 0)
         }
         lastReview.set(review.cid, review.id)
     }
-    return {
-        revlogIds: new Float64Array(ids),
-        cardIds: new Float64Array(cids),
-        actual: new Uint8Array(actual),
-    }
+    return samples.finish().samples
 }
