@@ -19,20 +19,61 @@ export function packRevlogs(reviews: Revlog[]): Float64Array {
     return values
 }
 
-export function unpackRevlogs(values: Float64Array): Revlog[] {
-    const reviews = new Array<Revlog>(values.length / 8)
-    for (let i = 0; i < reviews.length; i++) {
-        const offset = i * 8
-        reviews[i] = {
-            id: values[offset],
-            cid: values[offset + 1],
-            ease: values[offset + 2] as Revlog["ease"],
-            ivl: values[offset + 3],
-            lastIvl: values[offset + 4],
-            time: values[offset + 5],
-            factor: values[offset + 6],
-            type: values[offset + 7],
-        }
+// Rows are borrowed views: copy their numeric fields before retaining one.
+export class RevlogCursor implements Revlog {
+    constructor(
+        private values: Float64Array,
+        public index = 0
+    ) {}
+    get id() {
+        return this.values[this.index * 8]
     }
-    return reviews
+    get cid() {
+        return this.values[this.index * 8 + 1]
+    }
+    get ease() {
+        return this.values[this.index * 8 + 2] as Revlog["ease"]
+    }
+    get ivl() {
+        return this.values[this.index * 8 + 3]
+    }
+    get lastIvl() {
+        return this.values[this.index * 8 + 4]
+    }
+    get time() {
+        return this.values[this.index * 8 + 5]
+    }
+    get factor() {
+        return this.values[this.index * 8 + 6]
+    }
+    get type() {
+        return this.values[this.index * 8 + 7]
+    }
+}
+
+export class RevlogHistory implements Iterable<Revlog> {
+    constructor(public readonly values: Float64Array) {}
+    get length() {
+        return this.values.length / 8
+    }
+    id(index: number) {
+        return this.values[index * 8]
+    }
+    cid(index: number) {
+        return this.values[index * 8 + 1]
+    }
+    cursor(index = 0) {
+        return new RevlogCursor(this.values, index)
+    }
+    *[Symbol.iterator]() {
+        const row = this.cursor()
+        for (row.index = 0; row.index < this.length; row.index++) yield row
+    }
+}
+
+// Object arrays remain supported by the calculation helpers; loaded history is packed.
+export type RevlogInput = RevlogHistory | Revlog[] | Float64Array
+export function asRevlogHistory(reviews: RevlogInput): RevlogHistory {
+    if (reviews instanceof RevlogHistory) return reviews
+    return new RevlogHistory(reviews instanceof Float64Array ? reviews : packRevlogs(reviews))
 }

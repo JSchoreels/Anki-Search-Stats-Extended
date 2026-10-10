@@ -416,3 +416,40 @@ test("empty FSRS cache waits for replay and aligns predictions by review ID", as
         global.fetch = originalFetch
     }
 })
+
+test("an obsolete empty-cache response cannot request Memorised replay", async () => {
+    const originalFetch = global.fetch
+    let finishCache!: () => void
+    global.fetch = jest.fn(async (url: string) => {
+        if (url.endsWith("startFsrsCalibration"))
+            return response({ phase: "ready", generated: false, warnings: [] })
+        if (url.endsWith("fsrsReviewRetrievability"))
+            return new Promise((resolve) => {
+                finishCache = () => resolve(response({ data: [] }))
+            })
+        if (url.endsWith("rwkvReviewRetrievability")) return response({ data: [[100, 0.8]] })
+        return response({ columns: [], data: [], presets: [], cards: {}, retrievability: {} })
+    }) as typeof fetch
+    jest.doMock("../src/ts/statsWorkerClient", () => ({
+        runStatsTask: async (task: keyof import("../src/ts/statsTasks").Tasks, args: never) => {
+            const { runStatsTaskLocally } = await import("../src/ts/statsTasks")
+            return runStatsTaskLocally(task, args)
+        },
+    }))
+    try {
+        const stores = await import("../src/ts/stores")
+        stores.cids.set([10])
+        await flush()
+        stores.calibration_samples.set(
+            calibrationSamplesFrom([{ cardId: 10, revlogId: 100, actual: 1 }])
+        )
+        await flush()
+        stores.cids.set(null)
+        finishCache()
+        await flush()
+        expect(get(stores.showMemorisedStats)).toBe(false)
+        expect(get(stores.fsrsCalibrationStats)).toBeNull()
+    } finally {
+        global.fetch = originalFetch
+    }
+})

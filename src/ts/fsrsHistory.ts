@@ -1,5 +1,6 @@
 import type { Revlog } from "./cardData"
 import { getFsrs, type FsrsMemoryState, type FsrsModel, type FsrsSource } from "./fsrsModel"
+import { asRevlogHistory, type RevlogInput } from "./packedRevlogs"
 
 const clamp = (value: number, low: number, high: number) => Math.min(high, Math.max(low, value))
 
@@ -70,11 +71,24 @@ function isReset(review: Revlog) {
 
 // Port of Anki's reviews_for_fsrs(..., training=false). Cutoff dates are UTC midnight.
 export function selectFsrsHistory(entries: Revlog[], cutoffMs: number) {
+    const selected = selectHistoryIndices(
+        entries.map((_, i) => i),
+        (i) => entries[i],
+        cutoffMs
+    )
+    return { reviews: selected.reviews.map((i) => entries[i]), complete: selected.complete }
+}
+
+function selectHistoryIndices(
+    indices: number[],
+    rowAt: (index: number) => Revlog,
+    cutoffMs: number
+) {
     let firstLearning: number | undefined
     let firstGrade: number | undefined
     let complete = false
-    for (let i = entries.length - 1; i >= 0; i--) {
-        const entry = entries[i]
+    for (let i = indices.length - 1; i >= 0; i--) {
+        const entry = rowAt(indices[i])
         if (isCram(entry)) continue
         if (entry.ease > 0 && entry.id > cutoffMs && (entry.ivl >= 1 || entry.ivl <= -86400))
             firstGrade = i
@@ -95,8 +109,8 @@ export function selectFsrsHistory(entries: Revlog[], cutoffMs: number) {
     }
     if (
         firstLearning !== undefined &&
-        entries[firstLearning].id < cutoffMs &&
-        firstLearning < entries.length - 1
+        rowAt(indices[firstLearning]).id < cutoffMs &&
+        firstLearning < indices.length - 1
     ) {
         firstLearning = undefined
         complete = false
@@ -104,13 +118,19 @@ export function selectFsrsHistory(entries: Revlog[], cutoffMs: number) {
     const start = firstLearning ?? firstGrade
     return {
         reviews:
-            start === undefined ? [] : entries.slice(start).filter((e) => e.ease > 0 && !isCram(e)),
+            start === undefined
+                ? []
+                : indices.slice(start).filter((index) => {
+                      const e = rowAt(index)
+                      return e.ease > 0 && !isCram(e)
+                  }),
         complete,
     }
 }
 
 export type FsrsReplayStep = {
     review: Revlog
+    index: number
     model: FsrsModel
     // Present only when the first retained grade is already represented by an SM-2 bridge.
     startingState?: FsrsMemoryState
@@ -119,18 +139,29 @@ export type FsrsReplayStep = {
 
 // Preserve earlier learning cycles for historical graphs while applying native initialization
 // independently to each cycle. The final cycle is the one native current-state replay uses.
-export function prepareFsrsReplay(
-    reviews: Revlog[],
-    sourceForCard: (cid: number) => FsrsSource | undefined
-): FsrsReplayStep[] {
-    const byCard = new Map<number, Revlog[]>()
-    for (const review of reviews) {
-        const group = byCard.get(review.cid) ?? []
-        group.push(review)
-        byCard.set(review.cid, group)
+export function* prepareFsrsReplay(
+    input: RevlogInput,
+    sourceForCard: (cid: number) => FsrsSource | undefined,
+    includeStartingStates = true
+): Generator<FsrsReplayStep> {
+    const reviews = asRevlogHistory(input)
+    const byCard = new Map<number, number[]>()
+    const cardOrder = new Map<number, number>()
+    let chronological = true
+    for (let index = 0; index < reviews.length; index++) {
+        const cid = reviews.cid(index)
+        let group = byCard.get(cid)
+        if (!group) {
+            group = []
+            byCard.set(cid, group)
+            cardOrder.set(cid, cardOrder.size)
+        }
+        group.push(index)
+        if (index > 0 && reviews.id(index) <= reviews.id(index - 1)) chronological = false
     }
-    const steps: FsrsReplayStep[] = []
-    // Same bridge inputs produce the same state; keep this cache scoped to one replay.
+    const flags = new Uint8Array(reviews.length)
+    const models = new Map<number, FsrsModel>()
+    const bridges = new Map<number, FsrsMemoryState>()
     const startingStates = new Map<FsrsModel, Map<string, FsrsMemoryState>>()
     const startingState = (model: FsrsModel, review: Revlog, retention: number) => {
         const states = startingStates.get(model) ?? new Map<string, FsrsMemoryState>()
@@ -139,10 +170,16 @@ export function prepareFsrsReplay(
         if (!states.has(key)) states.set(key, stateFromIncompleteHistory(model, review, retention))
         return states.get(key)!
     }
+    const row = reviews.cursor()
+    const rowAt = (index: number) => {
+        row.index = index
+        return row
+    }
     for (const [cid, group] of byCard) {
         const source = sourceForCard(cid)
         if (!source) continue
         const model = getFsrs(source)
+        models.set(cid, model)
         const cutoff = source.ignoreRevlogsBeforeDate
             ? Date.parse(`${source.ignoreRevlogsBeforeDate}T00:00:00Z`)
             : 0
@@ -151,38 +188,64 @@ export function prepareFsrsReplay(
             "historicalRetention" in source
                 ? source.historicalRetention
                 : (source.sm2Retention ?? 0.9)
-        const sorted = [...group].sort((a, b) => a.id - b.id)
-        let cycle: Revlog[] = []
+        if (!chronological) group.sort((a, b) => reviews.id(a) - reviews.id(b))
+        let cycle: number[] = []
         let previousType: number | undefined
         const flush = () => {
-            const selected = selectFsrsHistory(cycle, cutoff)
-            selected.reviews.forEach((review, index) =>
-                steps.push({
-                    review,
-                    model,
-                    reset: index === 0,
-                    ...(!selected.complete && index === 0
-                        ? { startingState: startingState(model, review, retention) }
-                        : {}),
-                })
-            )
+            const selected = selectHistoryIndices(cycle, rowAt, cutoff)
+            selected.reviews.forEach((index, position) => {
+                flags[index] = position === 0 ? 3 : 1
+                if (includeStartingStates && !selected.complete && position === 0)
+                    bridges.set(index, startingState(model, rowAt(index), retention))
+            })
             cycle = []
         }
-        for (const review of sorted) {
-            if (isReset(review)) {
+        for (const index of group) {
+            row.index = index
+            if (isReset(row)) {
+                // flush borrows the same cursor; retain the reset timestamp first.
+                const id = row.id
                 flush()
-                if (review.id >= cutoff) steps.push({ review, model, reset: true })
+                if (id >= cutoff) flags[index] = 3
                 previousType = undefined
             } else {
-                if (review.ease > 0 && !isCram(review)) {
-                    if (review.type === 0 && previousType !== undefined && previousType !== 0)
-                        flush()
-                    previousType = review.type
+                if (row.ease > 0 && !isCram(row)) {
+                    const type = row.type
+                    if (type === 0 && previousType !== undefined && previousType !== 0) flush()
+                    previousType = type
                 }
-                cycle.push(review)
+                cycle.push(index)
             }
         }
         flush()
     }
-    return steps.sort((a, b) => a.review.id - b.review.id)
+    // Release per-card index lists before the long numerical replay.
+    byCard.clear()
+    const order = chronological
+        ? undefined
+        : Uint32Array.from({ length: reviews.length }, (_, i) => i)
+    order?.sort(
+        (a, b) =>
+            reviews.id(a) - reviews.id(b) ||
+            cardOrder.get(reviews.cid(a))! - cardOrder.get(reviews.cid(b))! ||
+            a - b
+    )
+    // The step and row are borrowed, consumed immediately by the calculation loops.
+    const step = {
+        review: row,
+        index: 0,
+        model: undefined as unknown as FsrsModel,
+        reset: false,
+        startingState: undefined as FsrsMemoryState | undefined,
+    }
+    for (let position = 0; position < reviews.length; position++) {
+        const index = order ? order[position] : position
+        if (!flags[index]) continue
+        row.index = index
+        step.index = index
+        step.model = models.get(row.cid)!
+        step.reset = !!(flags[index] & 2)
+        step.startingState = bridges.get(index)
+        yield step
+    }
 }

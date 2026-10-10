@@ -14,6 +14,7 @@ import {
     type buildCalibrationBins,
     type getMemorisedDays,
 } from "./MemorisedBar"
+import type { RevlogHistory } from "./packedRevlogs"
 import type { GraphsRequest, GraphsResponse } from "./proto/anki/stats_pb"
 import { lastForgetByCard, today, type calculateRevlogStats } from "./revlogGraphs"
 import {
@@ -30,7 +31,6 @@ import {
     startRwkvMemorisedHistory,
     type CardData,
     type FsrsCalibrationProgress,
-    type Revlog,
 } from "./search"
 import type { Tasks } from "./statsTasks"
 import { runStatsTask } from "./statsWorkerClient"
@@ -60,6 +60,14 @@ export let categoryOrder = writable([
 ])
 export let showRevlogStats = writable(false)
 export let showFsrsStats = writable(SSEconfig.autoMemorisedStats)
+export const showMemorisedStats = writable(SSEconfig.autoMemorisedStats ?? false)
+
+// Comparison/calibration loading does not request the separate historical replay.
+export function requestFsrsStats(includeMemorised = false) {
+    if (includeMemorised) showMemorisedStats.set(true)
+    showRevlogStats.set(true)
+    showFsrsStats.set(true)
+}
 
 function configSubscribe<T>(store: Readable<T>, run: (value: T) => void) {
     let first = true
@@ -88,6 +96,7 @@ configSubscribe(categoryOrder, ($categoryOrder) => saveConfigValue("categoryOrde
 configSubscribe(autoMemorisedStats, ($autoMemorisedStats) => {
     saveConfigValue("autoMemorisedStats", $autoMemorisedStats)
     if ($autoMemorisedStats || !get(showRevlogStats)) {
+        showMemorisedStats.set($autoMemorisedStats)
         showFsrsStats.set($autoMemorisedStats)
     }
 })
@@ -158,7 +167,7 @@ export const fsrsPresetData = derived(
     }
 )
 
-export let revlogs: Readable<Revlog[] | null> = derived(
+export let revlogs: Readable<RevlogHistory | null> = derived(
     [cids, showRevlogStats, searchLimit],
     ([$cids, $showRevlogStats, $searchLimit], set) => {
         set(null)
@@ -194,13 +203,13 @@ export let last_forget = derived([revlogs], ([$revlogs]) =>
 )
 export let memorised_stats = writable<Awaited<ReturnType<typeof getMemorisedDays>> | null>()
 derived(
-    [card_data, revlogs, showFsrsStats, last_forget, fsrsPresetData],
+    [card_data, revlogs, showFsrsStats, last_forget, fsrsPresetData, showMemorisedStats],
     (
-        [$card_data, $revlogs, $showFsrsStats, $last_forget, $presets],
+        [$card_data, $revlogs, $showFsrsStats, $last_forget, $presets, $requested],
         set: (value: Awaited<ReturnType<typeof getMemorisedDays>> | null) => void
     ) => {
         set(null)
-        if ($revlogs && $card_data && $showFsrsStats && $last_forget && $presets) {
+        if ($requested && $revlogs && $card_data && $showFsrsStats && $last_forget && $presets) {
             return latestResult(set, async (signal) => {
                 return runStatsTask(
                     "memorised",
@@ -254,6 +263,7 @@ function waitForMemorised(
             reject(new DOMException("Aborted", "AbortError"))
         }
         if (signal.aborted) return abort()
+        showMemorisedStats.set(true)
         signal.addEventListener("abort", abort, { once: true })
         const stop = memorised_stats.subscribe((value) => {
             if (value) {
@@ -296,11 +306,11 @@ function anchoredRwkvDays(values: number[] | undefined, firstDay: number | null 
 }
 
 derived(
-    [memorisedMode, cids, showFsrsStats],
-    ([$memorisedMode, $cids, $showFsrsStats], set: (value: RwkvMemorisedStats | null) => void) => {
+    [memorisedMode, cids, showMemorisedStats],
+    ([$memorisedMode, $cids, $requested], set: (value: RwkvMemorisedStats | null) => void) => {
         const generation = ++rwkvMemorisedGeneration
         set(null)
-        if ($memorisedMode === "fsrs" || !$cids || !$showFsrsStats) {
+        if ($memorisedMode === "fsrs" || !$cids || !$requested) {
             return
         }
 

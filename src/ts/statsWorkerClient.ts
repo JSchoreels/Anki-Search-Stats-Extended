@@ -1,5 +1,4 @@
-import type { Revlog } from "./cardData"
-import { packRevlogs } from "./packedRevlogs"
+import { asRevlogHistory, type RevlogInput } from "./packedRevlogs"
 import type { Tasks } from "./statsTasks"
 import { scheduleStatsTask } from "./statsWorkerQueue"
 
@@ -42,7 +41,7 @@ function startStatsTask<K extends keyof Tasks>(
         worker.onmessageerror = () => fail(new Error("Could not read stats worker result"))
         try {
             if (task === "revlog" || task === "memorised" || task === "calibrationSamples") {
-                const reviews = packRevlogs(args[0] as Revlog[])
+                const reviews = asRevlogHistory(args[0] as RevlogInput).values.slice()
                 worker.postMessage({ task, args: [reviews, ...args.slice(1)], context: SSEother }, [
                     reviews.buffer,
                 ])

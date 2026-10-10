@@ -1,6 +1,7 @@
 import { EMPTY_CALIBRATION_SAMPLES } from "../src/ts/calibrationSamples"
 import { intervalHistogram, type CardData } from "../src/ts/cardData"
 import { latestResult } from "../src/ts/latestResult"
+import { packRevlogs, RevlogHistory } from "../src/ts/packedRevlogs"
 import { runStatsTask } from "../src/ts/statsWorkerClient"
 
 test("intervals include review and relearning cards and only explicitly omit suspended cards", () => {
@@ -101,7 +102,7 @@ test.each(["revlog", "memorised", "calibrationSamples"] as const)(
             factor: 2500,
             type: 0,
         }
-        const reviews = [review]
+        const reviews = new RevlogHistory(packRevlogs([review] as never))
         try {
             const result = runStatsTask(task, [reviews] as never, new AbortController().signal)
             await Promise.resolve()
@@ -112,7 +113,10 @@ test.each(["revlog", "memorised", "calibrationSamples"] as const)(
                 1700000000001, 1700000000000, 3, -60, 10, 1000, 2500, 0,
             ])
             expect(transfers).toEqual([message.args[0].buffer])
-            expect(reviews).toEqual([review])
+            const delivered = structuredClone(message.args[0], { transfer: transfers })
+            expect(reviews.values.byteLength).toBe(64)
+            expect(delivered[0]).toBe(review.id)
+            expect(reviews.values[0]).toBe(review.id)
             worker.onmessage({ data: { result: "finished" } })
             expect(await result).toBe("finished")
             for (let i = 0; i < 5; i++) await Promise.resolve()

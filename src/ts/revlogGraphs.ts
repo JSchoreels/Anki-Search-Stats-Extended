@@ -3,7 +3,7 @@ import { FSRS5_DEFAULT_DECAY } from "ts-fsrs"
 import { ankiDayFromMs, ankiDayToMs } from "./ankiDay"
 import type { BarChart, BarDatum } from "./bar"
 import { totalCalc } from "./barHelpers"
-import { getCardDecay, type CardData, type Revlog } from "./cardData"
+import { getCardDecay, type CardData } from "./cardData"
 import type { ResolvedFsrsPreset } from "./config"
 import {
     averageDecay,
@@ -14,6 +14,7 @@ import { prepareFsrsReplay } from "./fsrsHistory"
 import { elapsedFsrsDays, type FsrsMemoryState } from "./fsrsModel"
 import { selectResolvedFsrsPresetParams, selectTsFsrsParams } from "./fsrsParams"
 import { i18n } from "./i18n"
+import { asRevlogHistory, type RevlogHistory, type RevlogInput } from "./packedRevlogs"
 type ReplayCard = FsrsMemoryState & { last_review?: Date }
 
 const rollover = SSEother.rollover ?? 0
@@ -105,7 +106,7 @@ function forgettingCurveModelsForCards(
 }
 
 type FSRSReplayStats = {
-    stabilityByRevlog: Map<Revlog, number>
+    stabilityByRevlog: Float64Array
     timeByRetrievabilitySamples: number[][]
     timeByStabilitySamples: number[][]
     gradeByRetrievability: number[][]
@@ -119,11 +120,11 @@ type FSRSReplayStats = {
 }
 
 function stabilityAfterReviewsByRevlog(
-    revlogData: Revlog[],
+    revlogData: RevlogHistory,
     id_card_data: Record<number, CardData>,
     presets: Record<number, ResolvedFsrsPreset>
 ): FSRSReplayStats {
-    const stabilityByRevlog = new Map<Revlog, number>()
+    const stabilityByRevlog = new Float64Array(revlogData.length).fill(NaN)
     const timeByRetrievabilitySamples: number[][] = []
     const timeByStabilitySamples: number[][] = []
     const gradeByRetrievability: number[][] = []
@@ -169,7 +170,7 @@ function stabilityAfterReviewsByRevlog(
             presets[cid] ?? (card ? deckConfigs[deckConfigIds[card.odid || card.did]] : undefined)
         )
     }
-    for (const { review: revlog, model: fsrs, startingState, reset } of prepareFsrsReplay(
+    for (const { review: revlog, model: fsrs, startingState, reset, index } of prepareFsrsReplay(
         revlogData,
         sourceForCard
     )) {
@@ -239,7 +240,7 @@ function stabilityAfterReviewsByRevlog(
         const newState = startingState ?? fsrs.nextState(memoryState, elapsed, revlog.ease)
         card = { ...newState, last_review: now }
         fsrsCards[revlog.cid] = card
-        stabilityByRevlog.set(revlog, card.stability)
+        stabilityByRevlog[index] = card.stability
     }
 
     return {
@@ -291,13 +292,14 @@ export function IDify<T extends { id: number }>(array: T[]) {
 }
 
 export function calculateRevlogStats(
-    revlogData: Revlog[],
+    input: RevlogInput,
     cardData: CardData[],
     end: number = today,
     presets: Record<number, ResolvedFsrsPreset> = {}
 ) {
     console.time("revlog stats")
     let id_card_data = IDify(cardData)
+    const revlogData = asRevlogHistory(input)
     const fsrsReplayStats = stabilityAfterReviewsByRevlog(revlogData, id_card_data, presets)
     const stability_after_review = fsrsReplayStats.stabilityByRevlog
 
@@ -348,7 +350,7 @@ export function calculateRevlogStats(
     let introduced = new Set<number>()
     let reintroduced = new Set<number>()
     let card_introduction_day: Record<number, number> = {}
-    let last_cids: Record<number, Revlog> = {}
+    let last_cids: Record<number, number> = {}
 
     let last_siblings: (undefined | SiblingReview)[] = []
     let sibling_time_ease: number[][] = emptyArray(initialEase())
@@ -565,31 +567,36 @@ export function calculateRevlogStats(
         }
     }
 
-    // "reduceRight" Used here to iterate backwards, never returns true
-    revlogData.reduceRight((_p, revlog) => {
+    const revlog = revlogData.cursor()
+    for (revlog.index = revlogData.length - 1; revlog.index >= 0; revlog.index--) {
         const day = dayFromMs(revlog.id)
         const card = id_card_data[revlog.cid]
 
         const next_review = last_cids[revlog.cid]
         // If the card is still learning, use the card data
-        let ivl = next_review ? revlog.ivl : card.type != 3 && card.type != 1 ? card.ivl : 0
+        let ivl =
+            next_review !== undefined ? revlog.ivl : card.type != 3 && card.type != 1 ? card.ivl : 0
         // Ignore "forgets"
-        if ((revlog.factor == 0 && revlog.type == 4) || (!next_review && card.queue == 0)) {
-            last_cids[revlog.cid] = revlog
-            return undefined
+        if (
+            (revlog.factor == 0 && revlog.type == 4) ||
+            (next_review === undefined && card.queue == 0)
+        ) {
+            last_cids[revlog.cid] = revlog.id
+            continue
         }
         ivl = ivl > 0 ? ivl : 0
 
-        const isCurrentSuspendedSegment = !next_review && card.queue == -1
+        const isCurrentSuspendedSegment = next_review === undefined && card.queue == -1
         const activeIvl = isCurrentSuspendedSegment ? (card.ivl > 0 ? card.ivl : 0) : ivl
-        const segmentStability = stability_after_review.get(revlog)
+        const stability = stability_after_review[revlog.index]
+        const segmentStability = Number.isFinite(stability) ? stability : undefined
 
         // If the card is suspended
         if (isCurrentSuspendedSegment) {
             ivl = -1
         }
 
-        let to = next_review ? dayFromMs(next_review.id) : end + 1
+        let to = next_review !== undefined ? dayFromMs(next_review) : end + 1
 
         for (let intervalDay = day; intervalDay < to; intervalDay++) {
             intervals[intervalDay] = intervals[intervalDay] ?? []
@@ -603,15 +610,13 @@ export function calculateRevlogStats(
                 segmentStability
             )
 
-            if (ivl == 0 && (revlog.type == 0 || (!next_review && card.type == 1))) {
+            if (ivl == 0 && (revlog.type == 0 || (next_review === undefined && card.type == 1))) {
                 intervals[intervalDay][-2] = (intervals[intervalDay][-2] ?? 0) + 1
             }
         }
 
-        last_cids[revlog.cid] = revlog
-
-        return undefined
-    }, undefined)
+        last_cids[revlog.cid] = revlog.id
+    }
 
     const burden = Array.from(intervals).map((v) => {
         if (!v) {
@@ -755,7 +760,8 @@ export function easeBarChart(
     }
 }
 
-export function lastForgetByCard(revlogs: Revlog[]): number[] {
+export function lastForgetByCard(input: RevlogInput): number[] {
+    const revlogs = asRevlogHistory(input)
     const result: number[] = []
     for (const revlog of revlogs) {
         if (revlog.factor == 0 && revlog.type == 4) result[revlog.cid] = revlog.id

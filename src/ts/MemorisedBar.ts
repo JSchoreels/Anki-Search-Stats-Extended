@@ -7,12 +7,7 @@ import {
     cardBootstrapConfidenceIntervals,
 } from "./calibrationBootstrap"
 import { type CalibrationSamples, sampleCount } from "./calibrationSamples"
-import {
-    type CardData,
-    getFsrsInternalStabilityFromCard,
-    getFsrsS90FromCard,
-    type Revlog,
-} from "./cardData"
+import { type CardData, getFsrsInternalStabilityFromCard, getFsrsS90FromCard } from "./cardData"
 import type { DeckConfig, ResolvedFsrsPreset } from "./config"
 import { prepareFsrsReplay } from "./fsrsHistory"
 import {
@@ -23,6 +18,7 @@ import {
     getFsrs,
     intervalAtRetrievability,
 } from "./fsrsModel"
+import { asRevlogHistory, type RevlogInput } from "./packedRevlogs"
 import { type Buckets, dayFromMs, emptyBuckets, IDify, rollover_ms } from "./revlogGraphs"
 export { getFsrs, intervalAtRetrievability } from "./fsrsModel"
 type ReplayCard = FsrsMemoryState & { last_review?: Date; last_review_day?: number }
@@ -84,18 +80,20 @@ export function calibrationConfidenceIntervals(
     samples: CalibrationSamples,
     predictions: Float64Array
 ): Array<[number, number] | undefined> {
-    const observations: CalibrationBootstrapObservation[] = []
-    for (let i = 0; i < sampleCount(samples); i++) {
-        const predicted = predictions[i]
-        if (isValidProbability(predicted) && isValidProbability(samples.actual[i])) {
-            observations.push({
-                cardId: samples.cardIds[i],
-                bin: calibrationBinIndex(predicted),
-                actual: samples.actual[i],
-            })
+    function* observations(): IterableIterator<CalibrationBootstrapObservation> {
+        // A borrowed observation is consumed immediately by the card aggregator.
+        const observation = { cardId: 0, bin: 0, actual: 0 }
+        for (let i = 0; i < sampleCount(samples); i++) {
+            const predicted = predictions[i]
+            if (isValidProbability(predicted) && isValidProbability(samples.actual[i])) {
+                observation.cardId = samples.cardIds[i]
+                observation.bin = calibrationBinIndex(predicted)
+                observation.actual = samples.actual[i]
+                yield observation
+            }
         }
     }
-    return cardBootstrapConfidenceIntervals(observations, CALIBRATION_BIN_COUNT)
+    return cardBootstrapConfidenceIntervals(observations(), CALIBRATION_BIN_COUNT)
 }
 
 export function withConfidenceIntervals(
@@ -122,7 +120,8 @@ export function buildCalibrationBins(samples: CalibrationSamples, predictions: F
  * @param revlogs The full list of review logs.
  * @returns A Set containing the IDs of all revlogs for cards deemed outliers.
  */
-export function applyOutlierFilter(revlogs: Revlog[]): Set<number> {
+export function applyOutlierFilter(input: RevlogInput): Set<number> {
+    const revlogs = asRevlogHistory(input)
     // Step 1: Group revlogs by card and identify the first review interval.
     // An "item" here represents a card's second review and its history.
     type SecondReviewItem = {
@@ -132,24 +131,31 @@ export function applyOutlierFilter(revlogs: Revlog[]): Set<number> {
         deltaT: number
     }
     const secondReviewItems: SecondReviewItem[] = []
-    const revlogsByCard = _.groupBy(revlogs, (r) => r.cid)
-
-    for (const cardId in revlogsByCard) {
-        const cardRevlogs = revlogsByCard[cardId]
-        if (cardRevlogs.length < 2) continue
-
-        const firstReview = cardRevlogs[0]
-        const secondReview = cardRevlogs[1]
-        const thirdReview = cardRevlogs[2]
-
-        if (firstReview && secondReview && thirdReview) {
-            secondReviewItems.push({
-                cardId: Number(cardId),
-                firstRating: firstReview.ease,
-                secondRating: secondReview.ease,
-                deltaT: dateDiffInDays(new Date(secondReview.id), new Date(thirdReview.id)),
-            })
+    const firstReviews = new Map<number, number[]>()
+    for (let index = 0; index < revlogs.length; index++) {
+        const cid = revlogs.cid(index)
+        let group = firstReviews.get(cid)
+        if (!group) {
+            group = []
+            firstReviews.set(cid, group)
         }
+        if (group.length < 3) group.push(index)
+    }
+    const row = revlogs.cursor()
+    for (const [cardId, indices] of firstReviews) {
+        if (indices.length < 3) continue
+        row.index = indices[0]
+        const firstRating = row.ease
+        row.index = indices[1]
+        const secondRating = row.ease,
+            secondId = row.id
+        row.index = indices[2]
+        secondReviewItems.push({
+            cardId,
+            firstRating,
+            secondRating,
+            deltaT: dateDiffInDays(new Date(secondId), new Date(row.id)),
+        })
     }
 
     // Step 2: Group items by first rating and then by delta_t.
@@ -323,7 +329,7 @@ function meanByReps(cards: CardData[], valueForCard: (card: CardData) => number 
 }
 
 export async function getMemorisedDays(
-    revlogs: Revlog[],
+    input: RevlogInput,
     cards: CardData[],
     configs: typeof SSEother.deck_configs,
     config_mapping: typeof SSEother.deck_config_ids,
@@ -338,6 +344,7 @@ export async function getMemorisedDays(
 
     // Apply the new outlier filtering logic at the start.
     console.time("Applying outlier filter")
+    const revlogs = asRevlogHistory(input)
     const excludedRevlogIds = applyOutlierFilter(revlogs)
     console.timeEnd("Applying outlier filter")
 
@@ -573,7 +580,8 @@ export async function getMemorisedDays(
     let day_means: number[] = []
     let day_young_ratio_s90: number[] = []
     let review_days: number[] = []
-    const uniqueCids = new Set(revlogs.map((r) => r.cid))
+    const uniqueCids = new Set<number>()
+    for (const review of revlogs) uniqueCids.add(review.cid)
     let probabilities: Record<number, number[]> = {}
     let time_by_retrievability_samples: number[][] = []
     let time_by_retrievability_samples_exclude_same_day: number[][] = []

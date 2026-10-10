@@ -8,6 +8,8 @@ Like the new anki stats screen? Want more? This is the addon for you.
 
 - **autoRevlogStats**: If false, graphs which itterate over every review for the cards in the selection will be hidden by default prompting the user to press a button to load them. 
 
+- **autoMemorisedStats**: Automatically request historical Memorised calculations when review history loads. When disabled, calibration, UM+, ROC and RWKV daily Calculate actions load their data independently; Memorised panels retain their own Calculate button. An empty FSRS prediction cache still requests replay for calibration.
+
 - **barWidth, barHeight**: Change the RESOLUTION at which the bar/candlestick charts are rendered. This can also be used to change their aspect ratio.
 
 - **piePercentages**: While true, A third percentage column is added to all pies.

@@ -1,5 +1,6 @@
 import type { Revlog } from "../src/ts/cardData"
-import { packRevlogs, unpackRevlogs } from "../src/ts/packedRevlogs"
+import { packRevlogs, RevlogHistory } from "../src/ts/packedRevlogs"
+import { reviewSnapshot } from "./reviewSnapshot"
 
 test("transferred review columns preserve timestamp IDs, negative intervals, resets and all grades", () => {
     const reviews = [0, 1, 2, 3, 4].map((ease, i) => ({
@@ -15,6 +16,6 @@ test("transferred review columns preserve timestamp IDs, negative intervals, res
     const packed = packRevlogs(reviews)
     const delivered = structuredClone(packed, { transfer: [packed.buffer] })
     expect(packed.byteLength).toBe(0)
-    expect(unpackRevlogs(delivered)).toEqual(reviews)
-    expect(unpackRevlogs(packRevlogs([]))).toEqual([])
+    expect(Array.from(new RevlogHistory(delivered), reviewSnapshot)).toEqual(reviews)
+    expect(Array.from(new RevlogHistory(packRevlogs([])), reviewSnapshot)).toEqual([])
 })

@@ -1,7 +1,8 @@
 import { get } from "svelte/store"
-import type { CardData, Revlog } from "./cardData"
+import type { CardData } from "./cardData"
 import type { ResolvedFsrsPreset } from "./config"
 import type { CurrentDisagreementResponse } from "./currentDisagreementData"
+import { RevlogHistory } from "./packedRevlogs"
 import { realFetch, searchJoin } from "./root"
 import { searchString } from "./stores"
 export * from "./cardData"
@@ -171,7 +172,8 @@ export async function saveFsrsReviewRetrievability(predictionsByRevlogId: Record
 }
 
 export async function getRevlogs(cids: number[], day_range: number, signal?: AbortSignal) {
-    const revlogs: Revlog[] = []
+    const pages: Float64Array[] = []
+    let total = 0
     let after_id = 0
     do {
         signal?.throwIfAborted()
@@ -190,21 +192,23 @@ export async function getRevlogs(cids: number[], day_range: number, signal?: Abo
         }
         const idx: Record<string, number> = {}
         response.columns.forEach((col, i) => (idx[col] = i))
-        for (const row of response.data) {
-            revlogs.push({
-                id: row[idx.id],
-                cid: row[idx.cid],
-                ease: row[idx.ease] as Revlog["ease"],
-                ivl: row[idx.ivl],
-                lastIvl: row[idx.lastIvl],
-                time: row[idx.time],
-                factor: row[idx.factor],
-                type: row[idx.type],
-            })
+        const fields = ["id", "cid", "ease", "ivl", "lastIvl", "time", "factor", "type"]
+        const values = new Float64Array(response.data.length * 8)
+        for (let i = 0; i < response.data.length; i++) {
+            for (let field = 0; field < fields.length; field++)
+                values[i * 8 + field] = response.data[i][idx[fields[field]]]
         }
+        pages.push(values)
+        total += values.length
         after_id = response.next_after_id ?? 0
     } while (after_id)
-    return revlogs
+    const values = new Float64Array(total)
+    let offset = 0
+    for (const page of pages) {
+        values.set(page, offset)
+        offset += page.length
+    }
+    return new RevlogHistory(values)
 }
 
 export async function getRwkvReviewRetrievability(

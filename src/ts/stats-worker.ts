@@ -1,6 +1,6 @@
 // Import calculations only after setting the page's scheduling/locale context.
 // esbuild bundles these dynamic imports into this single standalone worker.
-import { unpackRevlogs } from "./packedRevlogs"
+import { RevlogHistory } from "./packedRevlogs"
 
 self.onmessage = async ({ data }) => {
     try {
@@ -11,7 +11,7 @@ self.onmessage = async ({ data }) => {
             data.task === "memorised" ||
             data.task === "calibrationSamples"
         ) {
-            data.args[0] = unpackRevlogs(data.args[0])
+            data.args[0] = new RevlogHistory(data.args[0])
         }
         const result = await runStatsTaskLocally(data.task, data.args)
         self.postMessage({ result })

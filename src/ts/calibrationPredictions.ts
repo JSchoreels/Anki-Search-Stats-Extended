@@ -35,9 +35,21 @@ export function parseReviewRetrievabilityResponse(
     // Merge sorted rows into typed output instead of building a second, large
     // object keyed by timestamp IDs. Stable sorting preserves last-valid duplicate wins.
     const rows = response.data ?? []
-    rows.sort((a, b) => a[0] - b[0])
-    const sampleOrder = Uint32Array.from(samples.revlogIds, (_, index) => index)
-    sampleOrder.sort((a, b) => samples.revlogIds[a] - samples.revlogIds[b])
+    for (let i = 1; i < rows.length; i++) {
+        if (rows[i][0] < rows[i - 1][0]) {
+            rows.sort((a, b) => a[0] - b[0])
+            break
+        }
+    }
+    let sampleOrder: Uint32Array | undefined
+    for (let i = 1; i < samples.revlogIds.length; i++) {
+        if (samples.revlogIds[i] < samples.revlogIds[i - 1]) {
+            sampleOrder = Uint32Array.from(samples.revlogIds, (_, index) => index)
+            sampleOrder.sort((a, b) => samples.revlogIds[a] - samples.revlogIds[b])
+            break
+        }
+    }
+    const sampleAt = (index: number) => (sampleOrder ? sampleOrder[index] : index)
     const predictions = new Float64Array(samples.revlogIds.length).fill(NaN)
     let responsePredictionCount = 0
     let sampleIndex = 0
@@ -52,15 +64,15 @@ export function parseReviewRetrievabilityResponse(
         if (!Number.isFinite(prediction)) continue
         responsePredictionCount++
         while (
-            sampleIndex < sampleOrder.length &&
-            samples.revlogIds[sampleOrder[sampleIndex]] < revlogId
+            sampleIndex < samples.revlogIds.length &&
+            samples.revlogIds[sampleAt(sampleIndex)] < revlogId
         )
             sampleIndex++
         while (
-            sampleIndex < sampleOrder.length &&
-            samples.revlogIds[sampleOrder[sampleIndex]] === revlogId
+            sampleIndex < samples.revlogIds.length &&
+            samples.revlogIds[sampleAt(sampleIndex)] === revlogId
         )
-            predictions[sampleOrder[sampleIndex++]] = prediction
+            predictions[sampleAt(sampleIndex++)] = prediction
     }
     return {
         column: response.column ?? null,

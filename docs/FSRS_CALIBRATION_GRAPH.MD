@@ -2,7 +2,9 @@
 
 This document describes how calibration graph data is read for graph computations,
 including Anki's add-on preset overlay data and the optional RWKV calibration
-source.
+source. Calculate on calibration/comparison panels does not request the separate
+Memorised history when automatic Memorised loading is disabled. An empty validated
+FSRS cache still requests that replay for the calibration fallback.
 
 ## Source Data
 
@@ -82,7 +84,9 @@ columns: `revlogIds` and `cardIds` (`Float64Array`) and `actual` (`Uint8Array`).
 Its `fsrs_calibration_replay_predictions` is a `Float64Array` aligned to those
 samples. FSRS and RWKV endpoint helpers return raw response text; the
 `calibrationPredictions` worker task parses and validates it, aligns predictions
-by review ID, and computes calibration bins with confidence intervals.
+by review ID, and computes calibration bins. A separate `calibrationBands` task
+adds confidence intervals after the bins appear. Chronological response and
+sample arrays merge directly; shuffled inputs keep the sorted merge fallback.
 
 Each calibration store exposes `predictions: Float64Array`, with `NaN` for
 samples absent from the response. Response prediction counts retain all unique
@@ -535,7 +539,9 @@ Each populated calibration bucket includes a 95% card-level bootstrap confidence
 interval for observed retention. Reviews are first aggregated by card and bucket,
 then cards are sampled with replacement for 500 deterministic bootstrap iterations.
 This preserves the dependence between repeated reviews of the same card while
-keeping the graph stable across redraws.
+keeping the graph stable across redraws. Aggregation consumes the numeric sample
+columns directly through a reusable observation; it does not build a retained
+per-review object array. Bootstrap sampling order and seed are unchanged.
 
 ## Legacy RWKV Cache Fallback
 

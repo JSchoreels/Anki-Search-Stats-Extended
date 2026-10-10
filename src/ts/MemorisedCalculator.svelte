@@ -1,11 +1,13 @@
 <script lang="ts">
     import Calculator from "./Calculator.svelte"
-    import { showFsrsStats, showRevlogStats } from "./stores"
+    import { requestFsrsStats, showMemorisedStats, showFsrsStats, showRevlogStats } from "./stores"
 
-    export let calculate = () => {
-        $showRevlogStats = true
-        $showFsrsStats = true
-    }
+    export let includeMemorised = true
+    export let calculate = () => requestFsrsStats(includeMemorised)
 </script>
 
-<Calculator {calculate} shown={$showFsrsStats && $showRevlogStats} badIfTruncated></Calculator>
+<Calculator
+    {calculate}
+    shown={(includeMemorised ? $showMemorisedStats : $showFsrsStats) && $showRevlogStats}
+    badIfTruncated
+></Calculator>

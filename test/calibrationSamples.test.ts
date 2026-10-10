@@ -150,3 +150,35 @@ test("response alignment handles shuffled and repeated sample IDs without changi
     expect(parsed.responsePredictionCount).toBe(3)
     expect(Array.from(samples.revlogIds)).toEqual(ids)
 })
+
+test("chronological predictions and repeated sample IDs merge without sorting", () => {
+    const samples = calibrationSamplesFrom([
+        { revlogId: 100, cardId: 10, actual: 1 },
+        { revlogId: 100, cardId: 10, actual: 0 },
+        { revlogId: 200, cardId: 20, actual: 1 },
+    ])
+    const arraySort = jest.spyOn(Array.prototype, "sort")
+    const indexSort = jest.spyOn(Uint32Array.prototype, "sort")
+    let result: ReturnType<typeof parseReviewRetrievabilityResponse>
+    try {
+        result = parseReviewRetrievabilityResponse(
+            JSON.stringify({
+                data: [
+                    [100, 0.6],
+                    [100, null],
+                    [100, 0.8],
+                    [200, 0.9],
+                    [300, 1.1],
+                ],
+            }),
+            samples
+        )
+        expect(arraySort).not.toHaveBeenCalled()
+        expect(indexSort).not.toHaveBeenCalled()
+    } finally {
+        arraySort.mockRestore()
+        indexSort.mockRestore()
+    }
+    expect(result!.predictions).toEqual(new Float64Array([0.8, 0.8, 0.9]))
+    expect(result!.responsePredictionCount).toBe(3)
+})

@@ -36,7 +36,7 @@ function quantileSorted(values: number[], percentile: number) {
 }
 
 export function cardBootstrapConfidenceIntervals(
-    observations: CalibrationBootstrapObservation[],
+    observations: Iterable<CalibrationBootstrapObservation>,
     binCount: number,
     iterations = CALIBRATION_BOOTSTRAP_ITERATIONS,
     seed = BOOTSTRAP_SEED

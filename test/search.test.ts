@@ -2,6 +2,7 @@ import { get } from "svelte/store"
 import { parseReviewRetrievabilityResponse } from "../src/ts/calibrationPredictions"
 import { calibrationSamplesFrom } from "../src/ts/calibrationSamples"
 import { uniqueRevlogCids } from "../src/ts/search"
+import { reviewSnapshot } from "./reviewSnapshot"
 
 test("compact presets expand to each card's complete resolved settings", async () => {
     const originalFetch = global.fetch
@@ -264,7 +265,9 @@ test("review history follows page cursors and maps columns without losing rows",
     global.fetch = fetchMock as typeof fetch
     try {
         const { getRevlogs } = await import("../src/ts/search")
-        expect(await getRevlogs([10], 365)).toEqual([
+        const history = await getRevlogs([10], 365)
+        expect(history?.values.byteLength).toBe(2 * 8 * 8)
+        expect(Array.from(history!, reviewSnapshot)).toEqual([
             {
                 id: 1700000000001,
                 cid: 10,

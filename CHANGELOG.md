@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### User facing changes
+
+- Reduce memory use for large review histories throughout Statistics loading and graph replay, including UM+, calibration and Memorised. In one preserved 3.8-million-review Qt regression run, peak renderer memory fell from 5.1 GiB to 3.7 GiB (27%), and total time fell from 170.5 to 158.1 seconds.
+- Load calibration, UM+, ROC and RWKV daily graphs without starting the separate Memorised history when automatic Memorised loading is disabled. Memorised retains its Calculate action; automatic loading and the empty FSRS-cache replay fallback remain available.
+- Avoid unnecessary sorting when cached predictions already arrive in review order, and calculate the same confidence bands without a retained object for every review.
+
 - Preserve recent RWKV replay predictions after lazy cache generation, including requests without the alignment flag.
 - Reuse completed RWKV repair attempts only while the cache is unchanged. Cache updates, clears, table replacement and profile changes allow another repair; failed attempts remain retryable.
 - Avoid repeated RWKV replay for training reviews and unchanged unfillable gaps. Report training reviews separately from missing held-out predictions.
@@ -13,6 +19,12 @@
 - Remove the test-build diagnostic panel, full-history replay override and Generate button.
 - Add Export troubleshooting info beside Save PDF, with a Support-area fallback when the native button cannot be installed. Save aggregate calibration counts, date ranges, model sources, generation status and Anki environment details as a text file.
 - Identify unloaded data in troubleshooting exports instead of reporting misleading zero counts. Cancelling export writes no file.
+
+### Technical details
+
+- Keep history packed from paginated loading through worker processing. Borrow reusable review cursors, retain replay indices/byte flags and numeric stability columns, and share cycle selection between calibration and full replay.
+- Preserve stable shuffled/duplicate ordering, FSRS reset/cutoff/bridge rules, sparse predictions and the deterministic card bootstrap.
+- Verify 398 tests, both frontend bundles and the actual Svelte Calculate buttons in offscreen Qt WebEngine. The memory/time comparison uses the same preserved Primarius history and synthetic predictions for 1,518,677 selected reviews, retaining all graph results and refreshing predictions during full replay. It is a single before/after allocation test, not a live-cache or model-accuracy benchmark.
 
 ## 2026-10-10
 

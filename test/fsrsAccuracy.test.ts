@@ -17,6 +17,7 @@ import { getFsrsForParams } from "../src/ts/fsrsModel"
 import { getMemorisedDays } from "../src/ts/MemorisedBar"
 import { dayFromMs } from "../src/ts/revlogGraphs"
 import reference from "./fixtures/fsrs-native-reference.json"
+import { reviewSnapshot } from "./reviewSnapshot"
 
 const weights = [...FSRS7_DEFAULT_WEIGHTS]
 const config = { id: 1, fsrsVersion: 0, fsrsParams7: weights, sm2Retention: 0.9 } as DeckConfig
@@ -77,7 +78,10 @@ test("a missing-history first grade is represented once by its post-review state
     const logs = [review(0, 3, 1, 30, 2500), review(86400000)]
     const model = getFsrsForParams(weights)
     const initial = stateFromIncompleteHistory(model, logs[0], 0.9)
-    const steps = prepareFsrsReplay(logs, () => config)
+    const steps = Array.from(
+        prepareFsrsReplay(logs, () => config),
+        (step) => ({ ...step, review: reviewSnapshot(step.review) })
+    )
     expect(steps[0].startingState).toEqual(initial)
     const stats = await getMemorisedDays(
         logs,
@@ -108,9 +112,12 @@ test("the resolved preset supplies historical retention and the UTC cutoff", () 
         ignoreRevlogsBeforeDate: "2026-09-02",
     } as ResolvedFsrsPreset
     const logs = [review(0, 3, 0), review(2 * 86400000, 3, 1, 30, 2500), review(3 * 86400000)]
-    const steps = prepareFsrsReplay(logs, () => preset)
+    const steps = Array.from(
+        prepareFsrsReplay(logs, () => preset),
+        (step) => ({ ...step, review: reviewSnapshot(step.review) })
+    )
     expect(steps).toHaveLength(2)
-    expect(steps[0].review).toBe(logs[1])
+    expect(steps[0].review).toEqual(logs[1])
     expect(getFsrsForParams(weights).retrievability(steps[0].startingState!, 30)).toBeCloseTo(
         0.85,
         6

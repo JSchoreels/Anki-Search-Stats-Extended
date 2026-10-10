@@ -10,7 +10,7 @@
     {#if $showFsrsStats && $showRevlogStats}
         <slot name="graph"></slot>
     {:else}
-        <MemorisedCalculator></MemorisedCalculator>
+        <MemorisedCalculator includeMemorised={false}></MemorisedCalculator>
     {/if}
     <slot></slot>
 </GraphContainer>

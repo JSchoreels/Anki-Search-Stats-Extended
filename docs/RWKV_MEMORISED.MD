@@ -3,8 +3,10 @@
 ## User-visible behavior
 
 The Memorised graph has an FSRS, RWKV, and Both source selector. FSRS remains
-the default. Selecting RWKV starts a background historical replay when the
-local cache is missing or stale. The progress bar counts card-day predictions,
+the default. Once Memorised has been requested with Calculate (or automatic
+Memorised loading is enabled), selecting RWKV starts a background historical
+replay when the local cache is missing or stale. Enabling calibration/UM+/ROC
+alone does not request RWKV Memorised history. The progress bar counts card-day predictions,
 and the RWKV line extends from the oldest completed scheduler day toward today
 while the calculation runs. In Both mode, the complete FSRS line remains
 visible while RWKV catches up.
