@@ -76,7 +76,10 @@ Time graphs retain exact review durations alongside the per-bucket mean/median
 arrays in `TimeBuckets`: shared `Float64Array` duration values, `Uint32Array`
 review indices grouped by bucket, and `Uint32Array` bucket offsets. The six FSRS
 time series share one duration buffer, including their overlapping success and
-same-day filters. Repetition times use the same compact representation.
+same-day filters. Repetition times use the same compact representation. The two
+private retrievability/stability groups inside review-history aggregation also
+share one duration buffer and retain grouped indices, preserving exact bucket
+means and medians without two growing arrays of copied durations.
 `TimeBucketBuilder` collects numeric chunks and releases them after constructing
 the grouped indices; it does not retain six arrays of duration copies. Workers
 transfer these result buffers to the page once, preserving shared values. `BarScrollable.aggregateValues` combines those samples for

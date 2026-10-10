@@ -1,21 +1,41 @@
 import { asRevlogHistory, type RevlogInput } from "./packedRevlogs"
+import { StatsHistory } from "./statsHistory"
 import type { Tasks } from "./statsTasks"
 import { scheduleStatsTask } from "./statsWorkerQueue"
+export { loadStatsHistory } from "./statsHistory"
+
+type HistoryTask = "revlog" | "memorised" | "calibrationSamples"
+type TaskArgs<K extends keyof Tasks> = K extends HistoryTask
+    ? Parameters<Tasks[K]> extends [infer First, ...infer Rest]
+        ? [First | StatsHistory, ...Rest]
+        : never
+    : Parameters<Tasks[K]>
 
 export function runStatsTask<K extends keyof Tasks>(
     task: K,
-    args: Parameters<Tasks[K]>,
+    args: TaskArgs<K>,
     signal: AbortSignal
 ): Promise<Awaited<ReturnType<Tasks[K]>>> {
     const priority = task === "calibrationSamples" ? 0 : task === "memorised" ? 2 : 1
-    return scheduleStatsTask(priority, signal, () => startStatsTask(task, args, signal))
+    const scheduled = scheduleStatsTask(priority, signal, () => startStatsTask(task, args, signal))
+    if (!(args[0] instanceof StatsHistory)) return scheduled
+    // A task cancellation hides its result immediately. Retain queue ownership
+    // until that task returns the shared history; a search cancellation disposes
+    // the history itself and terminates its worker immediately.
+    return new Promise((resolve, reject) => {
+        const cancel = () => reject(new DOMException("Cancelled", "AbortError"))
+        signal.addEventListener("abort", cancel, { once: true })
+        if (signal.aborted) cancel()
+        scheduled.then(resolve, reject).finally(() => signal.removeEventListener("abort", cancel))
+    })
 }
 
 function startStatsTask<K extends keyof Tasks>(
     task: K,
-    args: Parameters<Tasks[K]>,
+    args: TaskArgs<K>,
     signal: AbortSignal
 ): Promise<Awaited<ReturnType<Tasks[K]>>> {
+    if (args[0] instanceof StatsHistory) return args[0].run(task, [undefined, ...args.slice(1)])
     return new Promise((resolve, reject) => {
         if (signal.aborted) {
             reject(new DOMException("Cancelled", "AbortError"))

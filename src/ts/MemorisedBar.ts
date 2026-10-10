@@ -9,6 +9,7 @@ import {
 import { type CalibrationSamples, sampleCount } from "./calibrationSamples"
 import { type CardData, getFsrsInternalStabilityFromCard, getFsrsS90FromCard } from "./cardData"
 import type { DeckConfig, ResolvedFsrsPreset } from "./config"
+import { DailyTransitions } from "./dailyTransitions"
 import { prepareFsrsReplay } from "./fsrsHistory"
 import {
     elapsedFsrsDays,
@@ -419,7 +420,7 @@ export async function getMemorisedDays(
     let s90_by_key = new Map<number, number>()
     const local_s90_by_key = new Map<string, number>()
     let current_card_s90_by_cid = new Map<number, number>()
-    let s90_events_by_day = new Map<number, Map<number, number | null>>()
+    const s90_events_by_day = new DailyTransitions()
     let s90_request_items: S90BatchItem[] = []
     let s90_request_index_by_key = new Map<string, number>()
     let s90_dedup_total = 0
@@ -587,9 +588,7 @@ export async function getMemorisedDays(
             probabilities[revlog.cid] = [1]
         }
         if (grade === 0) {
-            const events = s90_events_by_day.get(revlogDay) ?? new Map<number, number | null>()
-            events.set(revlog.cid, null)
-            s90_events_by_day.set(revlogDay, events)
+            s90_events_by_day.set(revlogDay, revlog.cid, null)
             continue
         }
         const new_card = !fsrsCards[revlog.cid]
@@ -695,9 +694,7 @@ export async function getMemorisedDays(
         last_memory_state[revlog.cid] = newState
         last_stability[revlog.cid] = card.stability // To prevent "forget" affecting the forgetting curve
         const s90_key = queueS90Request(revlog.cid, newState, fsrs)
-        const day_events = s90_events_by_day.get(revlogDay) ?? new Map<number, number | null>()
-        day_events.set(revlog.cid, s90_key)
-        s90_events_by_day.set(revlogDay, day_events)
+        s90_events_by_day.set(revlogDay, revlog.cid, s90_key)
 
         fsrsCards[revlog.cid] = card
     }
@@ -725,8 +722,7 @@ export async function getMemorisedDays(
     const s90_count_by_key = new Map<number, number>()
     for (let i = 0; i < review_days.length; i++) {
         const day = review_days[i]
-        const events = s90_events_by_day.get(day) ?? new Map<number, number | null>()
-        for (const [card_id, key] of events) {
+        for (const [card_id, key] of s90_events_by_day.entries(day)) {
             const previous_key = s90_key_by_card.get(card_id)
             if (previous_key !== undefined) {
                 incrementCount(s90_count_by_key, previous_key, -1)
@@ -745,6 +741,8 @@ export async function getMemorisedDays(
             day_young_ratio_s90[fillDay] = stats.youngRatio
         }
     }
+
+    s90_events_by_day.release()
 
     // console.log(log)
 

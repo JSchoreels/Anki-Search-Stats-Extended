@@ -15,7 +15,7 @@ import { elapsedFsrsDays, type FsrsMemoryState } from "./fsrsModel"
 import { selectResolvedFsrsPresetParams, selectTsFsrsParams } from "./fsrsParams"
 import { i18n } from "./i18n"
 import { asRevlogHistory, type RevlogHistory, type RevlogInput } from "./packedRevlogs"
-import { TimeBucketBuilder, bucketTimeStats as compactBucketTimeStats } from "./timeBucketStats"
+import { TimeBucketBuilder, bucketTimeStats, type TimeBuckets } from "./timeBucketStats"
 type ReplayCard = FsrsMemoryState & { last_review?: Date }
 
 const rollover = SSEother.rollover ?? 0
@@ -46,33 +46,6 @@ export function calendarDayFromMs(ms: number) {
 
 export const no_rollover_today = calendarDayFromMs(Date.now())
 const stability_maturity_threshold = 21
-
-function median(values: number[]) {
-    if (!values.length) {
-        return 0
-    }
-    const sorted = [...values].sort((a, b) => a - b)
-    const middle = Math.floor(sorted.length / 2)
-    if (sorted.length % 2 === 1) {
-        return sorted[middle]
-    }
-    return (sorted[middle - 1] + sorted[middle]) / 2
-}
-
-function bucketTimeStats(bucketedSamples: number[][]) {
-    const meanByBucket: number[] = []
-    const medianByBucket: number[] = []
-
-    bucketedSamples.forEach((samples, bucket) => {
-        if (!samples?.length) {
-            return
-        }
-        meanByBucket[bucket] = _.sum(samples) / samples.length
-        medianByBucket[bucket] = median(samples)
-    })
-
-    return { meanByBucket, medianByBucket }
-}
 
 function forgettingCurveModelsForCards(
     cids: Set<number>,
@@ -108,8 +81,8 @@ function forgettingCurveModelsForCards(
 
 type FSRSReplayStats = {
     stabilityByRevlog: Float64Array
-    timeByRetrievabilitySamples: number[][]
-    timeByStabilitySamples: number[][]
+    timeByRetrievabilitySamples: TimeBuckets
+    timeByStabilitySamples: TimeBuckets
     gradeByRetrievability: number[][]
     gradeByRetrievabilityExcludeSameDay: number[][]
     gradeByRetrievabilitySuccessOnly: number[][]
@@ -126,8 +99,7 @@ function stabilityAfterReviewsByRevlog(
     presets: Record<number, ResolvedFsrsPreset>
 ): FSRSReplayStats {
     const stabilityByRevlog = new Float64Array(revlogData.length).fill(NaN)
-    const timeByRetrievabilitySamples: number[][] = []
-    const timeByStabilitySamples: number[][] = []
+    const timeSamples = new TimeBucketBuilder(2)
     const gradeByRetrievability: number[][] = []
     const gradeByRetrievabilityExcludeSameDay: number[][] = []
     const gradeByRetrievabilitySuccessOnly: number[][] = []
@@ -148,6 +120,7 @@ function stabilityAfterReviewsByRevlog(
     }
 
     if (!deckConfigs || !deckConfigIds) {
+        const [timeByRetrievabilitySamples, timeByStabilitySamples] = timeSamples.finish()
         return {
             stabilityByRevlog,
             timeByRetrievabilitySamples,
@@ -194,10 +167,7 @@ function stabilityAfterReviewsByRevlog(
                 )
                 const stabilityBucket = Math.max(0, Math.round(card.stability))
 
-                timeByRetrievabilitySamples[retrievabilityBucket] ??= []
-                timeByRetrievabilitySamples[retrievabilityBucket].push(seconds)
-                timeByStabilitySamples[stabilityBucket] ??= []
-                timeByStabilitySamples[stabilityBucket].push(seconds)
+                timeSamples.add(seconds, [retrievabilityBucket, stabilityBucket])
             }
 
             const retrievability = fsrs.retrievability(card, elapsed)
@@ -244,6 +214,7 @@ function stabilityAfterReviewsByRevlog(
         stabilityByRevlog[index] = card.stability
     }
 
+    const [timeByRetrievabilitySamples, timeByStabilitySamples] = timeSamples.finish()
     return {
         stabilityByRevlog,
         timeByRetrievabilitySamples,
@@ -667,7 +638,7 @@ export function calculateRevlogStats(
     const retrievabilityTimeStats = bucketTimeStats(fsrsReplayStats.timeByRetrievabilitySamples)
     const stabilityTimeStats = bucketTimeStats(fsrsReplayStats.timeByStabilitySamples)
     const [timeByRepetitionSamples] = repetitionSamples.finish()
-    const repetitionTimeStats = compactBucketTimeStats(timeByRepetitionSamples)
+    const repetitionTimeStats = bucketTimeStats(timeByRepetitionSamples)
 
     console.timeEnd("revlog stats")
 
@@ -761,11 +732,4 @@ export function easeBarChart(
     }
 }
 
-export function lastForgetByCard(input: RevlogInput): number[] {
-    const revlogs = asRevlogHistory(input)
-    const result: number[] = []
-    for (const revlog of revlogs) {
-        if (revlog.factor == 0 && revlog.type == 4) result[revlog.cid] = revlog.id
-    }
-    return result
-}
+export { lastForgetByCard } from "./revlogMetadata"

@@ -44,6 +44,12 @@ test.each(["comparison", "memorised", "automatic", "empty cache"])(
             return response({})
         }) as typeof fetch
         jest.doMock("../src/ts/statsWorkerClient", () => ({
+            loadStatsHistory: async (cids: number[], days: number, signal: AbortSignal) => {
+                const { getRevlogs } = await import("../src/ts/search")
+                const { lastForgetByCard } = await import("../src/ts/revlogMetadata")
+                const history = await getRevlogs(cids, days, signal)
+                return history && Object.assign(history, { lastForget: lastForgetByCard(history) })
+            },
             runStatsTask: async (task: string, args: never) => {
                 tasks.push(task)
                 if (task === "revlog") return {}

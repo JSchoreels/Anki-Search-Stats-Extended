@@ -46,6 +46,12 @@ test("Statistics reads both caches immediately while automatic generation refres
         return response({})
     }) as typeof fetch
     jest.doMock("../src/ts/statsWorkerClient", () => ({
+        loadStatsHistory: async (cids: number[], days: number, signal: AbortSignal) => {
+            const { getRevlogs } = await import("../src/ts/search")
+            const { lastForgetByCard } = await import("../src/ts/revlogMetadata")
+            const history = await getRevlogs(cids, days, signal)
+            return history && Object.assign(history, { lastForget: lastForgetByCard(history) })
+        },
         runStatsTask: async (task: keyof import("../src/ts/statsTasks").Tasks, args: never) => {
             const { runStatsTaskLocally } = await import("../src/ts/statsTasks")
             return runStatsTaskLocally(task, args)
@@ -117,6 +123,12 @@ test("RWKV cache loads even when the FSRS cache request remains pending", async 
         return response({ columns: [], data: [], presets: [], cards: {}, retrievability: {} })
     }) as typeof fetch
     jest.doMock("../src/ts/statsWorkerClient", () => ({
+        loadStatsHistory: async (cids: number[], days: number, signal: AbortSignal) => {
+            const { getRevlogs } = await import("../src/ts/search")
+            const { lastForgetByCard } = await import("../src/ts/revlogMetadata")
+            const history = await getRevlogs(cids, days, signal)
+            return history && Object.assign(history, { lastForget: lastForgetByCard(history) })
+        },
         runStatsTask: async (task: keyof import("../src/ts/statsTasks").Tasks, args: never) => {
             const { runStatsTaskLocally } = await import("../src/ts/statsTasks")
             return runStatsTaskLocally(task, args)
@@ -160,6 +172,12 @@ test.each([
             return response({ columns: [], data: [], presets: [], cards: {}, retrievability: {} })
         }) as typeof fetch
         jest.doMock("../src/ts/statsWorkerClient", () => ({
+            loadStatsHistory: async (cids: number[], days: number, signal: AbortSignal) => {
+                const { getRevlogs } = await import("../src/ts/search")
+                const { lastForgetByCard } = await import("../src/ts/revlogMetadata")
+                const history = await getRevlogs(cids, days, signal)
+                return history && Object.assign(history, { lastForget: lastForgetByCard(history) })
+            },
             runStatsTask: async (task: keyof import("../src/ts/statsTasks").Tasks, args: never) => {
                 const { runStatsTaskLocally } = await import("../src/ts/statsTasks")
                 return runStatsTaskLocally(task, args)
@@ -195,6 +213,12 @@ test.each([
 test("comparison remains null until all inputs load and discards obsolete worker results", async () => {
     const pending: { signal: AbortSignal; finish: () => void }[] = []
     jest.doMock("../src/ts/statsWorkerClient", () => ({
+        loadStatsHistory: async (cids: number[], days: number, signal: AbortSignal) => {
+            const { getRevlogs } = await import("../src/ts/search")
+            const { lastForgetByCard } = await import("../src/ts/revlogMetadata")
+            const history = await getRevlogs(cids, days, signal)
+            return history && Object.assign(history, { lastForget: lastForgetByCard(history) })
+        },
         runStatsTask: async (
             task: keyof import("../src/ts/statsTasks").Tasks,
             args: never,
@@ -322,6 +346,12 @@ test("FSRS bins publish before bands and a pending RWKV fetch; bands preserve co
     const bands: (() => void)[] = []
     const tasks: string[] = []
     jest.doMock("../src/ts/statsWorkerClient", () => ({
+        loadStatsHistory: async (cids: number[], days: number, signal: AbortSignal) => {
+            const { getRevlogs } = await import("../src/ts/search")
+            const { lastForgetByCard } = await import("../src/ts/revlogMetadata")
+            const history = await getRevlogs(cids, days, signal)
+            return history && Object.assign(history, { lastForget: lastForgetByCard(history) })
+        },
         runStatsTask: async (task: keyof import("../src/ts/statsTasks").Tasks, args: never) => {
             tasks.push(task)
             const { runStatsTaskLocally } = await import("../src/ts/statsTasks")
@@ -384,6 +414,12 @@ test("empty FSRS cache waits for replay and aligns predictions by review ID", as
         return response({ columns: [], data: [], presets: [], cards: {}, retrievability: {} })
     }) as typeof fetch
     jest.doMock("../src/ts/statsWorkerClient", () => ({
+        loadStatsHistory: async (cids: number[], days: number, signal: AbortSignal) => {
+            const { getRevlogs } = await import("../src/ts/search")
+            const { lastForgetByCard } = await import("../src/ts/revlogMetadata")
+            const history = await getRevlogs(cids, days, signal)
+            return history && Object.assign(history, { lastForget: lastForgetByCard(history) })
+        },
         runStatsTask: async (task: keyof import("../src/ts/statsTasks").Tasks, args: never) => {
             const { runStatsTaskLocally } = await import("../src/ts/statsTasks")
             return runStatsTaskLocally(task, args)
@@ -431,6 +467,12 @@ test("an obsolete empty-cache response cannot request Memorised replay", async (
         return response({ columns: [], data: [], presets: [], cards: {}, retrievability: {} })
     }) as typeof fetch
     jest.doMock("../src/ts/statsWorkerClient", () => ({
+        loadStatsHistory: async (cids: number[], days: number, signal: AbortSignal) => {
+            const { getRevlogs } = await import("../src/ts/search")
+            const { lastForgetByCard } = await import("../src/ts/revlogMetadata")
+            const history = await getRevlogs(cids, days, signal)
+            return history && Object.assign(history, { lastForget: lastForgetByCard(history) })
+        },
         runStatsTask: async (task: keyof import("../src/ts/statsTasks").Tasks, args: never) => {
             const { runStatsTaskLocally } = await import("../src/ts/statsTasks")
             return runStatsTaskLocally(task, args)

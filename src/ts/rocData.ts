@@ -47,6 +47,9 @@ function buildRocSeries(
     const points: RocPoint[] = [
         { falsePositiveRate: 0, truePositiveRate: 0, threshold: Number.POSITIVE_INFINITY },
     ]
+    let auc = 0
+    let previousFPR = 0
+    let previousTPR = 0
     let truePositives = 0
     let falsePositives = 0
 
@@ -72,34 +75,24 @@ function buildRocSeries(
                     ? (negativeCount - falsePositives + 0.5 * q) / negativeCount
                     : (truePositives - 0.5 * p) / positiveCount
         }
-        points.push({
-            falsePositiveRate: falsePositives / negativeCount,
-            truePositiveRate: truePositives / positiveCount,
-            threshold,
-        })
+        const falsePositiveRate = falsePositives / negativeCount
+        const truePositiveRate = truePositives / positiveCount
+        auc += ((falsePositiveRate - previousFPR) * (truePositiveRate + previousTPR)) / 2
+        previousFPR = falsePositiveRate
+        previousTPR = truePositiveRate
+        const previous = points[points.length - 1]
+        // Keep the existing plotted thresholds, including the final endpoint;
+        // AUC and placements above still use every distinct threshold.
+        if (
+            end === sorted.length ||
+            falsePositiveRate - previous.falsePositiveRate >= ROC_POINT_RESOLUTION ||
+            truePositiveRate - previous.truePositiveRate >= ROC_POINT_RESOLUTION
+        )
+            points.push({ falsePositiveRate, truePositiveRate, threshold })
         start = end
     }
 
-    const auc = points.slice(1).reduce((area, point, index) => {
-        const previous = points[index]
-        const width = point.falsePositiveRate - previous.falsePositiveRate
-        return area + (width * (point.truePositiveRate + previous.truePositiveRate)) / 2
-    }, 0)
-
-    const sampledPoints = [points[0]]
-    for (let index = 1; index < points.length - 1; index++) {
-        const point = points[index]
-        const previous = sampledPoints[sampledPoints.length - 1]
-        if (
-            point.falsePositiveRate - previous.falsePositiveRate >= ROC_POINT_RESOLUTION ||
-            point.truePositiveRate - previous.truePositiveRate >= ROC_POINT_RESOLUTION
-        ) {
-            sampledPoints.push(point)
-        }
-    }
-    sampledPoints.push(points[points.length - 1])
-
-    return { points: sampledPoints, auc, interval: undefined }
+    return { points, auc, interval: undefined }
 }
 
 /**

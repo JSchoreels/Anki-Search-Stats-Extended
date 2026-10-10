@@ -110,6 +110,12 @@ test("calibration stores report endpoint warnings after worker parsing", async (
     jest.resetModules()
     global.fetch = fetchMock as typeof fetch
     jest.doMock("../src/ts/statsWorkerClient", () => ({
+        loadStatsHistory: async (cids: number[], days: number, signal: AbortSignal) => {
+            const { getRevlogs } = await import("../src/ts/search")
+            const { lastForgetByCard } = await import("../src/ts/revlogMetadata")
+            const history = await getRevlogs(cids, days, signal)
+            return history && Object.assign(history, { lastForget: lastForgetByCard(history) })
+        },
         runStatsTask: async (task: keyof import("../src/ts/statsTasks").Tasks, args: never) => {
             const { runStatsTaskLocally } = await import("../src/ts/statsTasks")
             return runStatsTaskLocally(task, args)
@@ -380,6 +386,24 @@ test("an older running Python endpoint retains the existing full JSON transport 
         ).toBe('{"column":"cache","data":[[1,0.8]]}')
     } finally {
         global.fetch = original
+        jest.resetModules()
+    }
+})
+
+test("legacy history loading keeps the restart alert and null result for old Python responses", async () => {
+    const originalFetch = global.fetch
+    const alertMock = jest.spyOn(global, "alert").mockImplementation(() => undefined)
+    jest.resetModules()
+    global.fetch = jest.fn(async () => ({ ok: true, text: async () => "{}" })) as any
+    try {
+        const { getRevlogs } = await import("../src/ts/search")
+        await expect(getRevlogs([10], 0)).resolves.toBeNull()
+        expect(alertMock).toHaveBeenCalledWith(
+            "Search Stats Extended has been updated. Please restart Anki."
+        )
+    } finally {
+        global.fetch = originalFetch
+        alertMock.mockRestore()
         jest.resetModules()
     }
 })

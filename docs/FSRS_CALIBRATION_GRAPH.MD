@@ -6,6 +6,10 @@ source. Calculate on calibration/comparison panels does not request the separate
 Memorised history when automatic Memorised loading is disabled. An empty validated
 FSRS cache still requests that replay for the calibration fallback.
 
+## History ownership
+
+The page loads a `StatsHistory` handle containing the review count and last-forget metadata. Its worker fetches paginated history and keeps the packed numeric rows. Calibration selection, review aggregation and Memorised use that same history through the global task queue. Each history task transfers ownership to a fresh worker after returning, releasing its temporary heap. Cancelling an active graph discards its result immediately and holds the queue until history returns; changing the search or history range terminates the owner immediately. Prediction parsing and comparison remain separate queued workers, with transferred result buffers. This changes no review selection, model formulas, cache schema or endpoint contract.
+
 ## Source Data
 
 - Deck config data is read from Anki in [`__init__.py`](/Users/jschoreels/workspace/Anki-Search-Stats-Extended/__init__.py) through:
@@ -533,20 +537,22 @@ valid probability are excluded, which keeps the comparison on an identical
 sample for FSRS and RWKV.
 
 For each model, reviews are sorted from highest to lowest predicted recall.
-Each distinct prediction becomes a threshold point whose x-coordinate is the
-false positive rate and y-coordinate is the true positive rate. Equal
+Each distinct prediction defines a threshold whose x-coordinate is the false
+positive rate and y-coordinate is the true positive rate. Equal
 predictions are processed together, so ties contribute half credit to AUC. The
 curve begins at `(0, 0)` and ends at `(1, 1)` when both outcome classes are
 present. The graph is unavailable when the paired sample has no remembered or
 no forgotten review.
 
 AUC is calculated with trapezoidal integration over the complete threshold
-curve. `1.0` means every remembered review is ranked above every forgotten
+curve as thresholds are processed; the complete point list is not retained. `1.0` means every remembered review is ranked above every forgotten
 review; `0.5` matches chance ranking. The orange dashed diagonal shows this
 chance baseline. FSRS uses the same steel-blue color and RWKV the same sea-green
 color as the Calibration and UM+ comparisons. Hover targets are sampled only
-for responsiveness on large histories; the visible curves and AUC still use all
-distinct thresholds.
+for responsiveness on large histories. The plotted curve retains the existing
+points whenever either axis advances by at least 0.001 and always retains the
+final endpoint. AUC and confidence placements still use all distinct thresholds,
+so display sampling does not change the metrics.
 
 Each model's AUC and the paired AUC difference (`FSRS − RWKV`) include 95%
 card-clustered DeLong confidence intervals (Obuchowski 1997). Clustering by card

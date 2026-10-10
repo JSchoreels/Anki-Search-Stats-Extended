@@ -1,5 +1,6 @@
 import { buildRocData, ROC_POINT_RESOLUTION } from "../src/ts/rocData"
 import { calibrationInputs } from "./calibrationInputs"
+import { buildRocData as referenceRoc } from "./reference/rocData"
 
 test("ROC compares FSRS and RWKV on the same paired reviews", () => {
     const data = buildRocData(
@@ -319,3 +320,40 @@ test("repeated reviews allocate confidence accumulators per card instead of per 
         global.Float64Array = original
     }
 })
+
+test.each(["distinct", "ties", "final small step"])(
+    "incremental ROC preserves every plotted threshold and exact full-curve AUC for %s probabilities",
+    (distribution) => {
+        const samples = Array.from({ length: 12000 }, (_, i) => ({
+            revlogId: i + 1,
+            cardId: i % 37,
+            actual: i % 3 ? 1 : 0,
+        }))
+        const predictions = (reverse: boolean) =>
+            Object.fromEntries(
+                samples.map((s, i) => [
+                    s.revlogId,
+                    distribution === "ties"
+                        ? (i % 13) / 12
+                        : (reverse ? samples.length - i : i) / samples.length,
+                ])
+            )
+        const fsrs = predictions(false),
+            rwkv = predictions(true)
+        if (distribution === "final small step") {
+            fsrs[1] = 0
+            rwkv[1] = 0
+        }
+        const reference = referenceRoc(samples, fsrs, rwkv)
+        const result = buildRocData(...calibrationInputs(samples, fsrs, rwkv))
+        for (const model of ["fsrs", "rwkv"] as const) {
+            expect(result[model].points).toEqual(reference[model].points)
+            expect(result[model].auc).toBe(reference[model].auc)
+            expect(result[model].points.at(-1)).toMatchObject({
+                falsePositiveRate: 1,
+                truePositiveRate: 1,
+            })
+        }
+        expect(result.count).toBe(reference.count)
+    }
+)

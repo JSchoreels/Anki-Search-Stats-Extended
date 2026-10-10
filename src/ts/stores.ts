@@ -14,9 +14,8 @@ import {
     type buildCalibrationBins,
     type getMemorisedDays,
 } from "./MemorisedBar"
-import type { RevlogHistory } from "./packedRevlogs"
 import type { GraphsRequest, GraphsResponse } from "./proto/anki/stats_pb"
-import { lastForgetByCard, today, type calculateRevlogStats } from "./revlogGraphs"
+import { today, type calculateRevlogStats } from "./revlogGraphs"
 import {
     cancelRwkvMemorisedHistory,
     catchErrors,
@@ -24,15 +23,15 @@ import {
     getCardData,
     getFsrsPresetData,
     getReviewRetrievabilityPages,
-    getRevlogs,
     getRwkvMemorisedHistoryProgress,
     saveConfigValue,
     startRwkvMemorisedHistory,
     type CardData,
     type FsrsCalibrationProgress,
 } from "./search"
+import type { StatsHistory } from "./statsHistory"
 import type { Tasks } from "./statsTasks"
-import { runStatsTask } from "./statsWorkerClient"
+import { loadStatsHistory, runStatsTask } from "./statsWorkerClient"
 import type { Tooltip } from "./tooltip"
 
 // Pie chart related
@@ -166,12 +165,12 @@ export const fsrsPresetData = derived(
     }
 )
 
-export let revlogs: Readable<RevlogHistory | null> = derived(
+export let revlogs: Readable<StatsHistory | null> = derived(
     [cids, showRevlogStats, searchLimit],
     ([$cids, $showRevlogStats, $searchLimit], set) => {
         set(null)
         if ($cids && $showRevlogStats) {
-            return latestResult(set, (signal) => getRevlogs($cids, $searchLimit, signal))
+            return latestResult(set, (signal) => loadStatsHistory($cids, $searchLimit, signal))
         }
     }
 )
@@ -197,9 +196,7 @@ derived(
         }
     }
 ).subscribe(revlogStats.set)
-export let last_forget = derived([revlogs], ([$revlogs]) =>
-    $revlogs ? lastForgetByCard($revlogs) : undefined
-)
+export let last_forget = derived([revlogs], ([$revlogs]) => $revlogs?.lastForget)
 export let memorised_stats = writable<Awaited<ReturnType<typeof getMemorisedDays>> | null>()
 derived(
     [card_data, revlogs, showFsrsStats, last_forget, fsrsPresetData, showMemorisedStats],

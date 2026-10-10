@@ -4,6 +4,9 @@
 
 ### User facing changes
 
+- Further reduce memory for large Statistics workloads: peak renderer RSS fell from 3.44 GiB to 2.38 GiB (31%, about 1.06 GiB) and total time from 128.2 to 120.9 seconds in a new before/after run of the preserved 3.8-million-review Qt workload.
+- Keep one copy of review history across calibration selection, aggregation and Memorised. Store daily transitions and remaining private time samples compactly while preserving exact graph results. Build the same ROC curve and metrics without retaining every threshold point; a separate 1.5-million-distinct-probability test used 42% less peak renderer memory.
+
 - Further reduce Statistics memory when UM+/calibration refreshes while full Memorised history is retained: peak renderer RSS fell from 3.70 GiB to 3.26 GiB (12%, about 450 MiB) in the same preserved 3.8-million-review Qt workload. Total time fell from 140.3 to 129.0 seconds in this additional before/after run.
 - Keep exact Time graph means, medians, success/same-day filters, bar widths and scrolling while storing shared durations compactly. Stream both models' predictions in bounded pages and transfer worker result buffers to reduce overlapping allocations.
 
@@ -24,6 +27,10 @@
 - Identify unloaded data in troubleshooting exports instead of reporting misleading zero counts. Cancelling export writes no file.
 
 ### Technical details
+
+- Load paginated packed history directly in its owner worker; the page retains count/reset metadata. Transfer the same history buffer to a fresh worker after each history task to release temporary heaps. Active graph cancellation rejects immediately but holds the queue until history returns; obsolete search/range lifetimes terminate the owner immediately. Calculator errors return ownership; fatal/transport errors release the queue.
+- Retain daily S90 card/key pairs in numeric chunks with only a current-day index map, preserving same-day order, resets and exact local/batch keys. Compact the two private replay time groups into shared durations and grouped indices. Integrate exact ROC AUC incrementally with unchanged placements, plotted thresholds and card-cluster covariance.
+- Verify 436 tests in 60 suites and bundle/type checks, exact 83-field calculator parity on a preserved-history subset, frozen ROC point/AUC parity, native FSRS checks, error/cancellation/store lifetime tests, and actual Qt history/Time controls. Compare identical ROC output hashes and repeat the retained-result Primarius stress sequence; record single-run methodology and limits in `docs/STATS_PERFORMANCE.MD`. No database, Python endpoint, dependency or configuration changes.
 
 - Store Time samples as one shared duration buffer plus grouped 32-bit indices and offsets, constructed from numeric chunks. Transfer each result-owned backing buffer once, preserving shared filter data.
 - Add optional `stream_pages: true` to prediction endpoints. One NDJSON response carries complete-cohort metadata, ordered pages of at most 25,000 rows and a completion marker. Parse incrementally in the queued worker, check row counts/completion, and preserve duplicate, warning, role and refresh semantics. Existing full-JSON requests remain supported; no schema or prediction-generation change.

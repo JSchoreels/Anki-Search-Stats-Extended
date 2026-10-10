@@ -8,17 +8,22 @@ Review history is fetched in pages of at most 25,000 rows, using the final
 review ID as an exclusive cursor. Every page retains the same card selection
 and history cutoff. An obsolete search stops fetching further pages. Pages
 are converted and discarded as they arrive, avoiding a single full-history
-JSON response alongside the final history. Each page is converted to eight numeric
-columns, then concatenated into one packed `Float64Array`.
+JSON response alongside the final history. The history owner worker fetches and
+converts pages to eight numeric columns, then concatenates them into one packed
+`Float64Array`. The page retains only its count and last-forget metadata in a
+`StatsHistory` handle.
 
 Review-history aggregation, FSRS Memorised history, calibration response parsing,
 prediction alignment, calibration bins/bootstrap, and UM+/ROC/RWKV daily
 calculations run in dedicated worker tasks. The shared `statsTasks.ts` dispatcher
-also serves tests. Workers receive review history as eight numeric columns in a
-transferred `Float64Array`, preserving timestamp IDs and signed intervals without
-cloning millions of objects. The page retains packed history and transfers a copy
-of its buffer, so later tasks can still use it. Workers wrap that buffer without
-unpacking rows. `RevlogHistory` iteration borrows one reusable cursor; callers
+also serves tests. Calibration selection, review aggregation and Memorised run
+against the same worker-owned history. After each history task returns, including
+a calculator error, the page transfers the same buffer immediately to a fresh
+owner worker and terminates the completed worker. This releases temporary
+calculation heaps without retaining or copying the full history on the page.
+Ownership transfers preserve timestamp IDs and signed intervals. Workers wrap
+the buffer without unpacking rows. Local callers can still supply packed history
+or review arrays; those callers retain their input and transfer a task copy. `RevlogHistory` iteration borrows one reusable cursor; callers
 must copy numeric fields if they retain a row. Replay groups retain row indices,
 selection/reset flags use bytes, and per-review stability uses a numeric column.
 Replay and cheap calibration selection share the same reset/cutoff/cycle rules;
@@ -31,6 +36,13 @@ A prediction refresh that arrives during replay waits for it to finish. This
 prevents newly generated caches from starting additional large worker heaps
 while replay is running, at the cost of delaying refreshed graphs.
 Cancelling a queued task removes it before any worker or transfer is created.
+Cancelling an active graph rejects its public promise immediately but retains
+queue ownership until the history worker completes and returns its buffer; the
+result is discarded. Changing the search, history range, or closing its store
+subscription aborts the history lifetime and terminates its owner immediately,
+including during loading or calculation. A replacement search starts a new
+owner. Fatal worker/transport errors dispose the owner and release the queue;
+ordinary calculator errors preserve history for a later task.
 Calibration samples use index-aligned `Float64Array` review
 and card IDs, `Uint8Array` outcomes, and `Float64Array` predictions (`NaN` for
 missing values). The page transfers each unread FSRS/RWKV prediction body stream to its queued
@@ -49,7 +61,13 @@ structured-cloning them. Buffers shared by multiple views or graph filters are
 transferred once, retaining aliasing. Time distributions retain one numeric
 duration buffer shared by overlapping FSRS filters and compact grouped review
 indices; exact means/medians and merged-bar controls use those values. Repetition
-samples use the same representation. ROC confidence intervals allocate six
+samples use the same representation, including the private retrievability and
+stability samples inside review aggregation. Daily Memorised S90 transitions
+retain exact card/key pairs in numeric chunks, with an index map for only the
+current day. Same-day updates preserve first-seen card order and the final state
+or reset; chunks are released after daily statistics. ROC integrates AUC over
+every distinct threshold while retaining only plotted points at the existing
+one-per-thousand axis resolution and the final endpoint. ROC confidence intervals allocate six
 accumulators by eligible card count, preserving the existing card-clustered
 DeLong calculation and its summation order.
 
@@ -229,3 +247,23 @@ legacy full-JSON compatibility, and ROC accumulator allocation. Existing frozen
 calibration/bootstrap and independent Obuchowski covariance parity remain green.
 An offscreen Svelte/Qt Time-category smoke renders all six graphs and exercises
 mean/median, success and same-day filtering, bar width and scrolling.
+
+
+## One history owner and bounded graph intermediates
+
+The October 11 improvements were measured against commit `3dd8185`: incremental exact ROC integration, chunked daily S90 transitions, compact private replay time samples, and a single worker-owned history transferred to a fresh worker after each history calculation. The same retained-result Qt WebEngine 6.11.2 workload uses 79,387 cards and 3,785,024 review rows, three synthetic prediction/comparison/confidence rounds and refreshes during aggregation and Memorised replay.
+
+| Measurement | Before (`3dd8185`) | After |
+| --- | ---: | ---: |
+| Peak renderer RSS | 3,610,352 KiB (3.44 GiB) | 2,499,168 KiB (2.38 GiB) |
+| Whole sequence | 128.152 s | 120.911 s |
+| Review aggregation | 27.122 s | 26.915 s |
+| Memorised calculation | 55.059 s | 49.133 s |
+| Selected calibration reviews | 1,518,677 | 1,518,677 |
+| Outlier exclusions | 20,788 | 20,788 |
+
+Peak RSS falls by 30.8%, saving about 1.06 GiB, and elapsed time falls by 5.7% in this single before/after pair. Renderer RSS uses the existing 250 ms sampling method and excludes the Python backend. The history buffer alone is about 231 MiB for this snapshot; it is now owned by one worker, rather than retained on the page alongside a per-task copy. The combined memory difference includes the other compact intermediates and garbage collection; it cannot be attributed to the buffer change alone. Synthetic predictions check allocation and integration, not live-cache coverage or model accuracy. An earlier development run measured 2,504,288 KiB and 118.186 seconds; the table uses the final packaged implementation. Single-run timing and RSS vary with system load and GC; full replay still needs substantial memory.
+
+The main regression has only 50 distinct synthetic probabilities. A separate Qt worker stress case processes 1,518,677 distinct probabilities per model and 79,387 card clusters to exercise ROC threshold allocation. Peak renderer RSS falls from 523,760 to 302,336 KiB (42.3%, about 216 MiB). Both runs return 1,002 plotted points per model and identical SHA-256 hashes of their complete ROC outputs, including AUC, both confidence intervals and the paired difference. The test generates outcomes/probabilities in memory without collection access; its timings of 0.869 and 0.905 seconds do not establish a speed improvement.
+
+Verification passes 436 tests in 60 suites and both frontend bundle/type checks. It includes exact equality of all 83 review/Memorised result fields on 3,443 reviews for 200 cards from the preserved copy, frozen full-threshold ROC point/AUC parity with ties and small endpoint steps, existing independent covariance/native FSRS checks, chunk boundaries and same-day daily-transition resets. Worker tests cover metadata-only loading, detached ownership transfers, calculator/fatal/transport errors, active and queued cancellation, and releasing the queue. Store tests reject obsolete search/range results. An actual Qt worker smoke loads paginated synthetic history, rotates it across repeated calculations, cancels active graphs and searches, replaces the search and confirms every owner is terminated. The Svelte/Qt Time smoke retains exact mean/median, success/same-day, merged-bar and scrolling behavior. No live collection is opened or modified.
