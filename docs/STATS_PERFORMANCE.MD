@@ -15,14 +15,19 @@ prediction alignment, calibration bins/bootstrap, and UM+/ROC/RWKV daily
 calculations run in dedicated worker tasks. The shared `statsTasks.ts` dispatcher
 also serves tests. Workers receive review history as eight numeric columns in a
 transferred `Float64Array`, preserving timestamp IDs and signed intervals without
-cloning millions of objects. Only one full-history worker runs at a time;
-calibration selection takes priority over queued aggregation and Memorised
-replay. Prediction parsing and calculations on compact results remain parallel.
+cloning millions of objects. All statistics tasks share one queue, including
+prediction parsing, confidence bands, and comparisons. Calibration selection
+takes priority; queued aggregation and prediction tasks precede Memorised replay.
+A prediction refresh that arrives during replay waits for it to finish. This
+prevents newly generated caches from starting additional large worker heaps
+while replay is running, at the cost of delaying refreshed graphs.
 Cancelling a queued task removes it before any worker or transfer is created.
 Calibration samples use index-aligned `Float64Array` review
 and card IDs, `Uint8Array` outcomes, and `Float64Array` predictions (`NaN` for
 missing values). The page sends raw response text to the worker and receives
-aligned predictions and compact graph results. This avoids cloning large
+aligned predictions and compact graph results. Prediction parsing sorts response
+rows and merges them with typed sample indices into a `Float64Array`, retaining
+last-valid duplicate semantics without a timestamp-keyed object copy. This avoids cloning large
 object arrays/maps and parsing prediction JSON on the main thread. Changing the search or history range terminates obsolete
 workers and ignores obsolete endpoint responses. Worker failures are reported;
 they do not fall back to blocking the page.
@@ -80,20 +85,34 @@ separate backend metrics/preset resolution from frontend graph processing.
 
 ## Large-collection regression verification
 
-The October 2026 memory regression was checked in an offscreen Qt WebEngine
-6.11.2 page against a preserved collection copy with 79,387 cards and 3,785,024
-review rows. The previous concurrent history pipeline reproduced V8
-`CALL_AND_RETRY_LAST` OOM. The corrected pipeline completed history loading,
+The October 2026 memory regression uses an offscreen Qt WebEngine 6.11.2
+page against a preserved collection copy with 79,387 cards and 3,785,024 review
+rows. An initial check completed with serialized full-history tasks, but discarded
+large graph results and did not refresh predictions during replay. It therefore
+missed the subsequent live-profile failure. The expanded regression retains
+review and Memorised results as the page stores do and requests a second set of
+predictions three seconds after review aggregation completes. This reproduces
+V8 `CALL_AND_RETRY_LAST` OOM with the history-only queue.
+
+Serializing alone still ran out of memory in prediction parsing with retained
+graph results. Compact prediction alignment removes that second large copy.
+Both changes are checked against the same refresh sequence, including
 selection of 1,518,677 calibration samples, both prediction parsers, both
-confidence-band workers, UM+/ROC/RWKV daily comparison, review aggregation,
-and full FSRS Memorised replay. Prediction payloads used synthetic probabilities
-at the real sample count; this checks allocation and task integration, not the
-accuracy or coverage of the live profile's model caches. No live collection was
+confidence-band calculations, UM+/ROC/RWKV daily comparison, review aggregation,
+and full FSRS Memorised replay. Prediction payloads use synthetic probabilities
+at the real sample count; each response must cover all selected IDs. A second
+refresh is triggered three seconds after Memorised replay actually starts and
+completes after its retained result arrives. This checks allocation and task
+integration, not the accuracy or coverage of the live profile's model caches.
+An additional stress case with 3,515,138 response rows still ran out of memory
+after replay. The actual endpoints are requested with selected review IDs,
+limiting each response to 1,518,677 rows for this snapshot; larger selected
+cohorts are not established by this regression. No live collection is
 opened or modified by this test.
 
 Regression tests cover cursor boundaries and card/date filtering using a
 synthetic SQLite endpoint fixture, cancellation between pages and in the queue,
-transferred timestamp/interval precision, history task ordering and failure
+transferred timestamp/interval precision, stats task ordering, prediction refresh during replay, and failure
 recovery, and equivalent local/batch daily S90 results across resets and
 same-day reviews. Run `npm test -- --runInBand --coverage=false` and
 `npm run build` before packaging both frontend bundles.

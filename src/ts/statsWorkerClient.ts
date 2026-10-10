@@ -1,18 +1,15 @@
 import type { Revlog } from "./cardData"
-import { scheduleHistoryTask } from "./historyWorkerQueue"
 import { packRevlogs } from "./packedRevlogs"
 import type { Tasks } from "./statsTasks"
+import { scheduleStatsTask } from "./statsWorkerQueue"
 
 export function runStatsTask<K extends keyof Tasks>(
     task: K,
     args: Parameters<Tasks[K]>,
     signal: AbortSignal
 ): Promise<Awaited<ReturnType<Tasks[K]>>> {
-    if (task === "revlog" || task === "memorised" || task === "calibrationSamples") {
-        const priority = task === "calibrationSamples" ? 0 : task === "revlog" ? 1 : 2
-        return scheduleHistoryTask(priority, signal, () => startStatsTask(task, args, signal))
-    }
-    return startStatsTask(task, args, signal)
+    const priority = task === "calibrationSamples" ? 0 : task === "memorised" ? 2 : 1
+    return scheduleStatsTask(priority, signal, () => startStatsTask(task, args, signal))
 }
 
 function startStatsTask<K extends keyof Tasks>(

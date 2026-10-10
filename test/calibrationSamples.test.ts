@@ -128,3 +128,25 @@ test("invalid JSON still fails parsing", () => {
         SyntaxError
     )
 })
+
+test("response alignment handles shuffled and repeated sample IDs without changing their order", () => {
+    const ids = [1700000000012, 1700000000010, 1700000000011, 1700000000012]
+    const samples = calibrationSamplesFrom(
+        ids.map((revlogId) => ({ revlogId, cardId: 1, actual: 1 }))
+    )
+    const parsed = parseReviewRetrievabilityResponse(
+        JSON.stringify({
+            data: [
+                [1700000000012, 0.2],
+                [1700000000099, 0.9],
+                [1700000000010, 0],
+                [1700000000012, 0.8],
+                [1700000000012, "invalid"],
+            ],
+        }),
+        samples
+    )
+    expect(parsed.predictions).toEqual(new Float64Array([0.8, 0, NaN, 0.8]))
+    expect(parsed.responsePredictionCount).toBe(3)
+    expect(Array.from(samples.revlogIds)).toEqual(ids)
+})

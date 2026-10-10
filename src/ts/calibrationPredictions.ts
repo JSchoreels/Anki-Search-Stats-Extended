@@ -1,4 +1,4 @@
-import { alignPredictions, type CalibrationSamples } from "./calibrationSamples"
+import type { CalibrationSamples } from "./calibrationSamples"
 
 export type ParsedReviewRetrievability = {
     column: string | null
@@ -29,20 +29,43 @@ export function parseReviewRetrievabilityResponse(
             roleCounts[role] = count
         }
     }
-    const predictionsByRevlogId: Record<number, number> = {}
     const warnings = (response.warnings ?? []).filter(
         (warning): warning is string => typeof warning === "string" && warning.length > 0
     )
-    for (const [revlogId, rawPrediction] of response.data ?? []) {
-        const prediction = typeof rawPrediction === "string" ? Number(rawPrediction) : rawPrediction
-        if (typeof prediction === "number" && Number.isFinite(prediction)) {
-            predictionsByRevlogId[revlogId] = prediction
-        }
+    // Merge sorted rows into typed output instead of building a second, large
+    // object keyed by timestamp IDs. Stable sorting preserves last-valid duplicate wins.
+    const rows = response.data ?? []
+    rows.sort((a, b) => a[0] - b[0])
+    const sampleOrder = Uint32Array.from(samples.revlogIds, (_, index) => index)
+    sampleOrder.sort((a, b) => samples.revlogIds[a] - samples.revlogIds[b])
+    const predictions = new Float64Array(samples.revlogIds.length).fill(NaN)
+    let responsePredictionCount = 0
+    let sampleIndex = 0
+    for (let rowIndex = 0; rowIndex < rows.length; ) {
+        const revlogId = rows[rowIndex][0]
+        let prediction = NaN
+        do {
+            const raw = rows[rowIndex++][1]
+            const value = typeof raw === "string" ? Number(raw) : raw
+            if (typeof value === "number" && Number.isFinite(value)) prediction = value
+        } while (rowIndex < rows.length && rows[rowIndex][0] === revlogId)
+        if (!Number.isFinite(prediction)) continue
+        responsePredictionCount++
+        while (
+            sampleIndex < sampleOrder.length &&
+            samples.revlogIds[sampleOrder[sampleIndex]] < revlogId
+        )
+            sampleIndex++
+        while (
+            sampleIndex < sampleOrder.length &&
+            samples.revlogIds[sampleOrder[sampleIndex]] === revlogId
+        )
+            predictions[sampleOrder[sampleIndex++]] = prediction
     }
     return {
         column: response.column ?? null,
-        predictions: alignPredictions(samples, predictionsByRevlogId),
-        responsePredictionCount: Object.keys(predictionsByRevlogId).length,
+        predictions,
+        responsePredictionCount,
         warnings,
         roles,
         roleCounts,

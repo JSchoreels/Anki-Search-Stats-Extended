@@ -1,23 +1,23 @@
-import { scheduleHistoryTask } from "../src/ts/historyWorkerQueue"
+import { scheduleStatsTask } from "../src/ts/statsWorkerQueue"
 
 // Advance both the task-resolution chain and the next queued microtask.
 async function flush() {
     for (let i = 0; i < 5; i++) await Promise.resolve()
 }
 
-test("history workers run one at a time, with calibration first", async () => {
+test("stats workers run one at a time, with calibration first", async () => {
     const signal = new AbortController().signal
     const started: string[] = []
     let complete!: () => void
-    const memorised = scheduleHistoryTask(2, signal, async () => {
+    const memorised = scheduleStatsTask(2, signal, async () => {
         started.push("memorised")
         return 2
     })
-    const revlog = scheduleHistoryTask(1, signal, async () => {
+    const revlog = scheduleStatsTask(1, signal, async () => {
         started.push("revlog")
         return 1
     })
-    const calibration = scheduleHistoryTask(
+    const calibration = scheduleStatsTask(
         0,
         signal,
         () =>
@@ -37,7 +37,7 @@ test("history workers run one at a time, with calibration first", async () => {
 test("a cancelled queued search never starts, and failures release the slot", async () => {
     const signal = new AbortController().signal
     let complete!: () => void
-    const first = scheduleHistoryTask(
+    const first = scheduleStatsTask(
         0,
         signal,
         () =>
@@ -48,15 +48,15 @@ test("a cancelled queued search never starts, and failures release the slot", as
     await flush()
     const controller = new AbortController()
     const start = jest.fn()
-    const cancelled = scheduleHistoryTask(0, controller.signal, start)
+    const cancelled = scheduleStatsTask(0, controller.signal, start)
     const rejected = expect(cancelled).rejects.toMatchObject({ name: "AbortError" })
     controller.abort()
     await rejected
-    const failure = scheduleHistoryTask(1, signal, async () => {
+    const failure = scheduleStatsTask(1, signal, async () => {
         throw new Error("worker failed")
     })
     const failed = expect(failure).rejects.toThrow("worker failed")
-    const next = scheduleHistoryTask(2, signal, async () => "ready")
+    const next = scheduleStatsTask(2, signal, async () => "ready")
     complete()
     await first
     await failed

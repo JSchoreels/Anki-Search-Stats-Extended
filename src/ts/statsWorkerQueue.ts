@@ -1,5 +1,5 @@
-// History workers each expand the complete collection. Keep only one active so
-// their heaps do not compete inside Qt's renderer. Small result tasks remain parallel.
+// Prediction refreshes can allocate large heaps too. Keep all stats calculations
+// in one queue so they cannot overlap a full-history replay.
 type Pending = { priority: number; start: () => void }
 const pending: Pending[] = []
 let active = false
@@ -11,7 +11,7 @@ function drain() {
     pending.shift()!.start()
 }
 
-export function scheduleHistoryTask<T>(
+export function scheduleStatsTask<T>(
     priority: number,
     signal: AbortSignal,
     start: () => Promise<T>

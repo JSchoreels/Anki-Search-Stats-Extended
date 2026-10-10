@@ -48,8 +48,10 @@ test("a cancelled worker stops computing and cannot publish its result", async (
             controller.signal
         )
         const result = expect(promise).rejects.toMatchObject({ name: "AbortError" })
+        await Promise.resolve()
+        const staleMessage = worker.onmessage
         controller.abort()
-        worker.onmessage({ data: { result: ["stale"] } })
+        staleMessage({ data: { result: ["stale"] } })
         await result
         expect(worker.terminate).toHaveBeenCalled()
     } finally {
@@ -119,3 +121,50 @@ test.each(["revlog", "memorised", "calibrationSamples"] as const)(
         }
     }
 )
+
+test("prediction refresh waits for Memorised replay and a cancelled refresh never starts", async () => {
+    const workers: any[] = []
+    const original = global.Worker
+    global.Worker = jest.fn(() => {
+        const worker = { terminate: jest.fn(), postMessage: jest.fn(), onmessage: null as any }
+        workers.push(worker)
+        return worker
+    }) as any
+    const flush = async () => {
+        for (let i = 0; i < 5; i++) await Promise.resolve()
+    }
+    try {
+        await flush()
+        const signal = new AbortController().signal
+        const replay = runStatsTask("memorised", [[]] as never, signal)
+        await flush()
+        expect(workers).toHaveLength(1)
+        const controller = new AbortController()
+        const obsolete = runStatsTask(
+            "calibrationPredictions",
+            [EMPTY_CALIBRATION_SAMPLES, "{}"],
+            controller.signal
+        )
+        const cancelled = expect(obsolete).rejects.toMatchObject({ name: "AbortError" })
+        controller.abort()
+        await cancelled
+        const refresh = runStatsTask(
+            "calibrationPredictions",
+            [EMPTY_CALIBRATION_SAMPLES, "{}"],
+            signal
+        )
+        await flush()
+        expect(workers).toHaveLength(1)
+        workers[0].onmessage({ data: { result: "replay finished" } })
+        expect(await replay).toBe("replay finished")
+        await flush()
+        expect(workers[0].terminate).toHaveBeenCalledTimes(1)
+        expect(workers).toHaveLength(2)
+        expect(workers[1].postMessage.mock.calls[0][0].task).toBe("calibrationPredictions")
+        workers[1].onmessage({ data: { result: "refresh finished" } })
+        expect(await refresh).toBe("refresh finished")
+        await flush()
+    } finally {
+        global.Worker = original
+    }
+})
