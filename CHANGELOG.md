@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Reduce memory use while loading UM+ and FSRS graphs for large collections: page review history, transfer compact worker inputs, serialize full-history workers, and retain only daily S90 transitions.
+
 - Keep calibration completion fingerprints off Qt's main thread and allow progress updates while a cache-reuse query waits for the collection.
 - Retry interrupted FSRS generation even when Anki saved some validation batches before cancellation.
 

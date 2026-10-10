@@ -82,3 +82,40 @@ test("current worker failures are reported, cancelled request failures are silen
         logMock.mockRestore()
     }
 })
+
+test.each(["revlog", "memorised", "calibrationSamples"] as const)(
+    "%s transfers numeric history while preserving the page's reviews",
+    async (task) => {
+        const worker = { terminate: jest.fn(), postMessage: jest.fn(), onmessage: null as any }
+        const original = global.Worker
+        global.Worker = jest.fn(() => worker) as any
+        const review = {
+            id: 1700000000001,
+            cid: 1700000000000,
+            ease: 3,
+            ivl: -60,
+            lastIvl: 10,
+            time: 1000,
+            factor: 2500,
+            type: 0,
+        }
+        const reviews = [review]
+        try {
+            const result = runStatsTask(task, [reviews] as never, new AbortController().signal)
+            await Promise.resolve()
+            const [message, transfers] = worker.postMessage.mock.calls[0]
+            expect(message.task).toBe(task)
+            expect(message.args[0]).toBeInstanceOf(Float64Array)
+            expect(Array.from(message.args[0])).toEqual([
+                1700000000001, 1700000000000, 3, -60, 10, 1000, 2500, 0,
+            ])
+            expect(transfers).toEqual([message.args[0].buffer])
+            expect(reviews).toEqual([review])
+            worker.onmessage({ data: { result: "finished" } })
+            expect(await result).toBe("finished")
+            for (let i = 0; i < 5; i++) await Promise.resolve()
+        } finally {
+            global.Worker = original
+        }
+    }
+)

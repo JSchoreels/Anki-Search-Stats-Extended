@@ -170,38 +170,40 @@ export async function saveFsrsReviewRetrievability(predictionsByRevlogId: Record
     )
 }
 
-export async function getRevlogs(cids: number[], day_range: number) {
-    const response = (await endpoint("revlogs", JSON.stringify({ cids, day_range }))) as {
-        columns?: string[]
-        data?: any[][]
-    }
-
-    if (!response.columns || !response.data) {
-        alert("Search Stats Extended has been updated. Please restart Anki.")
-        return null
-    }
-
-    // Build column index map once for efficient lookups
-    const idx: Record<string, number> = {}
-    response.columns.forEach((col, i) => (idx[col] = i))
-
-    // Convert array-of-arrays to array-of-objects
-    // Preallocate array for better performance
-    const revlogs = new Array<Revlog>(response.data.length)
-    for (let i = 0; i < response.data.length; i++) {
-        const row = response.data[i]
-        revlogs[i] = {
-            id: row[idx.id],
-            cid: row[idx.cid],
-            ease: row[idx.ease] as 0 | 1 | 2 | 3 | 4,
-            ivl: row[idx.ivl],
-            lastIvl: row[idx.lastIvl],
-            time: row[idx.time],
-            factor: row[idx.factor],
-            type: row[idx.type],
+export async function getRevlogs(cids: number[], day_range: number, signal?: AbortSignal) {
+    const revlogs: Revlog[] = []
+    let after_id = 0
+    do {
+        signal?.throwIfAborted()
+        const response = (await endpoint(
+            "revlogs",
+            JSON.stringify({ cids, day_range, after_id })
+        )) as {
+            columns?: string[]
+            data?: number[][]
+            next_after_id?: number | null
         }
-    }
-
+        signal?.throwIfAborted()
+        if (!response.columns || !response.data) {
+            alert("Search Stats Extended has been updated. Please restart Anki.")
+            return null
+        }
+        const idx: Record<string, number> = {}
+        response.columns.forEach((col, i) => (idx[col] = i))
+        for (const row of response.data) {
+            revlogs.push({
+                id: row[idx.id],
+                cid: row[idx.cid],
+                ease: row[idx.ease] as Revlog["ease"],
+                ivl: row[idx.ivl],
+                lastIvl: row[idx.lastIvl],
+                time: row[idx.time],
+                factor: row[idx.factor],
+                type: row[idx.type],
+            })
+        }
+        after_id = response.next_after_id ?? 0
+    } while (after_id)
     return revlogs
 }
 

@@ -4,10 +4,22 @@ The stats page fetches card data once for each search. Interval histograms use
 those cards (review and relearning types), excluding queue -1 when suspended
 cards are hidden. Toggling suspended cards does not issue another graphs request.
 
+Review history is fetched in pages of at most 25,000 rows, using the final
+review ID as an exclusive cursor. Every page retains the same card selection
+and history cutoff. An obsolete search stops fetching further pages. Pages
+are converted and discarded as they arrive, avoiding a single full-history
+JSON response alongside the final objects.
+
 Review-history aggregation, FSRS Memorised history, calibration response parsing,
 prediction alignment, calibration bins/bootstrap, and UM+/ROC/RWKV daily
 calculations run in dedicated worker tasks. The shared `statsTasks.ts` dispatcher
-also serves tests. Calibration samples use index-aligned `Float64Array` review
+also serves tests. Workers receive review history as eight numeric columns in a
+transferred `Float64Array`, preserving timestamp IDs and signed intervals without
+cloning millions of objects. Only one full-history worker runs at a time;
+calibration selection takes priority over queued aggregation and Memorised
+replay. Prediction parsing and calculations on compact results remain parallel.
+Cancelling a queued task removes it before any worker or transfer is created.
+Calibration samples use index-aligned `Float64Array` review
 and card IDs, `Uint8Array` outcomes, and `Float64Array` predictions (`NaN` for
 missing values). The page sends raw response text to the worker and receives
 aligned predictions and compact graph results. This avoids cloning large
@@ -65,3 +77,23 @@ After installing Python changes, fully quit and reopen Anki.
 Precision/performance measurements and reproducible synthetic inputs are in
 [FSRS_ACCURACY_BENCHMARK.MD](FSRS_ACCURACY_BENCHMARK.MD). Runtime measurements
 separate backend metrics/preset resolution from frontend graph processing.
+
+## Large-collection regression verification
+
+The October 2026 memory regression was checked in an offscreen Qt WebEngine
+6.11.2 page against a preserved collection copy with 79,387 cards and 3,785,024
+review rows. The previous concurrent history pipeline reproduced V8
+`CALL_AND_RETRY_LAST` OOM. The corrected pipeline completed history loading,
+selection of 1,518,677 calibration samples, both prediction parsers, both
+confidence-band workers, UM+/ROC/RWKV daily comparison, review aggregation,
+and full FSRS Memorised replay. Prediction payloads used synthetic probabilities
+at the real sample count; this checks allocation and task integration, not the
+accuracy or coverage of the live profile's model caches. No live collection was
+opened or modified by this test.
+
+Regression tests cover cursor boundaries and card/date filtering using a
+synthetic SQLite endpoint fixture, cancellation between pages and in the queue,
+transferred timestamp/interval precision, history task ordering and failure
+recovery, and equivalent local/batch daily S90 results across resets and
+same-day reviews. Run `npm test -- --runInBand --coverage=false` and
+`npm run build` before packaging both frontend bundles.

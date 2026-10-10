@@ -127,3 +127,31 @@ test("current-card heatmap and ease gain use the stored complete state", () => {
     expect(create_card_sr_dataset([incomplete], {})).toBeNull()
     expect(calculateEaseFactors([incomplete], { 1: config }, { 1: 1 })).toEqual([])
 })
+
+test("daily S90 compaction preserves local and batch results across same-day updates and resets", async () => {
+    const start = new Date(2026, 8, 1, 12).getTime()
+    const reviews = [
+        review(start, 1, 1000, 0),
+        review(start + 600000, 3, 2000),
+        review(start + 86400000, 0, 0, 4),
+        review(start + 86401000, 4, 3000, 0),
+        review(start + 172801000, 3, 5000),
+    ]
+    const local = await getMemorisedDays(reviews, [card], { 1: config }, { 1: 1 })
+    const batch = await getMemorisedDays(
+        reviews,
+        [card],
+        { 1: config },
+        { 1: 1 },
+        [],
+        2,
+        2,
+        {},
+        async (items) => items.map((item) => core.next_interval(item, 0.9))
+    )
+    for (const day of [0, 1, 2].map((offset) => dayFromMs(start) + offset)) {
+        expect(local.day_means[day]).toBeCloseTo(batch.day_means[day], 9)
+        expect(local.day_medians[day]).toBeCloseTo(batch.day_medians[day], 9)
+        expect(local.day_young_ratio_s90[day]).toBe(batch.day_young_ratio_s90[day])
+    }
+})

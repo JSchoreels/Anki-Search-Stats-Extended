@@ -435,16 +435,17 @@ export async function getMemorisedDays(
 
     let last_stability: number[] = []
     const last_memory_state: Record<number, FsrsMemoryState> = {}
-    let s90_by_key = new Map<string, number>()
+    let s90_by_key = new Map<number, number>()
+    const local_s90_by_key = new Map<string, number>()
     let current_card_s90_by_cid = new Map<number, number>()
-    let s90_events_by_day = new Map<number, { card_id: number; key: string | null }[]>()
+    let s90_events_by_day = new Map<number, Map<number, number | null>>()
     let s90_request_items: S90BatchItem[] = []
     let s90_request_index_by_key = new Map<string, number>()
     let s90_dedup_total = 0
     let s90_deduped_total = 0
     let s90_custom_resolver_calls = 0
 
-    function incrementCount(map: Map<string, number>, key: string, delta: number) {
+    function incrementCount(map: Map<number, number>, key: number, delta: number) {
         const next = (map.get(key) ?? 0) + delta
         if (next > 0) {
             map.set(key, next)
@@ -453,7 +454,8 @@ export async function getMemorisedDays(
         }
     }
 
-    const s90SourceKeys = new Map<number, string>()
+    const s90SourceKeys = new Map<number, number>()
+    const s90Sources = new Map<string, number>()
     function uncachedS90SourceKey(cid: number) {
         const source = card_fsrs_source(cid)
         if (!source) {
@@ -466,26 +468,43 @@ export async function getMemorisedDays(
     }
 
     function s90SourceKey(cid: number) {
-        if (!s90SourceKeys.has(cid)) s90SourceKeys.set(cid, uncachedS90SourceKey(cid))
+        if (!s90SourceKeys.has(cid)) {
+            const signature = uncachedS90SourceKey(cid)
+            if (!s90Sources.has(signature)) s90Sources.set(signature, s90Sources.size)
+            s90SourceKeys.set(cid, s90Sources.get(signature)!)
+        }
         return s90SourceKeys.get(cid)!
     }
 
-    function queueS90Request(cardId: number, state: FsrsMemoryState) {
+    function queueS90Request(cardId: number, state: FsrsMemoryState, model: FsrsModel) {
+        s90_dedup_total += 1
+        // Exact FSRS-7 intervals need no retained state cache in the local path.
+        if (!resolveS90Batch && state.stabilityFast !== undefined) {
+            return intervalAtRetrievability(model, state, TARGET_RETRIEVABILITY)
+        }
         const { step, bucket } = stabilityBucketForS90(state.stability)
         const stateKey =
             state.stabilityFast === undefined
                 ? `${step}:${bucket}`
                 : `${state.stability}:${state.stabilityFast}:${state.difficulty}`
         const s90_key = `${s90SourceKey(cardId)}:${stateKey}`
-        s90_dedup_total += 1
+        if (!resolveS90Batch) {
+            if (!local_s90_by_key.has(s90_key)) {
+                local_s90_by_key.set(
+                    s90_key,
+                    intervalAtRetrievability(model, state, TARGET_RETRIEVABILITY)
+                )
+            } else s90_deduped_total += 1
+            return local_s90_by_key.get(s90_key)!
+        }
         if (!s90_request_index_by_key.has(s90_key)) {
             s90_request_index_by_key.set(s90_key, s90_request_items.length)
             s90_request_items.push({
                 card_id: cardId,
                 ...state,
             })
-        }
-        return s90_key
+        } else s90_deduped_total += 1
+        return s90_request_index_by_key.get(s90_key)!
     }
 
     function weightedValueAtRank(entries: { s90: number; count: number }[], rank: number): number {
@@ -515,7 +534,7 @@ export async function getMemorisedDays(
         return lowValue + fraction * (highValue - lowValue)
     }
 
-    function dayStatsFromS90Counts(counts: Map<string, number>, totalCount: number) {
+    function dayStatsFromS90Counts(counts: Map<number, number>, totalCount: number) {
         if (totalCount <= 0) {
             return {
                 mean: 0,
@@ -530,7 +549,7 @@ export async function getMemorisedDays(
             if (count <= 0) {
                 continue
             }
-            const s90 = s90_by_key.get(key) ?? 0
+            const s90 = resolveS90Batch ? (s90_by_key.get(key) ?? 0) : key
             entries.push({ s90, count })
             weightedSum += s90 * count
             if (s90 < 21) {
@@ -591,8 +610,8 @@ export async function getMemorisedDays(
             probabilities[revlog.cid] = [1]
         }
         if (grade === 0) {
-            const events = s90_events_by_day.get(revlogDay) ?? []
-            events.push({ card_id: revlog.cid, key: null })
+            const events = s90_events_by_day.get(revlogDay) ?? new Map<number, number | null>()
+            events.set(revlog.cid, null)
             s90_events_by_day.set(revlogDay, events)
             continue
         }
@@ -714,12 +733,9 @@ export async function getMemorisedDays(
         card = { ...newState, last_review: now, last_review_day: revlogDay }
         last_memory_state[revlog.cid] = newState
         last_stability[revlog.cid] = card.stability // To prevent "forget" affecting the forgetting curve
-        const s90_key = queueS90Request(revlog.cid, newState)
-        const day_events = s90_events_by_day.get(revlogDay) ?? []
-        day_events.push({
-            card_id: revlog.cid,
-            key: s90_key,
-        })
+        const s90_key = queueS90Request(revlog.cid, newState, fsrs)
+        const day_events = s90_events_by_day.get(revlogDay) ?? new Map<number, number | null>()
+        day_events.set(revlog.cid, s90_key)
         s90_events_by_day.set(revlogDay, day_events)
 
         fsrsCards[revlog.cid] = card
@@ -733,40 +749,31 @@ export async function getMemorisedDays(
         current_card_s90_by_cid.set(card.id, stability)
     }
 
-    s90_deduped_total = Math.max(0, s90_dedup_total - s90_request_items.length)
-    if (s90_request_items.length > 0) {
-        const intervals = resolveS90Batch
-            ? await resolveS90Batch(s90_request_items, TARGET_RETRIEVABILITY)
-            : s90_request_items.map((item) => {
-                  const source = card_fsrs_source(item.card_id)
-                  if (!source) {
-                      return 0
-                  }
-                  return intervalAtRetrievability(getFsrs(source), item, TARGET_RETRIEVABILITY)
-              })
-        s90_custom_resolver_calls = resolveS90Batch ? 1 : 0
-        for (const [key, requestIndex] of s90_request_index_by_key) {
+    if (resolveS90Batch && s90_request_items.length > 0) {
+        const intervals = await resolveS90Batch(s90_request_items, TARGET_RETRIEVABILITY)
+        s90_custom_resolver_calls = 1
+        for (const requestIndex of s90_request_index_by_key.values()) {
             const s90 = intervals[requestIndex]
             if (s90 !== undefined) {
-                s90_by_key.set(key, s90)
+                s90_by_key.set(requestIndex, s90)
             }
         }
     }
 
-    const s90_key_by_card = new Map<number, string>()
-    const s90_count_by_key = new Map<string, number>()
+    const s90_key_by_card = new Map<number, number>()
+    const s90_count_by_key = new Map<number, number>()
     for (let i = 0; i < review_days.length; i++) {
         const day = review_days[i]
-        const events = s90_events_by_day.get(day) ?? []
-        for (const event of events) {
-            const previous_key = s90_key_by_card.get(event.card_id)
-            if (previous_key) {
+        const events = s90_events_by_day.get(day) ?? new Map<number, number | null>()
+        for (const [card_id, key] of events) {
+            const previous_key = s90_key_by_card.get(card_id)
+            if (previous_key !== undefined) {
                 incrementCount(s90_count_by_key, previous_key, -1)
             }
-            if (event.key === null) s90_key_by_card.delete(event.card_id)
+            if (key === null) s90_key_by_card.delete(card_id)
             else {
-                s90_key_by_card.set(event.card_id, event.key)
-                incrementCount(s90_count_by_key, event.key, 1)
+                s90_key_by_card.set(card_id, key)
+                incrementCount(s90_count_by_key, key, 1)
             }
         }
         const stats = dayStatsFromS90Counts(s90_count_by_key, s90_key_by_card.size)

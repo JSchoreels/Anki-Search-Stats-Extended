@@ -163,7 +163,7 @@ export let revlogs: Readable<Revlog[] | null> = derived(
     ([$cids, $showRevlogStats, $searchLimit], set) => {
         set(null)
         if ($cids && $showRevlogStats) {
-            return latestResult(set, () => getRevlogs($cids, $searchLimit))
+            return latestResult(set, (signal) => getRevlogs($cids, $searchLimit, signal))
         }
     }
 )

@@ -236,3 +236,86 @@ test("RWKV Memorised endpoints send the selected card ids", async () => {
         jest.resetModules()
     }
 })
+
+test("review history follows page cursors and maps columns without losing rows", async () => {
+    const originalFetch = global.fetch
+    const columns = ["cid", "id", "ease", "ivl", "lastIvl", "time", "factor", "type"]
+    const fetchMock = jest
+        .fn()
+        .mockResolvedValueOnce({
+            ok: true,
+            text: async () =>
+                JSON.stringify({
+                    columns,
+                    data: [[10, 1700000000001, 3, -60, 2, 5000, 2500, 0]],
+                    next_after_id: 1700000000001,
+                }),
+        })
+        .mockResolvedValueOnce({
+            ok: true,
+            text: async () =>
+                JSON.stringify({
+                    columns,
+                    data: [[10, 1700000000002, 0, 0, 0, 0, 0, 4]],
+                    next_after_id: null,
+                }),
+        })
+    jest.resetModules()
+    global.fetch = fetchMock as typeof fetch
+    try {
+        const { getRevlogs } = await import("../src/ts/search")
+        expect(await getRevlogs([10], 365)).toEqual([
+            {
+                id: 1700000000001,
+                cid: 10,
+                ease: 3,
+                ivl: -60,
+                lastIvl: 2,
+                time: 5000,
+                factor: 2500,
+                type: 0,
+            },
+            {
+                id: 1700000000002,
+                cid: 10,
+                ease: 0,
+                ivl: 0,
+                lastIvl: 0,
+                time: 0,
+                factor: 0,
+                type: 4,
+            },
+        ])
+        expect(fetchMock.mock.calls.map(([, options]) => JSON.parse(options.body))).toEqual([
+            { cids: [10], day_range: 365, after_id: 0 },
+            { cids: [10], day_range: 365, after_id: 1700000000001 },
+        ])
+    } finally {
+        global.fetch = originalFetch
+        jest.resetModules()
+    }
+})
+
+test("cancelled history loading stops before requesting another page", async () => {
+    const originalFetch = global.fetch
+    const controller = new AbortController()
+    const fetchMock = jest.fn().mockResolvedValue({
+        ok: true,
+        text: async () => {
+            controller.abort()
+            return JSON.stringify({ columns: [], data: [], next_after_id: 1 })
+        },
+    })
+    jest.resetModules()
+    global.fetch = fetchMock as typeof fetch
+    try {
+        const { getRevlogs } = await import("../src/ts/search")
+        await expect(getRevlogs([10], 0, controller.signal)).rejects.toMatchObject({
+            name: "AbortError",
+        })
+        expect(fetchMock).toHaveBeenCalledTimes(1)
+    } finally {
+        global.fetch = originalFetch
+        jest.resetModules()
+    }
+})

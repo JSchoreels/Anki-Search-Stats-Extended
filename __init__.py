@@ -248,6 +248,7 @@ post_handlers["fsrsPresetData"] = fsrs_preset_data
 
 
 REVLOG_COLUMNS = ["id", "cid", "ease", "ivl", "lastIvl", "time", "factor", "type"]
+REVLOG_PAGE_SIZE = 25000
 FSRS_RETRIEVABILITY_CACHE_TABLE = "search_stats_fsrs_review_retrievability"
 RWKV_RETRIEVABILITY_CACHE_TABLE = "search_stats_rwkv_review_retrievability"
 RWKV_MEMORISED_CACHE_META_TABLE = "search_stats_rwkv_memorised_meta"
@@ -293,7 +294,7 @@ def revlogs() -> bytes:
     req = orjson.loads(request.data)
     cards = ",".join(str(cid) for cid in req["cids"])
     day_range = req["day_range"]
-    lower_limit = _revlog_lower_limit(day_range)
+    lower_limit = max(_revlog_lower_limit(day_range), int(req.get("after_id", 0)))
 
     revlog_entries = mw.col.db.all(f"""
     SELECT
@@ -303,9 +304,16 @@ def revlogs() -> bytes:
         cid IN ({cards})
         AND revlog.id > ({lower_limit})
     ORDER BY revlog.id
+    LIMIT {REVLOG_PAGE_SIZE}
     """)
 
-    result = {"columns": REVLOG_COLUMNS, "data": revlog_entries}
+    result = {
+        "columns": REVLOG_COLUMNS,
+        "data": revlog_entries,
+        "next_after_id": revlog_entries[-1][0]
+        if len(revlog_entries) == REVLOG_PAGE_SIZE
+        else None,
+    }
 
     return Response(orjson.dumps(result))
 

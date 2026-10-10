@@ -1,6 +1,21 @@
+import type { Revlog } from "./cardData"
+import { scheduleHistoryTask } from "./historyWorkerQueue"
+import { packRevlogs } from "./packedRevlogs"
 import type { Tasks } from "./statsTasks"
 
 export function runStatsTask<K extends keyof Tasks>(
+    task: K,
+    args: Parameters<Tasks[K]>,
+    signal: AbortSignal
+): Promise<Awaited<ReturnType<Tasks[K]>>> {
+    if (task === "revlog" || task === "memorised" || task === "calibrationSamples") {
+        const priority = task === "calibrationSamples" ? 0 : task === "revlog" ? 1 : 2
+        return scheduleHistoryTask(priority, signal, () => startStatsTask(task, args, signal))
+    }
+    return startStatsTask(task, args, signal)
+}
+
+function startStatsTask<K extends keyof Tasks>(
     task: K,
     args: Parameters<Tasks[K]>,
     signal: AbortSignal
@@ -29,7 +44,14 @@ export function runStatsTask<K extends keyof Tasks>(
         worker.onerror = (event) => fail(new Error(event.message || "Stats worker failed"))
         worker.onmessageerror = () => fail(new Error("Could not read stats worker result"))
         try {
-            worker.postMessage({ task, args, context: SSEother })
+            if (task === "revlog" || task === "memorised" || task === "calibrationSamples") {
+                const reviews = packRevlogs(args[0] as Revlog[])
+                worker.postMessage({ task, args: [reviews, ...args.slice(1)], context: SSEother }, [
+                    reviews.buffer,
+                ])
+            } else {
+                worker.postMessage({ task, args, context: SSEother })
+            }
         } catch (error) {
             fail(error instanceof Error ? error : new Error(String(error)))
         }

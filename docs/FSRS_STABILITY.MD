@@ -14,10 +14,10 @@ This document describes how stability-related values are computed for FSRS graph
 
 - `day_means` and `day_medians` are computed from `S90`, not raw FSRS `stability`.
 - `S90` is defined as the interval in days where retrievability is `90%`.
-- Historical replay stores the complete upstream model state after each review, then computes S90 locally from the resolved preset params already read through `/_anki/fsrsPresetData`. For FSRS-7, the interval solver receives slow stability, fast stability, and difficulty together.
+- Historical replay computes S90 from the complete upstream model state after each review locally from the resolved preset params already read through `/_anki/fsrsPresetData`. For FSRS-7, the interval solver receives slow stability, fast stability, and difficulty together.
 - This avoids an additional backend S90 conversion request while preserving Anki's dynamic preset overlay resolution for the FSRS params used in the conversion.
-- Replay records each card's resolved S90 after review, then computes day stats from the recorded replay transitions.
-- FSRS-7 S90 requests are deduplicated only when the preset and all three state values match. Older models retain the existing scalar stability buckets.
+- Replay retains only each card's final S90 transition per Anki day, including reset events, then computes the same daily statistics from those transitions.
+- Local FSRS-7 conversion evaluates the complete state immediately instead of retaining a collection-wide request/state cache. Older models retain the existing scalar stability buckets and cache the first interval in each preset/bucket. An injected batch resolver still deduplicates FSRS-7 requests by complete parameters and all three state values; numeric request indices represent the daily transitions.
 - `day_young_ratio_s90` stores the young-card ratio based on `S90 < 21`.
 
 ### Notes
