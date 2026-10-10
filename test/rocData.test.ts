@@ -182,7 +182,9 @@ test("card-clustered DeLong intervals match a brute-force Obuchowski reference",
     ]
     const cards = [...new Set(samples.cardIds)]
     const clusters = cards.map((card) => {
-        const indices = Array.from(samples.cardIds.keys()).filter((i) => samples.cardIds[i] === card)
+        const indices = Array.from(samples.cardIds.keys()).filter(
+            (i) => samples.cardIds[i] === card
+        )
         const positive = indices.filter((i) => samples.actual[i] === 1)
         const negative = indices.filter((i) => samples.actual[i] === 0)
         return {
@@ -200,22 +202,19 @@ test("card-clustered DeLong intervals match a brute-force Obuchowski reference",
     const S10 = (k: number, l: number) =>
         (I10 / ((I10 - 1) * M)) *
         clusters.reduce(
-            (sum, c) =>
-                sum + (c.x[k] - c.m * models[k].auc) * (c.x[l] - c.m * models[l].auc),
+            (sum, c) => sum + (c.x[k] - c.m * models[k].auc) * (c.x[l] - c.m * models[l].auc),
             0
         )
     const S01 = (k: number, l: number) =>
         (I01 / ((I01 - 1) * N)) *
         clusters.reduce(
-            (sum, c) =>
-                sum + (c.y[k] - c.n * models[k].auc) * (c.y[l] - c.n * models[l].auc),
+            (sum, c) => sum + (c.y[k] - c.n * models[k].auc) * (c.y[l] - c.n * models[l].auc),
             0
         )
     const S11 = (k: number, l: number) =>
         (I / (I - 1)) *
         clusters.reduce(
-            (sum, c) =>
-                sum + (c.x[k] - c.m * models[k].auc) * (c.y[l] - c.n * models[l].auc),
+            (sum, c) => sum + (c.x[k] - c.m * models[k].auc) * (c.y[l] - c.n * models[l].auc),
             0
         )
     const cov = (k: number, l: number) =>
@@ -292,4 +291,31 @@ test.each([0, 1])("intervals are unavailable with only one cluster for class %i"
     expect(data.fsrs.interval).toBeUndefined()
     expect(data.rwkv.interval).toBeUndefined()
     expect(data.difference).toBeUndefined()
+})
+
+test("repeated reviews allocate confidence accumulators per card instead of per review", () => {
+    const count = 40000
+    const samples = {
+        revlogIds: Float64Array.from({ length: count }, (_, i) => i + 1),
+        cardIds: Float64Array.from({ length: count }, (_, i) => (i % 2) + 1),
+        actual: Uint8Array.from({ length: count }, (_, i) => (i % 4 < 2 ? 1 : 0)),
+    }
+    const predictions = Float64Array.from(samples.actual, (actual) => (actual ? 0.9 : 0.1))
+    const original = global.Float64Array
+    const allocations: number[] = []
+    global.Float64Array = new Proxy(original, {
+        construct(target, args, newTarget) {
+            if (typeof args[0] === "number") allocations.push(args[0])
+            return Reflect.construct(target, args, newTarget)
+        },
+    })
+    try {
+        const result = buildRocData(samples, predictions, predictions)
+        expect(result.fsrs.auc).toBe(1)
+        expect(result.difference?.value).toBe(0)
+        expect(allocations.filter((size) => size === count)).toHaveLength(5)
+        expect(allocations.filter((size) => size === 2)).toHaveLength(6)
+    } finally {
+        global.Float64Array = original
+    }
 })

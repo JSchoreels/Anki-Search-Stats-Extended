@@ -117,6 +117,7 @@ globals_ = {
     "_cache_table_name": lambda table: table,
     "_revlog_lower_limit": lambda days: days,
     "Response": lambda body: body,
+    "prediction_response": lambda result, stream_pages=False: json.dumps(result),
     "orjson": NS(loads=json.loads, dumps=json.dumps),
     "request": NS(data=json.dumps({"cids": [10], "revlog_ids": list(range(1, 12))})),
     "_positive_ints": lambda ids: ids,

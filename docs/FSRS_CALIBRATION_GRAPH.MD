@@ -82,11 +82,14 @@ FSRS cache still requests that replay for the calibration fallback.
 `getMemorisedDays()` returns calibration samples as three index-aligned typed
 columns: `revlogIds` and `cardIds` (`Float64Array`) and `actual` (`Uint8Array`).
 Its `fsrs_calibration_replay_predictions` is a `Float64Array` aligned to those
-samples. FSRS and RWKV endpoint helpers return raw response text; the
-`calibrationPredictions` worker task parses and validates it, aligns predictions
-by review ID, and computes calibration bins. A separate `calibrationBands` task
-adds confidence intervals after the bins appear. Chronological response and
-sample arrays merge directly; shuffled inputs keep the sorted merge fallback.
+samples. Statistics requests FSRS and RWKV prediction streams independently.
+The `calibrationPredictions` worker consumes bounded pages, validates metadata,
+aligns predictions by review ID, and computes calibration bins. A separate
+`calibrationBands` task adds confidence intervals after the bins appear. Ordered
+response rows merge directly, including duplicates crossing page boundaries.
+Shuffled sample IDs retain the sorted-index merge. Legacy full JSON responses
+still support shuffled rows. Workers transfer result buffers instead of cloning
+them; missing predictions remain `NaN`.
 
 Each calibration store exposes `predictions: Float64Array`, with `NaN` for
 samples absent from the response. Response prediction counts retain all unique
@@ -101,8 +104,37 @@ builds UM+, ROC, and RWKV daily results, with replay-only FSRS predictions
 replaced by `NaN` (see the ROC section). The page displays loading until this
 result is ready and cancels obsolete computations through `latestResult`.
 Warnings remain logged on the main thread and displayed by the existing panels.
-Endpoint request bodies, automatic preparation, revision triggers, and the
-`refresh_after_fsrs` handshake are unchanged.
+Automatic preparation, revision triggers, cohort selection, provenance counts,
+warning totals, and the `refresh_after_fsrs` handshake are unchanged.
+
+### Streamed prediction transport
+
+`fsrsReviewRetrievability` and `rwkvReviewRetrievability` accept optional
+`stream_pages: true` alongside the existing `cids`, `day_range`, `revlog_ids`,
+and RWKV `ensure_fsrs_alignment` fields. Omitting the flag retains the full JSON
+response contract. The frontend also accepts full JSON from an older Python
+module still running before Anki has been restarted.
+
+The streaming response has Content-Type `application/x-ndjson`. Its first line
+contains `format: "prediction-pages-v1"`, `row_count`, and the same response-wide
+metadata (`column`, optional `warnings`, `roles`, `role_counts`, and
+`refresh_after_fsrs`). Following lines contain `data: [[revlogId, prediction],
+...]`, with at most 25,000 rows each, ordered by review ID. A final
+`{"done": true}` line completes the response. The worker checks ordering, row
+count and completion before returning predictions; truncated or malformed
+responses cannot publish a partial cohort. UTF-8 and lines may cross network
+chunk boundaries. Last-valid duplicate semantics and response-wide finite-value
+counts apply across pages.
+
+One HTTP request still selects and prepares one complete cohort. Paging does not
+repeat native generation, change legacy completeness checks, or request separate
+subsets. Python retains its selected rows while yielding bounded serialized
+pages; it avoids creating one full serialized response. The page transfers the
+unread body stream to the queued prediction worker, keeping JSON text and parsed
+rows bounded rather than retaining a full response alongside aligned values.
+Changing the search aborts the fetch and terminates obsolete workers. FSRS and
+RWKV responses remain independent; parsing and all other heavy tasks keep the
+shared worker queue.
 
 ## Persistent Prediction Cache
 
@@ -523,7 +555,9 @@ bootstrap used for calibration bands. When the difference interval includes
 zero, the two models are not distinguishable on this sample. Intervals and the
 paired difference are unavailable with fewer than two card clusters containing
 remembered reviews or fewer than two containing forgotten reviews; AUC remains
-available when both outcome classes are present.
+available when both outcome classes are present. The six confidence-interval
+accumulators are sized to eligible card clusters, rather than the number of
+paired reviews; their accumulation order and covariance calculation are unchanged.
 
 UM+ and ROC compare only held-out FSRS predictions from Anki's calibration
 cache. When that cache returns nothing, the in-browser replay still feeds the

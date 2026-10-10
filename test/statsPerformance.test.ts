@@ -172,3 +172,50 @@ test("prediction refresh waits for Memorised replay and a cancelled refresh neve
         global.Worker = original
     }
 })
+
+test("worker result transfers preserve shared filters and predictions without cloning buffers", async () => {
+    const { resultTransfers } = await import("../src/ts/workerTransfers")
+    const values = new Float64Array([0.125, 10, 100])
+    const result = {
+        all: { values, indices: new Uint32Array([0, 1, 2]) },
+        successOnly: { values, indices: new Uint32Array([0, 2]) },
+        predictions: new Float64Array([0, NaN, 0.75]),
+    }
+    const transfers = resultTransfers(result)
+    expect(transfers).toHaveLength(4)
+    const received = structuredClone(result, { transfer: transfers })
+    expect(values.byteLength).toBe(0)
+    expect(received.all.values).toBe(received.successOnly.values)
+    expect(Array.from(received.all.values)).toEqual([0.125, 10, 100])
+    expect(Array.from(received.predictions)).toEqual([0, NaN, 0.75])
+})
+
+test("prediction bodies transfer only when their worker starts, and sample buffers stay on the page", async () => {
+    const worker = { terminate: jest.fn(), postMessage: jest.fn(), onmessage: null as any }
+    const original = global.Worker
+    global.Worker = jest.fn(() => worker) as any
+    try {
+        const stream = new ReadableStream<Uint8Array>({
+            start(c) {
+                c.close()
+            },
+        })
+        const promise = runStatsTask(
+            "calibrationPredictions",
+            [EMPTY_CALIBRATION_SAMPLES, stream],
+            new AbortController().signal
+        )
+        for (let i = 0; i < 5; i++) await Promise.resolve()
+        const [message, transfers] = worker.postMessage.mock.calls[0]
+        expect(transfers).toEqual([stream])
+        const received = structuredClone(message, { transfer: transfers })
+        expect(stream.locked).toBe(true)
+        expect(Array.from(received.args[0].revlogIds)).toEqual([])
+        await received.args[1].cancel()
+        worker.onmessage({ data: { result: "finished" } })
+        expect(await promise).toBe("finished")
+        for (let i = 0; i < 5; i++) await Promise.resolve()
+    } finally {
+        global.Worker = original
+    }
+})

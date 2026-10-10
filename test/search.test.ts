@@ -322,3 +322,64 @@ test("cancelled history loading stops before requesting another page", async () 
         jest.resetModules()
     }
 })
+
+test("prediction page requests preserve exact IDs, alignment and cancellation and return the unread body", async () => {
+    const original = global.fetch
+    const body = new ReadableStream<Uint8Array>({
+        start(c) {
+            c.close()
+        },
+    })
+    const signal = new AbortController().signal
+    global.fetch = jest.fn(
+        async () => new Response(body, { headers: { "Content-Type": "application/x-ndjson" } })
+    ) as any
+    jest.resetModules()
+    try {
+        const { getReviewRetrievabilityPages } = await import("../src/ts/search")
+        const result = await getReviewRetrievabilityPages(
+            "rwkv",
+            [10],
+            30,
+            new Float64Array([1700000000001, 1700000000001, 0, NaN]),
+            signal,
+            true
+        )
+        expect(result).toBe(body)
+        expect(body.locked).toBe(false)
+        const [url, request] = (global.fetch as jest.Mock).mock.calls[0]
+        expect(url).toBe("/_anki/rwkvReviewRetrievability")
+        expect(request.signal).toBe(signal)
+        expect(JSON.parse(request.body)).toEqual({
+            cids: [10],
+            day_range: 30,
+            revlog_ids: [1700000000001],
+            stream_pages: true,
+            ensure_fsrs_alignment: true,
+        })
+    } finally {
+        global.fetch = original
+        jest.resetModules()
+    }
+})
+
+test("an older running Python endpoint retains the existing full JSON transport until Anki restarts", async () => {
+    const original = global.fetch
+    global.fetch = jest.fn(async () => new Response('{"column":"cache","data":[[1,0.8]]}')) as any
+    jest.resetModules()
+    try {
+        const { getReviewRetrievabilityPages } = await import("../src/ts/search")
+        expect(
+            await getReviewRetrievabilityPages(
+                "fsrs",
+                [10],
+                0,
+                new Float64Array([1]),
+                new AbortController().signal
+            )
+        ).toBe('{"column":"cache","data":[[1,0.8]]}')
+    } finally {
+        global.fetch = original
+        jest.resetModules()
+    }
+})

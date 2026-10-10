@@ -15,6 +15,7 @@ import { elapsedFsrsDays, type FsrsMemoryState } from "./fsrsModel"
 import { selectResolvedFsrsPresetParams, selectTsFsrsParams } from "./fsrsParams"
 import { i18n } from "./i18n"
 import { asRevlogHistory, type RevlogHistory, type RevlogInput } from "./packedRevlogs"
+import { TimeBucketBuilder, bucketTimeStats as compactBucketTimeStats } from "./timeBucketStats"
 type ReplayCard = FsrsMemoryState & { last_review?: Date }
 
 const rollover = SSEother.rollover ?? 0
@@ -365,7 +366,7 @@ export function calculateRevlogStats(
     let short_term_recorded_cards: Set<number> = new Set()
     let forgetting_samples: ForgettingSample[] = []
     let forgetting_samples_short: ForgettingSample[] = []
-    let timeByRepetitionSamples: number[][] = []
+    const repetitionSamples = new TimeBucketBuilder(1)
     let gradeByRepetitions: number[][] = []
     let gradeByRepetitionsSuccessOnly: number[][] = []
     let repetitionsByCard: Record<number, number> = {}
@@ -505,8 +506,7 @@ export function calculateRevlogStats(
 
             if (revlog.time > 0) {
                 const seconds = revlog.time / 1000
-                timeByRepetitionSamples[repetitionBucket] ??= []
-                timeByRepetitionSamples[repetitionBucket].push(seconds)
+                repetitionSamples.add(seconds, [repetitionBucket])
             }
         }
 
@@ -666,7 +666,8 @@ export function calculateRevlogStats(
         decayValues.length > 0 ? averageDecay(decayValues) : FSRS5_DEFAULT_DECAY
     const retrievabilityTimeStats = bucketTimeStats(fsrsReplayStats.timeByRetrievabilitySamples)
     const stabilityTimeStats = bucketTimeStats(fsrsReplayStats.timeByStabilitySamples)
-    const repetitionTimeStats = bucketTimeStats(timeByRepetitionSamples)
+    const [timeByRepetitionSamples] = repetitionSamples.finish()
+    const repetitionTimeStats = compactBucketTimeStats(timeByRepetitionSamples)
 
     console.timeEnd("revlog stats")
 

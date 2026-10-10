@@ -72,8 +72,14 @@ The following arrays are returned by `getMemorisedDays()`:
 
 ## Displayed Ranges
 
-Time graphs retain the individual review samples alongside the per-bucket
-mean/median arrays. `BarScrollable.aggregateValues` combines those samples for
+Time graphs retain exact review durations alongside the per-bucket mean/median
+arrays in `TimeBuckets`: shared `Float64Array` duration values, `Uint32Array`
+review indices grouped by bucket, and `Uint32Array` bucket offsets. The six FSRS
+time series share one duration buffer, including their overlapping success and
+same-day filters. Repetition times use the same compact representation.
+`TimeBucketBuilder` collects numeric chunks and releases them after constructing
+the grouped indices; it does not retain six arrays of duration copies. Workers
+transfer these result buffers to the page once, preserving shared values. `BarScrollable.aggregateValues` combines those samples for
 all buckets in each displayed bar before calculating its statistic. It never
 averages bucket means or bucket medians. For example, 100 ten-second reviews
 and one hundred-second review have a combined mean of 1100/101 seconds and a

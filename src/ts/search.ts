@@ -31,9 +31,15 @@ ${e?.stack ? e.stack : e}`)
     }
 }
 
-async function endpointText(endpoint: string, body?: string, alertOnError = true) {
+async function fetchEndpoint(
+    endpoint: string,
+    body?: string,
+    alertOnError = true,
+    signal?: AbortSignal
+) {
     const resp = await realFetch(`/_anki/${endpoint}`, {
         method: "POST",
+        signal,
         body,
         headers: { "Content-Type": "application/binary" },
     })
@@ -56,7 +62,11 @@ ${responseText}`)
         throw new Error(`Endpoint ${endpoint} failed: ${resp.status} ${responseText}`)
     }
 
-    return resp.text()
+    return resp
+}
+
+async function endpointText(endpoint: string, body?: string, alertOnError = true) {
+    return (await fetchEndpoint(endpoint, body, alertOnError)).text()
 }
 
 async function endpoint(endpoint: string, body?: string, alertOnError = true) {
@@ -350,6 +360,34 @@ async function getReviewRetrievability(
             ...(ensureFsrsAlignment ? { ensure_fsrs_alignment: true } : {}),
         })
     )
+}
+
+export async function getReviewRetrievabilityPages(
+    model: "fsrs" | "rwkv",
+    cids: number[],
+    day_range: number,
+    revlogIds: Float64Array,
+    signal: AbortSignal,
+    ensureFsrsAlignment = false
+): Promise<string | ReadableStream<Uint8Array>> {
+    signal.throwIfAborted()
+    const response = await fetchEndpoint(
+        `${model}ReviewRetrievability`,
+        JSON.stringify({
+            cids,
+            day_range,
+            revlog_ids: [...new Set(revlogIds)].filter((id) => Number.isInteger(id) && id > 0),
+            stream_pages: true,
+            ...(ensureFsrsAlignment ? { ensure_fsrs_alignment: true } : {}),
+        }),
+        true,
+        signal
+    )
+    // Anki may still be running the Python module from before an add-on update.
+    if (!response.headers?.get("Content-Type")?.startsWith("application/x-ndjson"))
+        return response.text()
+    if (!response.body) throw new Error("Missing prediction page stream")
+    return response.body
 }
 
 export function browserSearch(search: string) {

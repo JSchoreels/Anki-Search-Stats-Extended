@@ -1,4 +1,7 @@
-import { parseReviewRetrievabilityResponse } from "./calibrationPredictions"
+import {
+    parseReviewRetrievabilityPages,
+    parseReviewRetrievabilityResponse,
+} from "./calibrationPredictions"
 import type { CalibrationSamples } from "./calibrationSamples"
 import { selectCalibrationSamples } from "./calibrationSampleSelection"
 import {
@@ -12,8 +15,14 @@ import { buildRocData } from "./rocData"
 import { buildRwkvDailyData } from "./rwkvDailyData"
 import { buildUmPlusData } from "./umPlusData"
 
-function calibrationPredictions(samples: CalibrationSamples, responseText: string) {
-    const parsed = parseReviewRetrievabilityResponse(responseText, samples)
+async function calibrationPredictions(
+    samples: CalibrationSamples,
+    response: string | ReadableStream<Uint8Array>
+) {
+    const parsed =
+        typeof response === "string"
+            ? parseReviewRetrievabilityResponse(response, samples)
+            : await parseReviewRetrievabilityPages(response, samples)
     return { ...parsed, bins: buildCalibrationBinCounts(samples, parsed.predictions) }
 }
 

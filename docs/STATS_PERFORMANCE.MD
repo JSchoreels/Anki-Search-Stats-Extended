@@ -33,14 +33,25 @@ while replay is running, at the cost of delaying refreshed graphs.
 Cancelling a queued task removes it before any worker or transfer is created.
 Calibration samples use index-aligned `Float64Array` review
 and card IDs, `Uint8Array` outcomes, and `Float64Array` predictions (`NaN` for
-missing values). The page sends raw response text to the worker and receives
-aligned predictions and compact graph results. Prediction parsing checks whether response rows and sample IDs are chronological,
-using their existing order when possible. Shuffled inputs are sorted before
-merging into a `Float64Array`, retaining
-last-valid duplicate semantics without a timestamp-keyed object copy. This avoids cloning large
-object arrays/maps and parsing prediction JSON on the main thread. Changing the search or history range terminates obsolete
-workers and ignores obsolete endpoint responses. Worker failures are reported;
-they do not fall back to blocking the page.
+missing values). The page transfers each unread FSRS/RWKV prediction body stream to its queued
+worker. The endpoint yields response-wide metadata, pages of at most 25,000
+ordered rows, and a completion marker in one HTTP request. The worker parses
+one page at a time and merges directly into aligned values; it does not retain a
+full JSON string and parsed cohort together. Last-valid duplicates remain valid
+across pages, and completion/count checks prevent partial results. Full JSON is
+accepted for compatibility with a Python module still running before restart;
+that parser skips sorting ordered rows and sorts shuffled rows when needed.
+Changing the search aborts the response fetch and terminates obsolete workers.
+Worker failures are reported; they do not fall back to blocking the page.
+
+Workers transfer their result-owned typed buffers to the page instead of
+structured-cloning them. Buffers shared by multiple views or graph filters are
+transferred once, retaining aliasing. Time distributions retain one numeric
+duration buffer shared by overlapping FSRS filters and compact grouped review
+indices; exact means/medians and merged-bar controls use those values. Repetition
+samples use the same representation. ROC confidence intervals allocate six
+accumulators by eligible card count, preserving the existing card-clustered
+DeLong calculation and its summation order.
 
 Calibration samples are selected in a cheap worker independently of the full
 Memorised replay. Last-forget markers come directly from review history, so
@@ -172,3 +183,49 @@ An offscreen Svelte/Qt button smoke confirms that calibration Calculate enables
 comparison loading while the Memorised Calculate button remains available, and
 that clicking the latter requests history. Store tests cover automatic loading,
 empty-cache fallback, RWKV demand gating and obsolete-response cancellation.
+
+
+## Compact time results and streamed predictions
+
+The next four improvements were measured against commit `890615d` in a fresh
+run of the same retained-result Qt workload: exact compact time samples,
+transferred worker result buffers, streamed prediction pages, and card-sized ROC
+confidence accumulators. Both runs process 3,785,024 review rows for 79,387 cards,
+select 1,518,677 calibration samples, and exclude 20,788 outliers. All three
+prediction/comparison/confidence rounds complete, including a refresh during
+Memorised replay. Prediction values remain synthetic; this verifies memory and
+integration rather than live model accuracy.
+
+| Measurement | Before (`890615d`) | After |
+| --- | ---: | ---: |
+| Peak renderer RSS | 3,877,248 KiB (3.70 GiB) | 3,416,304 KiB (3.26 GiB) |
+| Whole sequence | 140.256 s | 129.008 s |
+| Review aggregation | 30.993 s | 26.786 s |
+| Memorised calculation | 60.266 s | 54.901 s |
+| Selected calibration reviews | 1,518,677 | 1,518,677 |
+
+Peak renderer RSS falls by 11.9%, saving 450 MiB, and whole-sequence time falls
+by 8.0% in this before/after pair. The first updated run measured 3,455,888 KiB
+(3.30 GiB) and 132.606 seconds; the final run above includes the completed
+six-buffer ROC allocation check. These single-run figures vary with allocation,
+GC and system load. They are additional gains over the previously measured
+packed-history changes, not replacements for those earlier results. Full replay
+still needs substantial memory; these measurements do not establish a maximum
+supported collection size or guarantee that every live cache workload avoids OOM.
+
+The same 250 ms renderer-RSS sampling method is used. The paged harness sends
+actual selected review IDs, transfers the unread HTTP response body, and serves
+pages through the real `prediction_response` helper. Python's selected rows are
+retained during serialization and are outside the renderer RSS measurement.
+Flask's unbuffered-client test separately verifies lazy 25,000-row serialization.
+Worker queueing still prevents a refresh from starting another large calculation
+while replay runs. No live collection is queried or modified.
+
+Verification passes 419 tests and both frontend bundle/type checks. New cases
+cover exact merged medians/means with uneven and sparse buckets, overlapping
+filters, chunk boundaries, shared result-buffer transfer, row-count/completion
+checks, UTF-8 boundaries, duplicate predictions spanning pages, cancellation,
+legacy full-JSON compatibility, and ROC accumulator allocation. Existing frozen
+calibration/bootstrap and independent Obuchowski covariance parity remain green.
+An offscreen Svelte/Qt Time-category smoke renders all six graphs and exercises
+mean/median, success and same-day filtering, bar width and scrolling.

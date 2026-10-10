@@ -45,6 +45,8 @@ function startStatsTask<K extends keyof Tasks>(
                 worker.postMessage({ task, args: [reviews, ...args.slice(1)], context: SSEother }, [
                     reviews.buffer,
                 ])
+            } else if (task === "calibrationPredictions" && typeof args[1] !== "string") {
+                worker.postMessage({ task, args, context: SSEother }, [args[1] as ReadableStream])
             } else {
                 worker.postMessage({ task, args, context: SSEother })
             }

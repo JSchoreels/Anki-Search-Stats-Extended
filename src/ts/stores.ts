@@ -23,10 +23,9 @@ import {
     ensureFsrsCalibration,
     getCardData,
     getFsrsPresetData,
-    getFsrsReviewRetrievability,
+    getReviewRetrievabilityPages,
     getRevlogs,
     getRwkvMemorisedHistoryProgress,
-    getRwkvReviewRetrievability,
     saveConfigValue,
     startRwkvMemorisedHistory,
     type CardData,
@@ -449,10 +448,12 @@ derived(
         }
 
         return latestResult(set, async (signal) => {
-            const text = await getFsrsReviewRetrievability(
+            const text = await getReviewRetrievabilityPages(
+                "fsrs",
                 $cids,
                 $searchLimit,
-                Array.from(samples.revlogIds)
+                samples.revlogIds,
+                signal
             )
             const parsed = await runStatsTask("calibrationPredictions", [samples, text], signal)
             for (const warning of parsed.warnings) console.warn("Search Stats Extended:", warning)
@@ -514,10 +515,12 @@ derived(
         }
 
         return latestResult(set, async (signal) => {
-            const text = await getRwkvReviewRetrievability(
+            const text = await getReviewRetrievabilityPages(
+                "rwkv",
                 $cids,
                 $searchLimit,
-                Array.from(samples.revlogIds),
+                samples.revlogIds,
+                signal,
                 true
             )
             const parsed = await runStatsTask("calibrationPredictions", [samples, text], signal)

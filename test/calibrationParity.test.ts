@@ -81,7 +81,7 @@ test.each([0, 1, 4_096, 20_000])(
     }
 )
 
-test("prediction and replay tasks share alignment and calibration bin calculations", () => {
+test("prediction and replay tasks share alignment and calibration bin calculations", async () => {
     const samples = calibrationSamplesFrom([
         { revlogId: 10, cardId: 1, actual: 1 },
         { revlogId: 20, cardId: 2, actual: 0 },
@@ -94,7 +94,7 @@ test("prediction and replay tasks share alignment and calibration bin calculatio
         runStatsTaskLocally("calibrationReplay", [samples, predictions])
     )
     expect(
-        runStatsTaskLocally("calibrationPredictions", [
+        await runStatsTaskLocally("calibrationPredictions", [
             samples,
             JSON.stringify({
                 data: [

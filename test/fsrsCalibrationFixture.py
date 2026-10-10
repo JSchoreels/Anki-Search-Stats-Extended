@@ -275,6 +275,7 @@ def ensure_rwkv(*, force=False):
 
 globals_ = {
     "Response": lambda body: body,
+    "prediction_response": lambda result, stream_pages=False: json.dumps(result),
     "orjson": NS(loads=json.loads, dumps=json.dumps),
     "request": NS(
         data=json.dumps(

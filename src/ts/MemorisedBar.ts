@@ -20,6 +20,7 @@ import {
 } from "./fsrsModel"
 import { asRevlogHistory, type RevlogInput } from "./packedRevlogs"
 import { type Buckets, dayFromMs, emptyBuckets, IDify, rollover_ms } from "./revlogGraphs"
+import { bucketTimeStats, TimeBucketBuilder } from "./timeBucketStats"
 export { getFsrs, intervalAtRetrievability } from "./fsrsModel"
 type ReplayCard = FsrsMemoryState & { last_review?: Date; last_review_day?: number }
 
@@ -284,33 +285,6 @@ export type S90BatchResolver = (
 // Constants for B-W matrix
 const R_BIN_POWER = 1.4
 const LOG_R_BIN_POWER = Math.log(R_BIN_POWER)
-
-function median(values: number[]) {
-    if (!values.length) {
-        return 0
-    }
-    const sorted = [...values].sort((a, b) => a - b)
-    const middle = Math.floor(sorted.length / 2)
-    if (sorted.length % 2 === 1) {
-        return sorted[middle]
-    }
-    return (sorted[middle - 1] + sorted[middle]) / 2
-}
-
-function bucketTimeStats(bucketedSamples: number[][]) {
-    const meanByBucket: number[] = []
-    const medianByBucket: number[] = []
-
-    bucketedSamples.forEach((samples, bucket) => {
-        if (!samples?.length) {
-            return
-        }
-        meanByBucket[bucket] = _.sum(samples) / samples.length
-        medianByBucket[bucket] = median(samples)
-    })
-
-    return { meanByBucket, medianByBucket }
-}
 
 function meanByReps(cards: CardData[], valueForCard: (card: CardData) => number | undefined) {
     const sums: number[] = []
@@ -583,12 +557,7 @@ export async function getMemorisedDays(
     const uniqueCids = new Set<number>()
     for (const review of revlogs) uniqueCids.add(review.cid)
     let probabilities: Record<number, number[]> = {}
-    let time_by_retrievability_samples: number[][] = []
-    let time_by_retrievability_samples_exclude_same_day: number[][] = []
-    let time_by_retrievability_samples_success_only: number[][] = []
-    let time_by_retrievability_samples_success_only_exclude_same_day: number[][] = []
-    let time_by_stability_samples: number[][] = []
-    let time_by_difficulty_samples: number[][] = []
+    const timeSamples = new TimeBucketBuilder(6)
     for (const cid of uniqueCids) probabilities[cid] = [1]
 
     const replay = prepareFsrsReplay(revlogs, card_fsrs_source)
@@ -649,30 +618,14 @@ export async function getMemorisedDays(
                 const isSameDay = elapsed < 1
                 const isSuccess = grade > 1
 
-                time_by_retrievability_samples[retrievabilityBucket] ??= []
-                time_by_retrievability_samples[retrievabilityBucket].push(seconds)
-                if (!isSameDay) {
-                    time_by_retrievability_samples_exclude_same_day[retrievabilityBucket] ??= []
-                    time_by_retrievability_samples_exclude_same_day[retrievabilityBucket].push(
-                        seconds
-                    )
-                }
-                if (isSuccess) {
-                    time_by_retrievability_samples_success_only[retrievabilityBucket] ??= []
-                    time_by_retrievability_samples_success_only[retrievabilityBucket].push(seconds)
-                }
-                if (isSuccess && !isSameDay) {
-                    time_by_retrievability_samples_success_only_exclude_same_day[
-                        retrievabilityBucket
-                    ] ??= []
-                    time_by_retrievability_samples_success_only_exclude_same_day[
-                        retrievabilityBucket
-                    ].push(seconds)
-                }
-                time_by_stability_samples[stabilityBucket] ??= []
-                time_by_stability_samples[stabilityBucket].push(seconds)
-                time_by_difficulty_samples[difficultyBucket] ??= []
-                time_by_difficulty_samples[difficultyBucket].push(seconds)
+                timeSamples.add(seconds, [
+                    retrievabilityBucket,
+                    !isSameDay ? retrievabilityBucket : undefined,
+                    isSuccess ? retrievabilityBucket : undefined,
+                    isSuccess && !isSameDay ? retrievabilityBucket : undefined,
+                    stabilityBucket,
+                    difficultyBucket,
+                ])
             }
             const y = grade > 1 ? 1 : 0
 
@@ -870,6 +823,14 @@ export async function getMemorisedDays(
             resolveS90Batch ? "custom" : "local"
         }`
     )
+    const [
+        time_by_retrievability_samples,
+        time_by_retrievability_samples_exclude_same_day,
+        time_by_retrievability_samples_success_only,
+        time_by_retrievability_samples_success_only_exclude_same_day,
+        time_by_stability_samples,
+        time_by_difficulty_samples,
+    ] = timeSamples.finish()
     const retrievabilityTimeStats = bucketTimeStats(time_by_retrievability_samples)
     const retrievabilityTimeStatsExcludeSameDay = bucketTimeStats(
         time_by_retrievability_samples_exclude_same_day

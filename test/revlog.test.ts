@@ -15,7 +15,7 @@ import {
     easeBarChart,
 } from "../src/ts/revlogGraphs"
 import type { Revlog } from "../src/ts/search"
-import { aggregateTimeBuckets } from "../src/ts/timeBucketStats"
+import { aggregateTimeBuckets, TimeBucketBuilder } from "../src/ts/timeBucketStats"
 import { RevlogBuilder } from "./revlogBuilder"
 
 const burden_revlog_builder1 = new RevlogBuilder()
@@ -221,10 +221,7 @@ test("First long-term forgetting curve uses each subdeck preset", () => {
             expect(stats.forgetting_curve_long_term_model.length).toBe(34)
             expect(stats.forgetting_curve_long_term_model[27]).toBeCloseTo(fsrs7ParamsAlt[27], 6)
             expect(stats.forgetting_curve_long_term_model[28]).toBeCloseTo(fsrs7ParamsAlt[28], 6)
-            expect(stats.forgetting_curve_long_term_model[27]).not.toBeCloseTo(
-                fsrs7Params[27],
-                6
-            )
+            expect(stats.forgetting_curve_long_term_model[27]).not.toBeCloseTo(fsrs7Params[27], 6)
         }
     } finally {
         global.SSEother = previousSSEother
@@ -550,7 +547,12 @@ test("empty normalized rating buckets have finite zero values", () => {
 })
 
 test("wide time buckets compute statistics from every review, including uneven populations", () => {
-    const samples = [Array(100).fill(10), [100], [], [20, 30]]
+    const builder = new TimeBucketBuilder(1)
+    const original = [Array(100).fill(10), [100], [], [20, 30]]
+    original.forEach((values, bucket) =>
+        values.forEach((seconds) => builder.add(seconds, [bucket]))
+    )
+    const [samples] = builder.finish()
     expect(aggregateTimeBuckets(samples, 0, 2, "mean")).toEqual([1100 / 101])
     expect(aggregateTimeBuckets(samples, 0, 2, "median")).toEqual([10])
     expect(aggregateTimeBuckets(samples, 2, 2, "mean")).toEqual([25])
@@ -559,7 +561,7 @@ test("wide time buckets compute statistics from every review, including uneven p
     expect(aggregateTimeBuckets(samples, 8, 2, "median")).toEqual([0])
     expect(aggregateTimeBuckets(samples, -3, 2, "mean")).toEqual([0])
     expect(aggregateTimeBuckets(samples, -1, 2, "mean")).toEqual([10])
-    expect(samples[1]).toEqual([100])
+    expect(samples.values[samples.indices[samples.offsets[1]]]).toBe(100)
 })
 
 test("review speed skips days without reviews instead of dividing by zero", () => {

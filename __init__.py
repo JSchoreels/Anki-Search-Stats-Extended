@@ -97,6 +97,7 @@ if hasattr(gui_hooks, "stats_dialog_will_show"):
 from anki.utils import int_time
 from aqt.mediasrv import post_handlers
 from flask import Response, request
+from .prediction_pages import prediction_response
 
 
 def card_search() -> bytes:
@@ -595,7 +596,7 @@ def fsrs_review_retrievability() -> bytes:
     except (TypeError, ValueError):
         day_range = 0
     if not cids and not requested_review_ids:
-        return Response(orjson.dumps({"column": None, "data": []}))
+        return prediction_response({"column": None, "data": []}, req.get("stream_pages") is True)
 
     rows = [
         row
@@ -607,16 +608,15 @@ def fsrs_review_retrievability() -> bytes:
         if _valid_probability(row[1])
     ]
     if not rows:
-        return Response(orjson.dumps({"column": None, "data": []}))
+        return prediction_response({"column": None, "data": []}, req.get("stream_pages") is True)
 
-    return Response(
-        orjson.dumps(
-            {
-                "column": FSRS_RETRIEVABILITY_CACHE_TABLE,
-                "data": [(row[0], row[1]) for row in rows],
-                "roles": sorted({row[2] for row in rows}),
-            }
-        )
+    return prediction_response(
+        {
+            "column": FSRS_RETRIEVABILITY_CACHE_TABLE,
+            "data": [(row[0], row[1]) for row in rows],
+            "roles": sorted({row[2] for row in rows}),
+        },
+        req.get("stream_pages") is True,
     )
 
 
@@ -954,7 +954,7 @@ def rwkv_review_retrievability() -> bytes:
     except (TypeError, ValueError):
         day_range = 0
     if not cids and not requested_review_ids:
-        return Response(orjson.dumps({"column": None, "data": []}))
+        return prediction_response({"column": None, "data": []}, req.get("stream_pages") is True)
 
     fsrs_rows = _read_fsrs_calibration_retrievability_cache(
         cids, day_range, requested_review_ids
@@ -1028,11 +1028,12 @@ def rwkv_review_retrievability() -> bytes:
             "after the alignment refresh. Only available paired reviews are compared."
         )
     if not target_review_ids:
-        return Response(
-            orjson.dumps({
+        return prediction_response(
+            {
                 "column": None, "data": [], "warnings": warnings,
                 "refresh_after_fsrs": refresh_after_fsrs,
-            })
+            },
+            req.get("stream_pages") is True,
         )
 
     cache_rows = (
@@ -1106,21 +1107,23 @@ def rwkv_review_retrievability() -> bytes:
             f"RWKV calibration cache is missing {missing_count} eligible review "
             "retrievability row(s)."
         )
-        return Response(
-            orjson.dumps({
+        return prediction_response(
+            {
                 "column": None, "data": [], "warnings": warnings,
                 "refresh_after_fsrs": refresh_after_fsrs,
-            })
+            },
+            req.get("stream_pages") is True,
         )
 
     review_entries = sorted(predictions_by_revlog_id.items())
     source = "+".join(source_parts) if source_parts else None
-    return Response(
-        orjson.dumps({
+    return prediction_response(
+        {
             "column": source, "data": review_entries, "warnings": warnings,
             "roles": sorted(role_counts), "role_counts": role_counts,
             "refresh_after_fsrs": refresh_after_fsrs,
-        })
+        },
+        req.get("stream_pages") is True,
     )
 
 

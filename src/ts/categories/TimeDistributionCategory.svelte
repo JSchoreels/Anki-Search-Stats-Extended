@@ -51,11 +51,11 @@
     $: statistic = averageType === AverageType.MEAN ? "mean" : "median"
     $: retrievabilitySamples = retrievabilityExcludeSameDay
         ? retrievabilitySuccessOnly
-            ? ($memorised_stats?.time_by_retrievability_samples_success_only_exclude_same_day ?? [])
-            : ($memorised_stats?.time_by_retrievability_samples_exclude_same_day ?? [])
+            ? $memorised_stats?.time_by_retrievability_samples_success_only_exclude_same_day
+            : $memorised_stats?.time_by_retrievability_samples_exclude_same_day
         : retrievabilitySuccessOnly
-          ? ($memorised_stats?.time_by_retrievability_samples_success_only ?? [])
-          : ($memorised_stats?.time_by_retrievability_samples ?? [])
+          ? $memorised_stats?.time_by_retrievability_samples_success_only
+          : $memorised_stats?.time_by_retrievability_samples
 
     $: retrievabilitySeries = (() => {
         if (averageType === AverageType.MEAN) {
@@ -234,7 +234,7 @@
             data={stabilityTimeBar}
             aggregateValues={(start, width) =>
                 aggregateTimeBuckets(
-                    $memorised_stats?.time_by_stability_samples ?? [],
+                    $memorised_stats?.time_by_stability_samples,
                     start,
                     width,
                     statistic
@@ -263,7 +263,7 @@
             data={repetitionTimeBar}
             aggregateValues={(start, width) =>
                 aggregateTimeBuckets(
-                    $revlogStats?.time_by_repetition_samples ?? [],
+                    $revlogStats?.time_by_repetition_samples,
                     start,
                     width,
                     statistic
@@ -292,7 +292,7 @@
             data={difficultyTimeBar}
             aggregateValues={(start, width) =>
                 aggregateTimeBuckets(
-                    $memorised_stats?.time_by_difficulty_samples ?? [],
+                    $memorised_stats?.time_by_difficulty_samples,
                     start,
                     width,
                     statistic

@@ -194,17 +194,16 @@ function clusteredIntervals(
     // Card-clustered DeLong (Obuchowski 1997): reviews of one card are correlated,
     // matching the card-level bootstrap used for calibration bands.
     const clusters = new Map<number, number>()
-    const m = new Float64Array(fsrsPlacements.length)
-    const n = new Float64Array(fsrsPlacements.length)
+    for (const cardId of cardIds.subarray(0, fsrsPlacements.length)) {
+        if (!clusters.has(cardId)) clusters.set(cardId, clusters.size)
+    }
+    const m = new Float64Array(clusters.size)
+    const n = new Float64Array(clusters.size)
     const x = [new Float64Array(m.length), new Float64Array(m.length)]
     const y = [new Float64Array(m.length), new Float64Array(m.length)]
     for (let review = 0; review < fsrsPlacements.length; review++) {
         const cardId = cardIds[review]
-        let cluster = clusters.get(cardId)
-        if (cluster === undefined) {
-            cluster = clusters.size
-            clusters.set(cardId, cluster)
-        }
+        const cluster = clusters.get(cardId)!
         if (actual[review] === 1) {
             m[cluster]++
             x[0][cluster] += fsrsPlacements[review]
