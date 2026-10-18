@@ -28,6 +28,8 @@ export const TREND_PERSISTENCE_KEYS = {
     },
     introduced: {
         activeCards: "introduced:active-cards",
+        maturationCounts: "introduced:maturation-counts",
+        maturationRatios: "introduced:maturation-ratios",
         introductoryRating: "introduced:introductory-rating",
     },
     misc: {

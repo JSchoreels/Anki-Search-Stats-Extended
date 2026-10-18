@@ -4,6 +4,7 @@ import {
 } from "./calibrationPredictions"
 import type { CalibrationSamples } from "./calibrationSamples"
 import { selectCalibrationSamples } from "./calibrationSampleSelection"
+import { calculateMaturationHistory } from "./maturation"
 import {
     buildCalibrationBinCounts,
     buildCalibrationBins,
@@ -36,6 +37,7 @@ function comparison(samples: CalibrationSamples, fsrs: Float64Array, rwkv: Float
 
 const tasks = {
     revlog: calculateRevlogStats,
+    maturation: calculateMaturationHistory,
     memorised: getMemorisedDays,
     calibrationSamples: selectCalibrationSamples,
     calibrationBands: calibrationConfidenceIntervals,

@@ -31,6 +31,13 @@ test("all nine cells conserve cards and exact low/high boundaries stay in the mi
     ])
     expect(matrix.count).toBe(16)
     expect(matrix.totalWorkload).toBe(8)
+    expect(matrix.rowTotals).toEqual([
+        { count: 4, workload: 2, workloadCards: 4 },
+        { count: 8, workload: 4, workloadCards: 8 },
+        { count: 4, workload: 2, workloadCards: 4 },
+    ])
+    expect(matrix.columnTotals).toEqual(matrix.rowTotals)
+    expect(matrix.diagonal).toEqual({ count: 6, workload: 3, workloadCards: 6 })
     const shifted = buildExposureStabilityMatrix(cards, {
         repsLower: 10,
         repsUpper: 40,
@@ -111,6 +118,9 @@ test("sub-day curve intervals cost at most one daily review, and missing full st
     expect(m.count).toBe(2)
     expect(m.workloadCards).toBe(1)
     expect(m.totalWorkload).toBe(1)
+    expect(m.diagonal).toEqual({ count: 1, workload: 0, workloadCards: 0 })
+    expect(m.rowTotals[1]).toEqual({ count: 2, workload: 1, workloadCards: 1 })
+    expect(m.columnTotals.reduce((sum, cell) => sum + cell.count, 0)).toBe(m.count)
 })
 
 test("a card without stored retention uses its resolved preset target", () => {

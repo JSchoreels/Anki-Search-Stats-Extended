@@ -11,6 +11,116 @@ afterEach(() => {
     jest.resetModules()
 })
 
+test.each([undefined, true, false, "removed"])(
+    "Lapse visibility %s requests current presets without loading review history",
+    async (visibility) => {
+        const originalFetch = global.fetch,
+            originalConfig = global.SSEconfig
+        global.SSEconfig = { categories: { misc: false, lapse: visibility } } as never
+        const requests: string[] = []
+        const loadHistory = jest.fn()
+        global.fetch = jest.fn(async (url: string) => {
+            requests.push(url)
+            if (url.endsWith("cardData"))
+                return response({ columns: ["id", "did", "odid"], data: [[10, 1, 0]] })
+            return response({ presets: [], cards: {}, retrievability: {} })
+        }) as typeof fetch
+        jest.doMock("../src/ts/statsWorkerClient", () => ({
+            loadStatsHistory: loadHistory,
+            runStatsTask: jest.fn(),
+        }))
+        try {
+            const stores = await import("../src/ts/stores")
+            stores.cids.set([10])
+            await flush()
+            const presetRequests = () =>
+                requests.filter((url) => url.endsWith("fsrsPresetData")).length
+            const initiallyOpen = visibility !== false && visibility !== "removed"
+            expect(presetRequests()).toBe(initiallyOpen ? 1 : 0)
+
+            stores.shownCategories.set({ misc: false, lapse: false })
+            stores.cids.set([20])
+            await flush()
+            expect(presetRequests()).toBe(initiallyOpen ? 1 : 0)
+
+            stores.shownCategories.set({ misc: false, lapse: true })
+            await flush()
+            expect(presetRequests()).toBe(initiallyOpen ? 2 : 1)
+            expect(loadHistory).not.toHaveBeenCalled()
+            expect(get(stores.showRevlogStats)).toBe(false)
+            expect(get(stores.showMemorisedStats)).toBe(false)
+            stores.cids.set(null)
+        } finally {
+            global.fetch = originalFetch
+            global.SSEconfig = originalConfig
+        }
+    }
+)
+
+test("daily maturation loads all history only on request, releases it, and rejects obsolete results", async () => {
+    const originalFetch = global.fetch,
+        originalConfig = global.SSEconfig
+    global.SSEconfig = { categories: { misc: false, lapse: false, introduced: true } } as never
+    const requests: string[] = []
+    global.fetch = jest.fn(async (url: string) => {
+        requests.push(url)
+        if (url.endsWith("cardData"))
+            return response({ columns: ["id", "did", "odid"], data: [[10, 1, 0]] })
+        return response({ presets: [], cards: {}, retrievability: {} })
+    }) as typeof fetch
+    const histories: { dispose: jest.Mock }[] = []
+    const pending: { signal: AbortSignal; finish: () => void }[] = []
+    const loadHistory = jest.fn(async () => {
+        const history = { dispose: jest.fn() }
+        histories.push(history)
+        return history
+    })
+    const runTask = jest.fn((task: string, args: unknown[], signal: AbortSignal) => {
+        const throughDay = pending.length + 1
+        return new Promise((resolve) =>
+            pending.push({
+                signal,
+                finish: () => resolve({ cards: [], incompleteCards: 0, throughDay }),
+            })
+        )
+    })
+    jest.doMock("../src/ts/statsWorkerClient", () => ({
+        loadStatsHistory: loadHistory,
+        runStatsTask: runTask,
+    }))
+    let stop = () => {}
+    try {
+        const stores = await import("../src/ts/stores")
+        stop = stores.maturationHistory.subscribe(() => {})
+        stores.cids.set([10])
+        await flush()
+        expect(loadHistory).not.toHaveBeenCalled()
+        stores.showMaturationStats.set(true)
+        await flush()
+        expect(loadHistory).toHaveBeenCalledWith([10], 0, expect.any(AbortSignal))
+        expect(runTask.mock.calls.map(([task]) => task)).toEqual(["maturation"])
+        stores.cids.set([20])
+        await flush()
+        expect(pending).toHaveLength(2)
+        expect(pending[0].signal.aborted).toBe(true)
+        pending[1].finish()
+        await flush()
+        expect(get(stores.maturationHistory)?.throughDay).toBe(2)
+        pending[0].finish()
+        await flush()
+        expect(get(stores.maturationHistory)?.throughDay).toBe(2)
+        histories.forEach((history) => expect(history.dispose).toHaveBeenCalledTimes(1))
+        expect(get(stores.showRevlogStats)).toBe(false)
+        expect(get(stores.showMemorisedStats)).toBe(false)
+        expect(requests.some((url) => url.endsWith("startFsrsCalibration"))).toBe(false)
+        stores.cids.set(null)
+    } finally {
+        stop()
+        global.fetch = originalFetch
+        global.SSEconfig = originalConfig
+    }
+})
+
 test.each(["comparison", "memorised", "automatic", "empty cache"])(
     "%s requests only the necessary historical tasks",
     async (mode) => {

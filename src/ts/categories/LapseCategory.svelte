@@ -1,4 +1,5 @@
 <script lang="ts">
+    import ExposureStabilityMatrix from "../ExposureStabilityMatrix.svelte"
     import GraphContainer from "../GraphContainer.svelte"
     import IntervalGraph from "../IntervalGraph.svelte"
     import GraphCategory from "../GraphCategory.svelte"
@@ -75,4 +76,5 @@
             {i18n("lapse-total-help")}
         </p>
     </GraphContainer>
+    <ExposureStabilityMatrix />
 </GraphCategory>

@@ -100,6 +100,17 @@ export interface ExposureStabilityCell {
     workloadCards: number
 }
 
+function sumCells(cells: ExposureStabilityCell[]): ExposureStabilityCell {
+    return cells.reduce(
+        (sum, cell) => ({
+            count: sum.count + cell.count,
+            workload: sum.workload + cell.workload,
+            workloadCards: sum.workloadCards + cell.workloadCards,
+        }),
+        { count: 0, workload: 0, workloadCards: 0 }
+    )
+}
+
 export function buildExposureStabilityMatrix(
     cards: ExposureStabilityCard[],
     thresholds: ExposureStabilityThresholds
@@ -123,5 +134,13 @@ export function buildExposureStabilityMatrix(
             workloadCards++
         }
     }
-    return { cells, count: cards.length, totalWorkload, workloadCards }
+    return {
+        cells,
+        rowTotals: cells.map(sumCells),
+        columnTotals: [0, 1, 2].map((column) => sumCells(cells.map((row) => row[column]))),
+        diagonal: sumCells(cells.map((row, index) => row[index])),
+        count: cards.length,
+        totalWorkload,
+        workloadCards,
+    }
 }

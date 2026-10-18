@@ -1,10 +1,8 @@
-import { mount, unmount } from "svelte"
-import ExposureStabilityMatrix from "./ExposureStabilityMatrix.svelte"
+import { mount } from "svelte"
 import Root from "./Root.svelte"
-import { attachCardCountsMatrix } from "./cardCountsMatrixPlacement"
 import type { SSEconfig, SSEother } from "./config"
 import { patchFetch } from "./root"
-import { config, exposureStabilityVisible, other } from "./stores"
+import { config, other } from "./stores"
 import { exportTroubleshootingInfo } from "./troubleshooting"
 
 declare global {
@@ -24,15 +22,7 @@ config.set(SSEconfig)
 other.set(SSEother)
 window.exportSseTroubleshooting = exportTroubleshootingInfo
 
-setTimeout(() => {
-    mount(Root, { target: document.body })
-    attachCardCountsMatrix((target) => {
-        const component = mount(ExposureStabilityMatrix, { target })
-        return () => {
-            void unmount(component)
-        }
-    }, exposureStabilityVisible.set)
-}, SSEconfig.loadDelayMs ?? 100)
+setTimeout(() => mount(Root, { target: document.body }), SSEconfig.loadDelayMs ?? 100)
 
 const style = document.createElement("style")
 style.innerHTML = css

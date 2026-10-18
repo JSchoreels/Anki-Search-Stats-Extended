@@ -12,6 +12,10 @@
     export let label: string
     export let data: number[]
     export let series: LineChartSeries[] | undefined = undefined
+    export let dayRange: { start: number; end: number } | undefined = undefined
+    export let bounds: { width: number; height: number } | undefined = undefined
+    export let formatY: ((value: number) => string) | undefined = undefined
+    export let showIsolatedPoints = false
     export let trend_data: DrawnTrend[] = []
     export let current_trend: TrendLine = undefined
     export let removeTrend: (id: number) => void = () => {}
@@ -52,8 +56,12 @@
                 void queuePersistPinnedRanges(trendPersistenceKey, ranges, true)
             },
             series,
+            dayRange,
+            bounds,
+            formatY,
+            showIsolatedPoints,
         })
     }
 </script>
 
-<svg bind:this={svg}></svg>
+<svg bind:this={svg} role="img" aria-label={label}></svg>

@@ -4,6 +4,7 @@
     import LineOrCandlestick from "../LineOrCandlestick.svelte"
     import TrendValue from "../TrendValue.svelte"
     import GraphCategory from "../GraphCategory.svelte"
+    import MaturationGraph from "../MaturationGraph.svelte"
     import Warning from "../Warning.svelte"
     import { i18n, i18n_pattern } from "../i18n"
     import { TREND_PERSISTENCE_KEYS } from "../trendPersistenceKeys"
@@ -151,6 +152,7 @@
             </Warning>
         {/if}
     </RevlogGraphContainer>
+    <MaturationGraph />
     <RevlogGraphContainer>
         <h1 slot="title">{i18n("forgotten")}</h1>
         <BarScrollable

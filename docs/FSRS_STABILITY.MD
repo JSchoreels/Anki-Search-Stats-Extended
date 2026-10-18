@@ -2,13 +2,27 @@
 
 ## Current Exposure × Stability matrix
 
-The panel appears immediately beside native Card Counts in the Stats graph grid, stacking below it on narrower windows. It uses the same current search and displays active studied cards with valid stored S90. New cards, suspended/buried cards and missing-S90 cards are excluded and reported. Reps are the current Anki card counter (`prop:reps`), not a fresh count of retained revlog entries.
+The panel appears in Search Stats Extended's Lapse section after Lapse Load, Lapse Distribution and Lapse Total. It follows the section's visibility, category order and responsive graph layout. It uses the same current search and displays active studied cards with valid stored S90. New cards, suspended/buried cards and missing-S90 cards are excluded and reported. Reps are the current Anki card counter (`prop:reps`), not a fresh count of retained revlog entries.
 
 The default exposure bands are reps <5, 5–30 inclusive, and >30. Stability bands are stored S90 <7 days, 7–30 inclusive, and >30. Four editable positive thresholds are persisted in the add-on configuration as `exposureStabilityThresholds` (`repsLower`, `repsUpper`, `s90Lower`, `s90Upper`). Rep thresholds must be whole numbers and each upper threshold must exceed its lower threshold. Invalid saved settings use the defaults.
 
+The compact Unified layout shows card counts above workload values, with the threshold form and explanatory text initially collapsed. The final column sums each exposure row; the final row sums each stability column; the bottom-right cell is the grand total. The main-diagonal summary sums under-exposed/unstable, middle/middle and over-exposed/stable cells. All summaries preserve separate known-workload coverage, so cards with unavailable model state remain counted.
+
 Each cell shows card count and estimated current maintenance workload. The interval is solved from each card's resolved FSRS preset and complete current memory state at its stored desired retention, falling back to the preset retention only when the stored value is absent or invalid. FSRS-7 passes `s_int`, `s_fast` and difficulty together. Workload is `sum(1 / max(curve_interval_days, 1))`, matching the existing daily minimum while replacing scheduled intervals with curve-derived intervals. It is not a simulated future review forecast and includes neither future learning gains nor repeated-failure/relearning costs.
 
-Cards with valid S90 remain counted if workload cannot be computed; unavailable workload is shown separately rather than interpreted as zero. Threshold changes only regroup prepared values and do not replay review history or recompute the model intervals. Counts can display while shared preset data is still loading. The matrix requests the existing shared current-preset data even when the separate Misc category is closed, without enabling historical review loading.
+Cards with valid S90 remain counted if workload cannot be computed; unavailable workload is shown separately rather than interpreted as zero. Threshold changes only regroup prepared values and do not replay review history or recompute the model intervals. Counts can display while shared preset data is still loading. An open Lapse section requests the existing shared current-preset data even when the separate Misc category is closed, without enabling historical review loading. A collapsed or removed Lapse section does not request that data for the matrix.
+
+## Daily maturation and introductions
+
+Daily maturation appears in the Introduced section. Its Calculate action loads the full available history for the current search and runs a dedicated FSRS worker calculation; it does not enable Memorised replay or calibration. The selected Stats date range limits the displayed dates, not the history needed to find lifetime first crossings.
+
+Both milestones use the matrix's saved S90 cutoffs: Maturing is the first post-review S90 at or above `s90Lower`; Matured is the first S90 strictly above `s90Upper`, matching the matrix's inclusive middle band. Introduction is the first eligible initial learning review. Each card contributes once to each series across its entire retained history, including earlier learning cycles. Resets and later lapses do not create another introduction or milestone. An intra-day crossing still counts if a later answer lowers stability that day.
+
+The three series share the same complete-history card population from the current search. Cards whose initial learning is missing, unsupported, or excluded by the preset's historical cutoff are excluded from all three series and reported. Native FSRS history selection excludes cram and manual entries and applies model-specific initialization and rollover rules. Full FSRS-7 slow/fast stability and difficulty are used to solve S90. This reconstruction uses current resolved preset parameters; unavailable historical parameter changes and deleted reviews cannot be recovered.
+
+The ratios are `100 × Maturing(day) / Introduced(day)` and `100 × Matured(day) / Introduced(day)`. Zero introductions produce gaps, not zeros or infinity. These are same-day throughput ratios, which can exceed 100%; they do not measure the eventual maturation of the cards introduced on that date.
+
+The worker returns only each card's introduction day and typed record-high S90/day pairs, then releases the loaded history. Changing either threshold recomputes the daily series from those compact peaks without replaying reviews again. This preserves exact boundary values and the first crossing within an Anki day.
 
 This document describes how stability-related values are computed for FSRS graphs.
 

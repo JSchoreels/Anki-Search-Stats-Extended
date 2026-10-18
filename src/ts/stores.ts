@@ -10,6 +10,7 @@ import { calculateCardDataPies } from "./CardDataPies"
 import { DEFAULT_ORDER, type SSEconfig, type SSEother } from "./config"
 import { exposureStabilityThresholds } from "./exposureStabilityMatrix"
 import { latestResult } from "./latestResult"
+import type { MaturationHistory } from "./maturation"
 import {
     withConfidenceIntervals,
     type buildCalibrationBins,
@@ -44,7 +45,6 @@ export let graph_mode = writable<"Bar" | "Pie">("Pie")
 
 // Config related stats
 export let other = writable<SSEother>()
-export const exposureStabilityVisible = writable(false)
 export const exposureStabilitySettings = writable(
     exposureStabilityThresholds(SSEconfig.exposureStabilityThresholds)
 )
@@ -62,6 +62,7 @@ export let categoryOrder = writable([
     ...DEFAULT_ORDER.filter((c) => !(SSEconfig.categoryOrder ?? []).includes(c)),
 ])
 export let showRevlogStats = writable(false)
+export const showMaturationStats = writable(false)
 export let showFsrsStats = writable(SSEconfig.autoMemorisedStats)
 export const showMemorisedStats = writable(SSEconfig.autoMemorisedStats ?? false)
 
@@ -157,9 +158,12 @@ export let card_data: Readable<CardData[] | null> = derived([cids], ([$cids], se
 
 // Shared by current-state heatmaps, preset-specific curves and historical replay.
 const needsFsrsData = derived(
-    [showRevlogStats, shownCategories, exposureStabilityVisible],
-    ([$showRevlogs, $categories, $matrix]) =>
-        $matrix || $showRevlogs || ($categories.misc !== false && $categories.misc !== "removed")
+    [showRevlogStats, shownCategories, showMaturationStats],
+    ([$showRevlogs, $categories, $maturation]) =>
+        $showRevlogs ||
+        ($categories.misc !== false && $categories.misc !== "removed") ||
+        ($categories.lapse !== false && $categories.lapse !== "removed") ||
+        ($maturation && $categories.introduced !== false && $categories.introduced !== "removed")
 )
 export const fsrsPresetData = derived(
     [card_data, needsFsrsData],
@@ -170,6 +174,30 @@ export const fsrsPresetData = derived(
         set(null)
         if ($cards && $needed)
             return latestResult(set, () => getFsrsPresetData($cards.map((card) => card.id)))
+    }
+)
+
+export const maturationHistory = derived(
+    [card_data, fsrsPresetData, showMaturationStats],
+    ([$cards, $presets, $requested], set: (value: MaturationHistory | null) => void) => {
+        set(null)
+        if ($requested && $cards && $presets)
+            return latestResult(set, async (signal) => {
+                const history = await loadStatsHistory(
+                    $cards.map((card) => card.id),
+                    0,
+                    signal
+                )
+                try {
+                    return await runStatsTask(
+                        "maturation",
+                        [history, $cards, $presets.presetsByCard],
+                        signal
+                    )
+                } finally {
+                    history.dispose()
+                }
+            })
     }
 )
 

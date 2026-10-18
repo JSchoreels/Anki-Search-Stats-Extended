@@ -5,7 +5,7 @@ import { scheduleStatsTask } from "./statsWorkerQueue"
 import { resultTransfers } from "./workerTransfers"
 export { loadStatsHistory } from "./statsHistory"
 
-type HistoryTask = "revlog" | "memorised" | "calibrationSamples"
+type HistoryTask = "revlog" | "memorised" | "calibrationSamples" | "maturation"
 type TaskArgs<K extends keyof Tasks> = K extends HistoryTask
     ? Parameters<Tasks[K]> extends [infer First, ...infer Rest]
         ? [First | StatsHistory, ...Rest]
@@ -61,7 +61,12 @@ function startStatsTask<K extends keyof Tasks>(
         worker.onerror = (event) => fail(new Error(event.message || "Stats worker failed"))
         worker.onmessageerror = () => fail(new Error("Could not read stats worker result"))
         try {
-            if (task === "revlog" || task === "memorised" || task === "calibrationSamples") {
+            if (
+                task === "revlog" ||
+                task === "memorised" ||
+                task === "calibrationSamples" ||
+                task === "maturation"
+            ) {
                 const reviews = copyRevlogValues(asRevlogHistory(args[0] as RevlogInput).values)
                 worker.postMessage(
                     { task, args: [reviews, ...args.slice(1)], context: SSEother },

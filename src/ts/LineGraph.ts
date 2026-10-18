@@ -76,6 +76,10 @@ export function renderLineChart(
         initialPinnedTrends = [],
         onPinnedRangesChange = () => {},
         series = undefined,
+        dayRange = undefined,
+        bounds = undefined,
+        formatY = undefined,
+        showIsolatedPoints = false,
     }: {
         onTrendsChange?: (trends: DrawnTrend[]) => void
         onPreviewTrendChange?: (trend: TrendLine) => void
@@ -83,6 +87,10 @@ export function renderLineChart(
         initialPinnedTrends?: TrendRange[]
         onPinnedRangesChange?: (ranges: TrendRange[]) => void
         series?: LineChartSeries[]
+        dayRange?: { start: number; end: number }
+        bounds?: { width: number; height: number }
+        formatY?: (value: number) => string
+        showIsolatedPoints?: boolean
     } = {}
 ) {
     if (!svg) {
@@ -99,7 +107,7 @@ export function renderLineChart(
     }
     // This is a hacky fix and I should probably fix the d3 calls below instead
     clearChart(svg)
-    const { width, height } = defaultGraphBounds()
+    const { width, height } = bounds ?? defaultGraphBounds()
 
     const chartSeries =
         series && series.length > 0 ? series : [{ label, data: values, color: "steelblue" }]
@@ -107,12 +115,12 @@ export function renderLineChart(
         .map((item) => item.data.findIndex((value) => value))
         .filter((index) => index >= 0)
     const first_non_zero_index = d3.min(first_non_zero_indexes) ?? -1
-    const start_index = first_non_zero_index === -1 ? 0 : first_non_zero_index
+    const start_index = dayRange?.start ?? (first_non_zero_index === -1 ? 0 : first_non_zero_index)
 
     const seriesData = chartSeries.map((item) => ({
         ...item,
         points: Array.from(item.data)
-            .slice(start_index)
+            .slice(start_index, dayRange ? dayRange.end + 1 : undefined)
             .map((value, index) => ({
                 value: value ?? 0,
                 date: new Date((start_index + index) * day_ms),
@@ -140,7 +148,7 @@ export function renderLineChart(
 
     const x = d3.scaleTime().domain([xMin, xMax]).range([0, width])
 
-    const yMax = d3.max(allPoints.map((point) => point.value)) || 0
+    const yMax = Math.max(dayRange ? 1 : 0, d3.max(allPoints.map((point) => point.value)) || 0)
 
     const y = d3.scaleLinear().domain([yMax, 0]).range([0, height]).nice()
 
@@ -149,14 +157,17 @@ export function renderLineChart(
         .attr("viewBox", `-40 -10 ${width + 50} ${height + 50}`)
         .append("g")
 
-    gridLines(axis, x.ticks(7).map(x), y.ticks().map(y))
+    const tickCount = bounds ? Math.max(2, Math.min(7, Math.floor(width / 90))) : 7
+    gridLines(axis, x.ticks(tickCount).map(x), y.ticks().map(y), { width, height })
 
-    axis.append("g").call(d3.axisLeft(y)).attr("opacity", 0.5)
+    const yAxis = d3.axisLeft(y)
+    if (formatY) yAxis.tickFormat((value) => formatY(Number(value)))
+    axis.append("g").call(yAxis).attr("opacity", 0.5)
 
     axis.append("g")
         .attr("transform", `translate(0, ${height})`)
         .attr("opacity", 0.5)
-        .call(d3.axisBottom(x).ticks(7))
+        .call(d3.axisBottom(x).ticks(tickCount))
 
     d3.select(svg)
         .selectAll("path.line-series")
@@ -201,6 +212,27 @@ export function renderLineChart(
             .text((item) => item.label)
     }
 
+    if (showIsolatedPoints) {
+        for (const item of seriesData) {
+            axis.append("g")
+                .selectAll("circle")
+                .data(
+                    item.points.filter(
+                        (point, index, points) =>
+                            Number.isFinite(point.value) &&
+                            !Number.isFinite(points[index - 1]?.value) &&
+                            !Number.isFinite(points[index + 1]?.value)
+                    )
+                )
+                .join("circle")
+                .attr("class", "line-isolated-point")
+                .attr("cx", (point) => x(point.date))
+                .attr("cy", (point) => y(point.value))
+                .attr("r", 2.5)
+                .attr("fill", item.color)
+        }
+    }
+
     const lastDay = d3.max(allPoints.map((point) => point.day)) ?? start_index
     const hoverData = Array.from({ length: lastDay - start_index + 1 }, (_, index) => {
         const day = start_index + index
@@ -234,7 +266,11 @@ export function renderLineChart(
                         .filter((item) => Number.isFinite(item.value))
                         .map((item) => {
                             const value = item.value
-                            const rendered = value > 10 ? value.toFixed(0) : value.toPrecision(2)
+                            const rendered = formatY
+                                ? formatY(value)
+                                : value > 10
+                                  ? value.toFixed(0)
+                                  : value.toPrecision(2)
                             return `${item.label}: ${rendered}`
                         }),
                 ],

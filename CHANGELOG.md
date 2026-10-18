@@ -4,7 +4,8 @@
 
 ### User facing changes
 
-- Add an Exposure × Stability matrix beside Card Counts with four saved, editable rep/S90 thresholds. Show active studied card counts and FSRS curve workload in all nine cells, with explicit population and unavailable-workload coverage.
+- Add a compact Exposure × Stability matrix in the Lapse section with four saved, editable rep/S90 thresholds. Show active studied card counts and FSRS curve workload in all nine cells, row and column totals, and a main-diagonal total, with explicit population and unavailable-workload coverage.
+- Compare daily introductions with cards first becoming Maturing or Matured at the matrix's two S90 cutoffs. Show both milestone/new ratios, leaving gaps on days without introductions, in a new Daily maturation panel in the Introduced section.
 
 - Further reduce Statistics memory during UM+/calibration refreshes and full Memorised replay: peak renderer RSS fell from 2.38 GiB to 2.21 GiB (7.3%, about 178 MiB), and the preserved 3.8-million-review workload completed in 116.1 seconds instead of 125.9 seconds in a fresh before/after pair.
 - Store the same review history in 47% smaller buffers (231 MiB to 123 MiB for this snapshot), collect calibration samples in numeric chunks, compact replay grouping and release bootstrap counters before resampling. Preserve the checked graph results and controls.
@@ -33,7 +34,8 @@
 
 ### Technical details
 
-- Reuse shared resolved presets and the full FSRS model state for curve intervals, with a one-day workload floor. Mount beside native Card Counts and clean up when its graph is replaced; retain Anki's responsive graph layout and avoid loading review history for this current-state panel.
+- Reuse shared resolved presets and the full FSRS model state for curve intervals, with a one-day workload floor. Render within the Lapse category's responsive grid and follow its show/hide controls; request current presets only while needed and avoid loading review history for this current-state panel.
+- Replay full available history on demand in a separate maturation worker, preserving complete initial learning coverage, native history filters and both FSRS-7 traces. Retain compact record-high S90 transitions so cutoff changes do not replay history; dispose the history worker and reject obsolete search results. Bound maturation charts to the selected date range, preserve missing ratios and show isolated daily values.
 
 - Use native-width review columns: Float64 IDs, signed Int32 intervals, Uint32 time/factor and Uint8 grades/types, with validation against truncation or wrapping. Transfer all eight buffers between history owners; keep legacy Float64 inputs supported through shared strided views.
 - Build calibration samples in 16,384-row typed chunks. Group replay rows with Uint32 indices/offsets and learning-cycle views, releasing grouping before numerical replay. Collect card/bin bootstrap counts in numeric chunks and release the collection frame before the unchanged 500 deterministic resampling iterations.
