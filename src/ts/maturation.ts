@@ -149,3 +149,32 @@ export function buildMaturationSeries(history: MaturationHistory, lower: number,
         lastDay: history.throughDay,
     }
 }
+
+export function smoothMaturationSeries(
+    source: ReturnType<typeof buildMaturationSeries>,
+    days: number
+): ReturnType<typeof buildMaturationSeries> {
+    if (!Number.isSafeInteger(days) || days < 1)
+        throw new Error("Invalid maturation average window")
+    const result = {
+        ...source,
+        introduced: [] as number[],
+        maturing: [] as number[],
+        matured: [] as number[],
+        maturingRatio: [] as number[],
+        maturedRatio: [] as number[],
+    }
+    const keys = ["introduced", "maturing", "matured"] as const
+    const sums = [0, 0, 0]
+    for (let day = source.firstDay; day <= source.lastDay; day++) {
+        const windowDays = Math.min(days, day - source.firstDay + 1)
+        keys.forEach((key, index) => {
+            sums[index] += source[key][day] ?? 0
+            if (day - days >= source.firstDay) sums[index] -= source[key][day - days] ?? 0
+            result[key][day] = sums[index] / windowDays
+        })
+        result.maturingRatio[day] = sums[0] ? (100 * sums[1]) / sums[0] : NaN
+        result.maturedRatio[day] = sums[0] ? (100 * sums[2]) / sums[0] : NaN
+    }
+    return result
+}

@@ -48,6 +48,7 @@ export let other = writable<SSEother>()
 export const exposureStabilitySettings = writable(
     exposureStabilityThresholds(SSEconfig.exposureStabilityThresholds)
 )
+export const maturationSmoothing = writable({ enabled: false, days: 7 })
 export let config = writable<SSEconfig>()
 export let shownCategories = writable(SSEconfig.categories ?? {})
 export let autoRevlogStats = writable(SSEconfig.autoRevlogStats ?? false)

@@ -2,8 +2,8 @@
     import GraphContainer from "./GraphContainer.svelte"
     import Calculator from "./Calculator.svelte"
     import LineGraph from "./LineGraph.svelte"
-    import { buildMaturationSeries } from "./maturation"
-    import { NEW_COLOUR, YOUNG_COLOUR, MATURE_COLOUR } from "./graph"
+    import { buildMaturationSeries, smoothMaturationSeries } from "./maturation"
+    import { NEW_COLOUR, YOUNG_COLOUR, MATURE_COLOUR, defaultGraphBounds } from "./graph"
     import { i18n } from "./i18n"
     import { TREND_PERSISTENCE_KEYS } from "./trendPersistenceKeys"
     import {
@@ -11,9 +11,27 @@
         showMaturationStats,
         exposureStabilitySettings,
         searchLimit,
+        maturationSmoothing,
     } from "./stores"
 
+    export let mode: "counts" | "ratios" = "counts"
     let chartWidth = 600
+    let percentile = 90
+    let draftPercentile: number | undefined = percentile
+    function applyPercentile() {
+        if (
+            typeof draftPercentile === "number" &&
+            Number.isInteger(draftPercentile) &&
+            draftPercentile >= 1 &&
+            draftPercentile <= 100
+        )
+            percentile = draftPercentile
+    }
+    $: averageDays = $maturationSmoothing.days
+    function applyAverageDays() {
+        if (Number.isSafeInteger(averageDays) && averageDays >= 1)
+            maturationSmoothing.update((settings) => ({ ...settings, days: averageDays }))
+    }
     function sizeCharts(node: HTMLDivElement) {
         let frame = 0
         const observer = new ResizeObserver(([entry]) => {
@@ -33,65 +51,150 @@
         }
     }
     $: thresholds = $exposureStabilitySettings
-    $: series = $maturationHistory
+    $: dailySeries = $maturationHistory
         ? buildMaturationSeries($maturationHistory, thresholds.s90Lower, thresholds.s90Upper)
         : null
-    $: dayRange = series
+    $: averaged =
+        dailySeries && $maturationSmoothing.enabled
+            ? smoothMaturationSeries(dailySeries, $maturationSmoothing.days)
+            : null
+    $: dayRange = dailySeries
         ? {
               start: Math.max(
-                  series.firstDay,
-                  $searchLimit ? series.lastDay - $searchLimit + 1 : series.firstDay
+                  dailySeries.firstDay,
+                  $searchLimit ? dailySeries.lastDay - $searchLimit + 1 : dailySeries.firstDay
               ),
-              end: series.lastDay,
+              end: dailySeries.lastDay,
           }
         : undefined
-    $: bounds = { width: Math.max(160, chartWidth - 70), height: 170 }
+    $: marginLeft = mode === "ratios" ? 70 : 40
+    $: bounds = {
+        width: Math.max(160, chartWidth - marginLeft - 30),
+        height: defaultGraphBounds().height,
+        marginLeft,
+    }
     $: maturingLabel = i18n("maturation-maturing", { value: thresholds.s90Lower })
     $: maturedLabel = i18n("maturation-matured", { value: thresholds.s90Upper })
     const percentFormat = new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 })
     const formatPercent = (value: number) => `${percentFormat.format(value)}%`
+    const countFormat = (value: number) => percentFormat.format(value)
+    let definitions: {
+        key: "introduced" | "maturing" | "matured" | "maturingRatio" | "maturedRatio"
+        label: string
+        color: string
+    }[]
+    $: definitions =
+        mode === "counts"
+            ? [
+                  { key: "introduced", label: i18n("introduced"), color: NEW_COLOUR },
+                  { key: "maturing", label: maturingLabel, color: YOUNG_COLOUR },
+                  { key: "matured", label: maturedLabel, color: MATURE_COLOUR },
+              ]
+            : [
+                  { key: "maturingRatio", label: maturingLabel, color: YOUNG_COLOUR },
+                  { key: "maturedRatio", label: maturedLabel, color: MATURE_COLOUR },
+              ]
+    $: chartSeries = dailySeries
+        ? [
+              ...definitions.map(({ key, ...style }) => ({
+                  ...style,
+                  data: dailySeries[key],
+                  opacity: averaged ? 0.3 : 1,
+                  strokeWidth: averaged ? 1 : 1.5,
+              })),
+              ...(averaged
+                  ? definitions.map(({ key, ...style }) => ({
+                        ...style,
+                        label: i18n("maturation-average-series", {
+                            label: style.label,
+                            days: $maturationSmoothing.days,
+                        }),
+                        data: averaged[key],
+                        strokeWidth: 2.2,
+                        legend: false,
+                    }))
+                  : []),
+          ]
+        : []
+    $: chartLabel = i18n(mode === "counts" ? "maturation-counts-title" : "maturation-ratios-title")
 </script>
 
 <GraphContainer>
-    <h1>{i18n("maturation-title")}</h1>
-    {#if series && $maturationHistory?.cards.length}
+    <h1>{i18n(mode === "counts" ? "maturation-title" : "maturation-ratios-heading")}</h1>
+    {#if dailySeries && $maturationHistory?.cards.length}
+        <div class="chart-controls">
+            <span>{chartLabel}</span>
+            <form on:submit|preventDefault={applyPercentile}>
+                <label>
+                    {i18n("maturation-axis-cap")}
+                    <span>
+                        P
+                        <input
+                            aria-label={i18n("maturation-axis-cap")}
+                            type="number"
+                            min="1"
+                            max="100"
+                            step="1"
+                            required
+                            bind:value={draftPercentile}
+                            on:change={applyPercentile}
+                        />
+                    </span>
+                </label>
+            </form>
+        </div>
+        {#if averaged}<p class="average-key">
+                {i18n("maturation-average-line-key", { days: $maturationSmoothing.days })}
+            </p>{/if}
+        <div class="average-controls">
+            <label class="average-toggle">
+                <input type="checkbox" bind:checked={$maturationSmoothing.enabled} />
+                {i18n("maturation-moving-average")}
+            </label>
+            <form on:submit|preventDefault={applyAverageDays}>
+                <label>
+                    <input
+                        aria-label={i18n("maturation-average-days")}
+                        type="number"
+                        min="1"
+                        step="1"
+                        required
+                        disabled={!$maturationSmoothing.enabled}
+                        bind:value={averageDays}
+                        on:change={applyAverageDays}
+                    />
+                    {i18n("maturation-days")}
+                </label>
+            </form>
+        </div>
         <div class="maturation-charts" use:sizeCharts>
-            <h3>{i18n("maturation-counts-title")}</h3>
             <LineGraph
-                label={i18n("maturation-counts-title")}
-                data={series.introduced}
-                series={[
-                    { label: i18n("introduced"), data: series.introduced, color: NEW_COLOUR },
-                    { label: maturingLabel, data: series.maturing, color: YOUNG_COLOUR },
-                    { label: maturedLabel, data: series.matured, color: MATURE_COLOUR },
-                ]}
+                label={chartLabel}
+                data={chartSeries[0].data}
+                series={chartSeries}
                 {dayRange}
                 {bounds}
+                yPercentile={percentile}
+                formatY={mode === "ratios"
+                    ? formatPercent
+                    : $maturationSmoothing.enabled
+                      ? countFormat
+                      : undefined}
                 showIsolatedPoints
-                trendPersistenceKey={TREND_PERSISTENCE_KEYS.introduced.maturationCounts}
-            />
-            <h3>{i18n("maturation-ratios-title")}</h3>
-            <LineGraph
-                label={i18n("maturation-ratios-title")}
-                data={series.maturingRatio}
-                series={[
-                    { label: maturingLabel, data: series.maturingRatio, color: YOUNG_COLOUR },
-                    { label: maturedLabel, data: series.maturedRatio, color: MATURE_COLOUR },
-                ]}
-                {dayRange}
-                {bounds}
-                formatY={formatPercent}
-                showIsolatedPoints
-                trendPersistenceKey={TREND_PERSISTENCE_KEYS.introduced.maturationRatios}
+                trendPersistenceKey={mode === "counts"
+                    ? TREND_PERSISTENCE_KEYS.introduced.maturationCounts
+                    : TREND_PERSISTENCE_KEYS.introduced.maturationRatios}
             />
         </div>
+        <p>{i18n("maturation-cap-help")}</p>
+        {#if $maturationSmoothing.enabled}<p>{i18n("maturation-average-help")}</p>{/if}
         <p>
             {i18n("maturation-coverage", {
                 count: $maturationHistory.cards.length,
                 excluded: $maturationHistory.incompleteCards,
             })}
         </p>
-    {:else if series}
+    {:else if dailySeries}
         <p>{i18n("maturation-empty")}</p>
     {:else}
         <Calculator shown={$showMaturationStats} calculate={() => showMaturationStats.set(true)} />
@@ -104,10 +207,41 @@
         width: 100%;
         min-width: 0;
     }
-    h3 {
-        font-size: 0.9em;
-        font-weight: 500;
-        margin: 0.7em 0 0;
+    .chart-controls {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: space-between;
+        align-items: center;
+        gap: 0.7em;
+        margin-bottom: 0.5em;
+        font-size: 0.85em;
+    }
+    label {
+        display: flex;
+        align-items: center;
+        gap: 0.4em;
+    }
+    label span {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.2em;
+    }
+    input {
+        width: 4.5em;
+    }
+    .average-controls {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.5em 1em;
+        margin-bottom: 0.6em;
+        font-size: 0.85em;
+    }
+    .average-toggle input {
+        width: auto;
+    }
+    .average-key {
+        margin-bottom: 0.6em;
     }
     .maturation-charts :global(svg) {
         display: block;

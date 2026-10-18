@@ -50,6 +50,33 @@ export type LineChartSeries = {
     label: string
     data: number[]
     color: string
+    opacity?: number
+    strokeWidth?: number
+    legend?: boolean
+}
+
+let nextClipId = 0
+
+/** Percentile of visible daily maxima, so the same days fit across named series. */
+export function lineChartPercentileCeiling(
+    series: LineChartSeries[],
+    start: number,
+    end: number,
+    percentile: number
+) {
+    if (!(Number.isFinite(percentile) && percentile > 0 && percentile <= 100))
+        throw new Error("Invalid line chart percentile")
+    const maxima: number[] = []
+    for (let day = start; day <= end; day++) {
+        let maximum: number | undefined
+        for (const item of series) {
+            const value = item.data[day]
+            if (Number.isFinite(value) && (maximum === undefined || value > maximum))
+                maximum = value
+        }
+        if (maximum !== undefined) maxima.push(maximum)
+    }
+    return Math.max(1, d3.quantile(maxima, percentile / 100) ?? 0)
 }
 
 export function visibleTrendRangeFromLinePoints(points: Pick<LineChartPoint, "day">[]) {
@@ -80,6 +107,7 @@ export function renderLineChart(
         bounds = undefined,
         formatY = undefined,
         showIsolatedPoints = false,
+        yPercentile = undefined,
     }: {
         onTrendsChange?: (trends: DrawnTrend[]) => void
         onPreviewTrendChange?: (trend: TrendLine) => void
@@ -88,9 +116,10 @@ export function renderLineChart(
         onPinnedRangesChange?: (ranges: TrendRange[]) => void
         series?: LineChartSeries[]
         dayRange?: { start: number; end: number }
-        bounds?: { width: number; height: number }
+        bounds?: { width: number; height: number; marginLeft?: number }
         formatY?: (value: number) => string
         showIsolatedPoints?: boolean
+        yPercentile?: number
     } = {}
 ) {
     if (!svg) {
@@ -108,6 +137,7 @@ export function renderLineChart(
     // This is a hacky fix and I should probably fix the d3 calls below instead
     clearChart(svg)
     const { width, height } = bounds ?? defaultGraphBounds()
+    const marginLeft = bounds?.marginLeft ?? 40
 
     const chartSeries =
         series && series.length > 0 ? series : [{ label, data: values, color: "steelblue" }]
@@ -148,13 +178,18 @@ export function renderLineChart(
 
     const x = d3.scaleTime().domain([xMin, xMax]).range([0, width])
 
-    const yMax = Math.max(dayRange ? 1 : 0, d3.max(allPoints.map((point) => point.value)) || 0)
+    const lastDay = d3.max(allPoints.map((point) => point.day)) ?? start_index
+    const capped = yPercentile !== undefined && yPercentile < 100
+    const yMax = capped
+        ? lineChartPercentileCeiling(chartSeries, start_index, lastDay, yPercentile)
+        : Math.max(dayRange ? 1 : 0, d3.max(allPoints.map((point) => point.value)) || 0)
 
-    const y = d3.scaleLinear().domain([yMax, 0]).range([0, height]).nice()
+    const y = d3.scaleLinear().domain([yMax, 0]).range([0, height])
+    if (!capped) y.nice()
 
     const axis = d3
         .select(svg)
-        .attr("viewBox", `-40 -10 ${width + 50} ${height + 50}`)
+        .attr("viewBox", `-${marginLeft} -10 ${width + marginLeft + 10} ${height + 50}`)
         .append("g")
 
     const tickCount = bounds ? Math.max(2, Math.min(7, Math.floor(width / 90))) : 7
@@ -169,14 +204,27 @@ export function renderLineChart(
         .attr("opacity", 0.5)
         .call(d3.axisBottom(x).ticks(tickCount))
 
-    d3.select(svg)
-        .selectAll("path.line-series")
+    const plot = axis.append("g").attr("class", "line-plot")
+    if (capped) {
+        const clipId = `sse-line-clip-${nextClipId++}`
+        d3.select(svg)
+            .append("defs")
+            .append("clipPath")
+            .attr("id", clipId)
+            .append("rect")
+            .attr("width", width)
+            .attr("height", height)
+        plot.attr("clip-path", `url(#${clipId})`)
+    }
+
+    plot.selectAll("path.line-series")
         .data(seriesData)
         .join("path")
         .attr("class", "line-series")
         .attr("fill", "none")
         .attr("stroke", (item) => item.color)
-        .attr("stroke-width", 1.5)
+        .attr("stroke-width", (item) => item.strokeWidth ?? 1.5)
+        .attr("opacity", (item) => item.opacity ?? 1)
         .style("pointer-events", "none")
         .attr("d", (item) =>
             d3
@@ -186,14 +234,15 @@ export function renderLineChart(
                 .y((d) => y(d.value))(item.points)
         )
 
-    if (seriesData.length > 1) {
+    const legendSeries = seriesData.filter((item) => item.legend !== false)
+    if (legendSeries.length > 1) {
         const legend = axis
             .append("g")
             .attr("transform", `translate(${Math.max(0, width - 130)}, 8)`)
             .style("font-size", "11px")
         const items = legend
             .selectAll("g")
-            .data(seriesData)
+            .data(legendSeries)
             .join("g")
             .attr("transform", (_item, index) => `translate(0, ${index * 16})`)
         items
@@ -214,7 +263,7 @@ export function renderLineChart(
 
     if (showIsolatedPoints) {
         for (const item of seriesData) {
-            axis.append("g")
+            plot.append("g")
                 .selectAll("circle")
                 .data(
                     item.points.filter(
@@ -230,10 +279,10 @@ export function renderLineChart(
                 .attr("cy", (point) => y(point.value))
                 .attr("r", 2.5)
                 .attr("fill", item.color)
+                .attr("opacity", item.opacity ?? 1)
         }
     }
 
-    const lastDay = d3.max(allPoints.map((point) => point.day)) ?? start_index
     const hoverData = Array.from({ length: lastDay - start_index + 1 }, (_, index) => {
         const day = start_index + index
         return {
@@ -278,7 +327,7 @@ export function renderLineChart(
         })
 
     selectableTrendLine({
-        chart: { svg: axis, y },
+        chart: { svg: plot, y },
         points: date_values.map((value) => ({ x: value.day, y: value.value })),
         visibleRange: visibleTrendRangeFromLinePoints(date_values),
         hoverAreas: hoverBars,

@@ -749,6 +749,15 @@ introduced-truncated-warning =
     Re-introduced does not work for cards introduced before the cutoff date.
 matrix-title = Exposure × Stability
 maturation-title = Daily maturation
+maturation-ratios-heading = Maturation / new ratios
+maturation-axis-cap = Y-axis cap
+maturation-cap-help = The cap uses the selected percentile of each day's highest plotted value in the visible date range. P100 shows the full range. Peaks are clipped visually; hover shows uncapped values.
+maturation-moving-average = Moving average
+maturation-average-days = Moving average window in days
+maturation-days = days
+maturation-average-help = Trailing averages overlay the daily lines. Both graphs share the window. Counts are average cards/day; ratios divide milestone totals by introduction totals over that window. A window with no introductions has no ratio.
+maturation-average-series = { $label } · { $days }d avg
+maturation-average-line-key = Faint: daily · Thick: { $days }-day average
 maturation-maturing = Maturing ≥{ $value }d
 maturation-matured = Matured >{ $value }d
 maturation-counts-title = Introductions and first crossings · cards/day

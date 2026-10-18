@@ -5,6 +5,7 @@ import { getFsrs, intervalAtRetrievability } from "../src/ts/fsrsModel"
 import {
     buildMaturationSeries,
     calculateMaturationHistory,
+    smoothMaturationSeries,
     type MaturationHistory,
 } from "../src/ts/maturation"
 import { packRevlogs, RevlogHistory } from "../src/ts/packedRevlogs"
@@ -53,6 +54,29 @@ test("first milestones include the lower boundary, exclude the upper boundary, a
     const changed = buildMaturationSeries(history, 30, 80)
     expect(changed.maturing.slice(10)).toEqual([0, 2, 1])
     expect(changed.matured.slice(10)).toEqual([0, 0, 1])
+})
+
+test("trailing counts average calendar days while ratios use the same window's totals", () => {
+    const raw = {
+        firstDay: 10,
+        lastDay: 13,
+        introduced: new Array(10).concat(1, 9, 0, 0),
+        maturing: new Array(10).concat(10, 0, 2, 3),
+        matured: new Array(10).concat(0, 5, 1, 1),
+        maturingRatio: new Array(10).concat(1000, 0, NaN, NaN),
+        maturedRatio: new Array(10).concat(0, 500 / 9, NaN, NaN),
+    }
+    const averaged = smoothMaturationSeries(raw, 2)
+    expect(averaged.introduced.slice(10)).toEqual([1, 5, 4.5, 0])
+    expect(averaged.maturing.slice(10)).toEqual([10, 5, 1, 2.5])
+    expect(averaged.maturingRatio[11]).toBe(100)
+    expect(averaged.maturingRatio[12]).toBeCloseTo(200 / 9)
+    expect(averaged.maturingRatio[13]).toBeNaN()
+    expect(averaged.maturedRatio[12]).toBeCloseTo(600 / 9)
+    expect(raw.introduced.slice(10)).toEqual([1, 9, 0, 0])
+    expect(smoothMaturationSeries(raw, 1)).toEqual(raw)
+    expect(smoothMaturationSeries(raw, 7).maturingRatio[13]).toBe(150)
+    expect(() => smoothMaturationSeries(raw, 0)).toThrow("Invalid maturation average window")
 })
 
 test("full FSRS-7 replay retains one introduction across resets and ignores cram/manual/future events", () => {

@@ -13,9 +13,11 @@
     export let data: number[]
     export let series: LineChartSeries[] | undefined = undefined
     export let dayRange: { start: number; end: number } | undefined = undefined
-    export let bounds: { width: number; height: number } | undefined = undefined
+    export let bounds: { width: number; height: number; marginLeft?: number } | undefined =
+        undefined
     export let formatY: ((value: number) => string) | undefined = undefined
     export let showIsolatedPoints = false
+    export let yPercentile: number | undefined = undefined
     export let trend_data: DrawnTrend[] = []
     export let current_trend: TrendLine = undefined
     export let removeTrend: (id: number) => void = () => {}
@@ -60,6 +62,7 @@
             bounds,
             formatY,
             showIsolatedPoints,
+            yPercentile,
         })
     }
 </script>

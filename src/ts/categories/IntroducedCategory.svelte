@@ -152,7 +152,8 @@
             </Warning>
         {/if}
     </RevlogGraphContainer>
-    <MaturationGraph />
+    <MaturationGraph mode="counts" />
+    <MaturationGraph mode="ratios" />
     <RevlogGraphContainer>
         <h1 slot="title">{i18n("forgotten")}</h1>
         <BarScrollable
