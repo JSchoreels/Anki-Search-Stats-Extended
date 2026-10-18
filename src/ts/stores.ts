@@ -8,6 +8,7 @@ import {
 } from "./calibrationSamples"
 import { calculateCardDataPies } from "./CardDataPies"
 import { DEFAULT_ORDER, type SSEconfig, type SSEother } from "./config"
+import { exposureStabilityThresholds } from "./exposureStabilityMatrix"
 import { latestResult } from "./latestResult"
 import {
     withConfidenceIntervals,
@@ -43,6 +44,10 @@ export let graph_mode = writable<"Bar" | "Pie">("Pie")
 
 // Config related stats
 export let other = writable<SSEother>()
+export const exposureStabilityVisible = writable(false)
+export const exposureStabilitySettings = writable(
+    exposureStabilityThresholds(SSEconfig.exposureStabilityThresholds)
+)
 export let config = writable<SSEconfig>()
 export let shownCategories = writable(SSEconfig.categories ?? {})
 export let autoRevlogStats = writable(SSEconfig.autoRevlogStats ?? false)
@@ -100,6 +105,9 @@ configSubscribe(autoMemorisedStats, ($autoMemorisedStats) => {
 })
 
 configSubscribe(alwaysAllTime, ($alwaysAllTime) => saveConfigValue("alwaysAllTime", $alwaysAllTime))
+configSubscribe(exposureStabilitySettings, (settings) =>
+    saveConfigValue("exposureStabilityThresholds", settings)
+)
 
 // Data related
 export let data = writable<null | GraphsResponse>(null)
@@ -149,9 +157,9 @@ export let card_data: Readable<CardData[] | null> = derived([cids], ([$cids], se
 
 // Shared by current-state heatmaps, preset-specific curves and historical replay.
 const needsFsrsData = derived(
-    [showRevlogStats, shownCategories],
-    ([$showRevlogs, $categories]) =>
-        $showRevlogs || ($categories.misc !== false && $categories.misc !== "removed")
+    [showRevlogStats, shownCategories, exposureStabilityVisible],
+    ([$showRevlogs, $categories, $matrix]) =>
+        $matrix || $showRevlogs || ($categories.misc !== false && $categories.misc !== "removed")
 )
 export const fsrsPresetData = derived(
     [card_data, needsFsrsData],

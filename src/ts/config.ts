@@ -1,4 +1,5 @@
 import type { CATEGORIES } from "./categories"
+import type { ExposureStabilityThresholds } from "./exposureStabilityMatrix"
 
 export type StoredTrendCoordinate = number | string
 export type StoredTrendMode = "fitted" | "endpoints"
@@ -23,6 +24,7 @@ export type SSEconfig = Partial<{
     autoMemorisedStats: boolean
     alwaysAllTime: boolean
     pinnedTrends: Record<string, StoredTrendRange[]>
+    exposureStabilityThresholds: ExposureStabilityThresholds
 }>
 
 export type DeckConfig = {

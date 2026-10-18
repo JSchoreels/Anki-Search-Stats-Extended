@@ -24,6 +24,7 @@ Its total can be lower than a native single-model histogram.
 
 | Graph family | Data and checks |
 | --- | --- |
+| Exposure × Stability matrix | Current Anki reps and stored S90, inclusive middle boundaries, active studied population, new/inactive/missing-state exclusions, count conservation, complete FSRS-7 curve inversion at card/preset retention, one-day workload floor, unavailable workload coverage, persisted thresholds, native graph placement and refresh cleanup |
 | FSRS/RWKV current retrievability and disagreement | Supported backend FSRS memory metrics, paired eligibility, native float32 percentage boundaries, unique cards, selected model, shift ordering, tooltip local/search totals |
 | Memorised, average stability, young-card ratio, calibration, loss, lapse odds | Complete FSRS replay state, resolved presets, historical-retention bridge, UTC cutoff, reset/cram handling, review filters, end-of-day/current-time snapshots, calibration sample eligibility |
 | ROC, UM+, RWKV daily surprise | Paired predictions, tied ROC thresholds, AUC, shared error buckets, sample counts, zero-variance and missing-day handling |

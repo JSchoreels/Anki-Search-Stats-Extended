@@ -3,6 +3,8 @@
 Like the new anki stats screen? Want more? This is the addon for you.
 
 ## Config
+
+- **exposureStabilityThresholds**: Four editable cutoffs for the Exposure × Stability matrix beside Card Counts. Defaults: `repsLower: 5`, `repsUpper: 30`, `s90Lower: 7`, `s90Upper: 30`. The middle bands include both endpoints. Apply thresholds in the panel to save them. Cells show active studied card counts and FSRS curve workload at each card's desired retention; new and inactive cards are excluded. See [stability metrics](docs/FSRS_STABILITY.MD).
      
 - **loadDelayMs**: The number of ms to delay before displaying the search stats, Increasing this can help if the search stats appear above the regular stats (Though even with 0ms this doesn't tend to happen)
 

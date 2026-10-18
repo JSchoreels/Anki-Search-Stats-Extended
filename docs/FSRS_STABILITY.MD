@@ -1,5 +1,15 @@
 # FSRS Stability Metrics
 
+## Current Exposure × Stability matrix
+
+The panel appears immediately beside native Card Counts in the Stats graph grid, stacking below it on narrower windows. It uses the same current search and displays active studied cards with valid stored S90. New cards, suspended/buried cards and missing-S90 cards are excluded and reported. Reps are the current Anki card counter (`prop:reps`), not a fresh count of retained revlog entries.
+
+The default exposure bands are reps <5, 5–30 inclusive, and >30. Stability bands are stored S90 <7 days, 7–30 inclusive, and >30. Four editable positive thresholds are persisted in the add-on configuration as `exposureStabilityThresholds` (`repsLower`, `repsUpper`, `s90Lower`, `s90Upper`). Rep thresholds must be whole numbers and each upper threshold must exceed its lower threshold. Invalid saved settings use the defaults.
+
+Each cell shows card count and estimated current maintenance workload. The interval is solved from each card's resolved FSRS preset and complete current memory state at its stored desired retention, falling back to the preset retention only when the stored value is absent or invalid. FSRS-7 passes `s_int`, `s_fast` and difficulty together. Workload is `sum(1 / max(curve_interval_days, 1))`, matching the existing daily minimum while replacing scheduled intervals with curve-derived intervals. It is not a simulated future review forecast and includes neither future learning gains nor repeated-failure/relearning costs.
+
+Cards with valid S90 remain counted if workload cannot be computed; unavailable workload is shown separately rather than interpreted as zero. Threshold changes only regroup prepared values and do not replay review history or recompute the model intervals. Counts can display while shared preset data is still loading. The matrix requests the existing shared current-preset data even when the separate Misc category is closed, without enabling historical review loading.
+
 This document describes how stability-related values are computed for FSRS graphs.
 
 ## Average Stability Over Time

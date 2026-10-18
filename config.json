@@ -40,5 +40,11 @@
         "lapse",
         "bad"
     ],
-    "alwaysAllTime": false
+    "alwaysAllTime": false,
+    "exposureStabilityThresholds": {
+        "repsLower": 5,
+        "repsUpper": 30,
+        "s90Lower": 7,
+        "s90Upper": 30
+    }
 }
