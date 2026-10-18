@@ -15,6 +15,13 @@
     } from "./stores"
 
     export let mode: "counts" | "ratios" = "counts"
+    let visible = {
+        introduced: true,
+        maturing: true,
+        matured: true,
+        maturingRatio: true,
+        maturedRatio: true,
+    }
     let chartWidth = 600
     let percentile = 90
     let draftPercentile: number | undefined = percentile
@@ -94,27 +101,21 @@
                   { key: "maturingRatio", label: maturingLabel, color: YOUNG_COLOUR },
                   { key: "maturedRatio", label: maturedLabel, color: MATURE_COLOUR },
               ]
-    $: chartSeries = dailySeries
-        ? [
-              ...definitions.map(({ key, ...style }) => ({
+    $: displayedSeries = averaged ?? dailySeries
+    $: chartSeries = displayedSeries
+        ? definitions
+              .filter(({ key }) => visible[key])
+              .map(({ key, ...style }) => ({
                   ...style,
-                  data: dailySeries[key],
-                  opacity: averaged ? 0.3 : 1,
-                  strokeWidth: averaged ? 1 : 1.5,
-              })),
-              ...(averaged
-                  ? definitions.map(({ key, ...style }) => ({
-                        ...style,
-                        label: i18n("maturation-average-series", {
+                  label: averaged
+                      ? i18n("maturation-average-series", {
                             label: style.label,
                             days: $maturationSmoothing.days,
-                        }),
-                        data: averaged[key],
-                        strokeWidth: 2.2,
-                        legend: false,
-                    }))
-                  : []),
-          ]
+                        })
+                      : style.label,
+                  data: displayedSeries[key],
+                  strokeWidth: averaged ? 2.2 : 1.5,
+              }))
         : []
     $: chartLabel = i18n(mode === "counts" ? "maturation-counts-title" : "maturation-ratios-title")
 </script>
@@ -143,9 +144,15 @@
                 </label>
             </form>
         </div>
-        {#if averaged}<p class="average-key">
-                {i18n("maturation-average-line-key", { days: $maturationSmoothing.days })}
-            </p>{/if}
+        <div class="curve-controls" role="group" aria-label={i18n("maturation-curves")}>
+            {#each definitions as definition (definition.key)}
+                <label>
+                    <input type="checkbox" bind:checked={visible[definition.key]} />
+                    <span class="curve-color" style:background-color={definition.color}></span>
+                    {definition.label}
+                </label>
+            {/each}
+        </div>
         <div class="average-controls">
             <label class="average-toggle">
                 <input type="checkbox" bind:checked={$maturationSmoothing.enabled} />
@@ -168,23 +175,27 @@
             </form>
         </div>
         <div class="maturation-charts" use:sizeCharts>
-            <LineGraph
-                label={chartLabel}
-                data={chartSeries[0].data}
-                series={chartSeries}
-                {dayRange}
-                {bounds}
-                yPercentile={percentile}
-                formatY={mode === "ratios"
-                    ? formatPercent
-                    : $maturationSmoothing.enabled
-                      ? countFormat
-                      : undefined}
-                showIsolatedPoints
-                trendPersistenceKey={mode === "counts"
-                    ? TREND_PERSISTENCE_KEYS.introduced.maturationCounts
-                    : TREND_PERSISTENCE_KEYS.introduced.maturationRatios}
-            />
+            {#if chartSeries.length}
+                <LineGraph
+                    label={chartLabel}
+                    data={chartSeries[0].data}
+                    series={chartSeries}
+                    {dayRange}
+                    {bounds}
+                    yPercentile={percentile}
+                    formatY={mode === "ratios"
+                        ? formatPercent
+                        : $maturationSmoothing.enabled
+                          ? countFormat
+                          : undefined}
+                    showIsolatedPoints
+                    trendPersistenceKey={mode === "counts"
+                        ? TREND_PERSISTENCE_KEYS.introduced.maturationCounts
+                        : TREND_PERSISTENCE_KEYS.introduced.maturationRatios}
+                />
+            {:else}
+                <p role="status">{i18n("maturation-select-curve")}</p>
+            {/if}
         </div>
         <p>{i18n("maturation-cap-help")}</p>
         {#if $maturationSmoothing.enabled}<p>{i18n("maturation-average-help")}</p>{/if}
@@ -237,11 +248,21 @@
         margin-bottom: 0.6em;
         font-size: 0.85em;
     }
-    .average-toggle input {
+    .average-toggle input,
+    .curve-controls input {
         width: auto;
     }
-    .average-key {
+    .curve-controls {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5em 1em;
         margin-bottom: 0.6em;
+        font-size: 0.85em;
+    }
+    .curve-color {
+        width: 0.7em;
+        height: 0.7em;
+        border-radius: 2px;
     }
     .maturation-charts :global(svg) {
         display: block;

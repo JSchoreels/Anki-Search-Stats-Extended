@@ -4,7 +4,7 @@
 
 ### User facing changes
 
-- Give maturation counts and milestone/new ratios separate full-height graph cards. Default each vertical axis to P90, with an editable percentile and P100 full-range option. Add optional moving averages with a shared day window, using rolling totals for the ratios.
+- Give maturation counts and milestone/new ratios separate full-height graph cards. Default each vertical axis to P90, with an editable percentile and P100 full-range option. Add individual curve visibility controls and optional moving averages that replace the daily lines, with a shared day window and rolling totals for the ratios.
 
 - Add a compact Exposure × Stability matrix in the Lapse section with four saved, editable rep/S90 thresholds. Show active studied card counts and FSRS curve workload in all nine cells, row and column totals, and a main-diagonal total, with explicit population and unavailable-workload coverage.
 - Compare daily introductions with cards first becoming Maturing or Matured at the matrix's two S90 cutoffs. Show both milestone/new ratios, leaving gaps on days without introductions, in a new Daily maturation panel in the Introduced section.
@@ -36,7 +36,7 @@
 
 ### Technical details
 
-- Calculate axis ceilings from visible daily series maxima, ignore unavailable ratio days, and clip plotted peaks without changing tooltip or trend values. Smooth counts by calendar day and ratios by rolling milestone/introduction totals; preserve partial-window coverage and zero-denominator gaps.
+- Calculate axis ceilings from the selected raw or averaged daily series maxima, ignore unavailable ratio days, and clip plotted peaks without changing tooltip or trend values. Smooth counts by calendar day and ratios by rolling milestone/introduction totals; preserve partial-window coverage and zero-denominator gaps.
 
 - Reuse shared resolved presets and the full FSRS model state for curve intervals, with a one-day workload floor. Render within the Lapse category's responsive grid and follow its show/hide controls; request current presets only while needed and avoid loading review history for this current-state panel.
 - Replay full available history on demand in a separate maturation worker, preserving complete initial learning coverage, native history filters and both FSRS-7 traces. Retain compact record-high S90 transitions so cutoff changes do not replay history; dispose the history worker and reject obsolete search results. Bound maturation charts to the selected date range, preserve missing ratios and show isolated daily values.
