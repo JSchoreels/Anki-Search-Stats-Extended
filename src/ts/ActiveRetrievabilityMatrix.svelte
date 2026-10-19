@@ -287,7 +287,23 @@
         font-variant-numeric: tabular-nums;
     }
     .matrix-diagonal {
+        display: block;
+        margin: 1em 0;
+        padding: 0;
+        border: 0;
+        background: transparent;
+        color: inherit;
+        font: inherit;
         font-weight: 500;
+        text-align: start;
+        cursor: pointer;
+    }
+    .matrix-diagonal:hover {
+        text-decoration: underline;
+    }
+    .matrix-diagonal:focus-visible {
+        outline: 2px solid var(--fg-link, var(--fg));
+        outline-offset: 3px;
     }
     .matrix-sum {
         background: color-mix(in srgb, var(--fg) 8%, transparent);
