@@ -2,7 +2,7 @@
     import GraphContainer from "./GraphContainer.svelte"
     import { i18n } from "./i18n"
     import { browserSearchCurrent } from "./search"
-    import { card_data, exposureStabilitySettings, fsrsPresetData } from "./stores"
+    import { card_data, exposureStabilitySettings } from "./stores"
     import {
         buildExposureStabilityMatrix,
         exposureStabilityCellSearch,
@@ -29,9 +29,7 @@
     let thresholdsOpen = false
     $: draft = { repsLower, repsUpper, s90Lower, s90Upper }
     $: valid = validExposureStabilityThresholds(draft)
-    $: prepared = $card_data
-        ? prepareExposureStabilityCards($card_data, $fsrsPresetData?.presetsByCard ?? {})
-        : null
+    $: prepared = $card_data ? prepareExposureStabilityCards($card_data) : null
     $: matrix = prepared
         ? buildExposureStabilityMatrix(prepared.cards, $exposureStabilitySettings)
         : null
@@ -43,7 +41,6 @@
                   {
                       count: matrix.count,
                       workload: matrix.totalWorkload,
-                      workloadCards: matrix.workloadCards,
                   },
               ],
           ]
@@ -78,7 +75,7 @@
         maximumFractionDigits: 2,
     })
     function workloadValue(cell: ExposureStabilityCell) {
-        return cell.workloadCards ? workloadFormat.format(cell.workload) : cell.count ? "—" : "0.00"
+        return workloadFormat.format(cell.workload)
     }
 </script>
 
@@ -170,10 +167,6 @@
                 workload: workloadValue(matrix.diagonal),
             })}
         </p>
-        {#if !$fsrsPresetData}<p role="status">{i18n("matrix-loading-workload")}</p>{/if}
-        {#if $fsrsPresetData && matrix.workloadCards < matrix.count}
-            <p>{i18n("matrix-missing-workload", { count: matrix.count - matrix.workloadCards })}</p>
-        {/if}
     {:else}<p role="status">{i18n("matrix-loading")}</p>{/if}
     <details class="matrix-notes">
         <summary>{i18n("matrix-about")}</summary>

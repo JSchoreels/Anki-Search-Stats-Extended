@@ -1,6 +1,4 @@
 import { getExtraDataFromCard, getFsrsS90FromExtraData, type CardData } from "./cardData"
-import type { ResolvedFsrsPreset } from "./config"
-import { getFsrs, intervalAtRetrievability, memoryStateFromCardData } from "./fsrsModel"
 
 export interface ExposureStabilityThresholds {
     repsLower: number
@@ -68,13 +66,10 @@ export interface ExposureStabilityCard {
     id: number
     reps: number
     s90: number
-    workload: number | null
+    workload: number
 }
 
-export function prepareExposureStabilityCards(
-    cards: CardData[],
-    presetsByCard: Record<number, ResolvedFsrsPreset>
-) {
+export function prepareExposureStabilityCards(cards: CardData[]) {
     const prepared: ExposureStabilityCard[] = []
     const seen = new Set<number>()
     let excluded = 0
@@ -93,26 +88,7 @@ export function prepareExposureStabilityCards(
             excluded++
             continue
         }
-        let workload: number | null = null
-        const preset = presetsByCard[card.id]
-        if (preset) {
-            try {
-                const model = getFsrs(preset)
-                const state = memoryStateFromCardData(model, data)
-                const retention =
-                    data.dr !== undefined && data.dr > 0 && data.dr < 1
-                        ? data.dr
-                        : preset.desiredRetention
-                if (state && Number.isFinite(retention) && retention > 0 && retention < 1) {
-                    const interval = intervalAtRetrievability(model, state, retention)
-                    if (Number.isFinite(interval) && interval > 0)
-                        workload = 1 / Math.max(interval, 1)
-                }
-            } catch {
-                // Count known S90 cards even when their model cannot estimate workload.
-            }
-        }
-        prepared.push({ id: card.id, reps: card.reps, s90, workload })
+        prepared.push({ id: card.id, reps: card.reps, s90, workload: 1 / Math.max(card.ivl, 1) })
     }
     return { cards: prepared, excluded }
 }
@@ -120,7 +96,6 @@ export function prepareExposureStabilityCards(
 export interface ExposureStabilityCell {
     count: number
     workload: number
-    workloadCards: number
 }
 
 function sumCells(cells: ExposureStabilityCell[]): ExposureStabilityCell {
@@ -128,9 +103,8 @@ function sumCells(cells: ExposureStabilityCell[]): ExposureStabilityCell {
         (sum, cell) => ({
             count: sum.count + cell.count,
             workload: sum.workload + cell.workload,
-            workloadCards: sum.workloadCards + cell.workloadCards,
         }),
-        { count: 0, workload: 0, workloadCards: 0 }
+        { count: 0, workload: 0 }
     )
 }
 
@@ -141,21 +115,16 @@ export function buildExposureStabilityMatrix(
     if (!validExposureStabilityThresholds(thresholds))
         throw new Error("Invalid exposure/stability thresholds")
     const cells: ExposureStabilityCell[][] = Array.from({ length: 3 }, () =>
-        Array.from({ length: 3 }, () => ({ count: 0, workload: 0, workloadCards: 0 }))
+        Array.from({ length: 3 }, () => ({ count: 0, workload: 0 }))
     )
     let totalWorkload = 0
-    let workloadCards = 0
     for (const card of cards) {
         const row = card.reps < thresholds.repsLower ? 0 : card.reps > thresholds.repsUpper ? 2 : 1
         const column = card.s90 < thresholds.s90Lower ? 0 : card.s90 > thresholds.s90Upper ? 2 : 1
         const cell = cells[row][column]
         cell.count++
-        if (card.workload !== null) {
-            cell.workload += card.workload
-            cell.workloadCards++
-            totalWorkload += card.workload
-            workloadCards++
-        }
+        cell.workload += card.workload
+        totalWorkload += card.workload
     }
     return {
         cells,
@@ -164,6 +133,5 @@ export function buildExposureStabilityMatrix(
         diagonal: sumCells(cells.map((row, index) => row[index])),
         count: cards.length,
         totalWorkload,
-        workloadCards,
     }
 }

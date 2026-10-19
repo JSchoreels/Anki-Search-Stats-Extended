@@ -12,7 +12,7 @@ afterEach(() => {
 })
 
 test.each([undefined, true, false, "removed"])(
-    "Lapse visibility %s requests current presets without loading review history",
+    "Lapse visibility %s needs neither current presets nor review history",
     async (visibility) => {
         const originalFetch = global.fetch,
             originalConfig = global.SSEconfig
@@ -35,17 +35,16 @@ test.each([undefined, true, false, "removed"])(
             await flush()
             const presetRequests = () =>
                 requests.filter((url) => url.endsWith("fsrsPresetData")).length
-            const initiallyOpen = visibility !== false && visibility !== "removed"
-            expect(presetRequests()).toBe(initiallyOpen ? 1 : 0)
+            expect(presetRequests()).toBe(0)
 
             stores.shownCategories.set({ misc: false, lapse: false })
             stores.cids.set([20])
             await flush()
-            expect(presetRequests()).toBe(initiallyOpen ? 1 : 0)
+            expect(presetRequests()).toBe(0)
 
             stores.shownCategories.set({ misc: false, lapse: true })
             await flush()
-            expect(presetRequests()).toBe(initiallyOpen ? 2 : 1)
+            expect(presetRequests()).toBe(0)
             expect(loadHistory).not.toHaveBeenCalled()
             expect(get(stores.showRevlogStats)).toBe(false)
             expect(get(stores.showMemorisedStats)).toBe(false)

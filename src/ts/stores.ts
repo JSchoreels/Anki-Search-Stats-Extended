@@ -163,7 +163,6 @@ const needsFsrsData = derived(
     ([$showRevlogs, $categories, $maturation]) =>
         $showRevlogs ||
         ($categories.misc !== false && $categories.misc !== "removed") ||
-        ($categories.lapse !== false && $categories.lapse !== "removed") ||
         ($maturation && $categories.introduced !== false && $categories.introduced !== "removed")
 )
 export const fsrsPresetData = derived(
