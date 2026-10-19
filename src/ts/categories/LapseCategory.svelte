@@ -1,4 +1,5 @@
 <script lang="ts">
+    import ActiveRetrievabilityMatrix from "../ActiveRetrievabilityMatrix.svelte"
     import ExposureStabilityMatrix from "../ExposureStabilityMatrix.svelte"
     import GraphContainer from "../GraphContainer.svelte"
     import IntervalGraph from "../IntervalGraph.svelte"
@@ -77,4 +78,5 @@
         </p>
     </GraphContainer>
     <ExposureStabilityMatrix />
+    <ActiveRetrievabilityMatrix />
 </GraphCategory>

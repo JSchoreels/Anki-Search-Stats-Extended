@@ -1,3 +1,4 @@
+import { calculateActiveRetrievabilityHistory } from "./activeRetrievabilityMatrix"
 import {
     parseReviewRetrievabilityPages,
     parseReviewRetrievabilityResponse,
@@ -38,6 +39,7 @@ function comparison(samples: CalibrationSamples, fsrs: Float64Array, rwkv: Float
 const tasks = {
     revlog: calculateRevlogStats,
     maturation: calculateMaturationHistory,
+    activeRetrievability: calculateActiveRetrievabilityHistory,
     memorised: getMemorisedDays,
     calibrationSamples: selectCalibrationSamples,
     calibrationBands: calibrationConfidenceIntervals,

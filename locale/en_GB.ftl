@@ -792,3 +792,23 @@ matrix-total = Total: { $count } cards · { $workload } estimated reviews/day
 matrix-scope-help = Active studied cards with stored S90 in the current search. Excludes new, suspended, buried and missing-S90 cards ({ $count } excluded). Reps use Anki's current card counter.
 matrix-workload-help = Workload sums 1 / max(stored scheduled interval, 1 day), using the same formula as Future Due's Daily load. Totals match when both panels include the same cards; the matrix excludes new, suspended, buried and missing-S90 cards.
 matrix-loading = Loading card stability and scheduled workload…
+
+active-r-title = Time Active × Average R
+active-r-axes = Time Active / Average R
+active-r-threshold-summary = Days: { $daysLow } / { $daysHigh } · Average R: { $rLow }% / { $rHigh }% · Edit
+active-r-days-lower = Lower time cutoff (days)
+active-r-days-upper = Upper time cutoff (days)
+active-r-r-lower = Lower Average R cutoff (%)
+active-r-r-upper = Upper Average R cutoff (%)
+active-r-low-days = <{ $value } days
+active-r-middle-days = { $low }–{ $high } days
+active-r-high-days = >{ $value } days
+active-r-low-r = <{ $value }%
+active-r-middle-r = { $low }–{ $high }%
+active-r-high-r = >{ $value }%
+active-r-invalid = Use positive whole-day cutoffs and positive R percentages up to 100. Each upper cutoff must exceed its lower cutoff.
+active-r-coverage = { $count } eligible cards; { $excluded } new or inactive cards excluded; { $incomplete } cards with incomplete history or unavailable presets excluded.
+active-r-help = Time Active counts calendar Anki days from initial learning through today, including both days and suspended periods. Average R is the mean of one retrievability sample at each day's end; today's sample uses the calculation time. Full retained history is replayed with current resolved FSRS presets and complete fast/slow states. Cards missing initial learning, a complete replay cycle, or a daily state are excluded. Historical preset changes, deleted reviews and suspension events cannot be recovered. Threshold edits only regroup cached metrics; the Stats date range does not shorten history.
+
+active-r-loading = Replaying lifetime history and calculating daily Average R…
+active-r-workload-help = Workload sums 1 / max(stored scheduled interval, 1 day) for the included cards. Incomplete histories and new or inactive cards are excluded, so its total can differ from Future Due’s Daily load.

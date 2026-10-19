@@ -39,6 +39,7 @@ self.onmessage = async ({ data }) => {
                 data.task === "revlog" ||
                 data.task === "memorised" ||
                 data.task === "maturation" ||
+                data.task === "activeRetrievability" ||
                 data.task === "calibrationSamples"
             ) {
                 data.args[0] = new RevlogHistory(data.args[0])

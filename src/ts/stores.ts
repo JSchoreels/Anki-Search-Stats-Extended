@@ -1,5 +1,9 @@
 import { derived, get, writable, type Readable } from "svelte/store"
 import {
+    activeRetrievabilityThresholds,
+    type ActiveRetrievabilityHistory,
+} from "./activeRetrievabilityMatrix"
+import {
     alignPredictions,
     EMPTY_CALIBRATION_SAMPLES,
     heldOutFsrsPredictions,
@@ -47,6 +51,9 @@ export let graph_mode = writable<"Bar" | "Pie">("Pie")
 export let other = writable<SSEother>()
 export const exposureStabilitySettings = writable(
     exposureStabilityThresholds(SSEconfig.exposureStabilityThresholds)
+)
+export const activeRetrievabilitySettings = writable(
+    activeRetrievabilityThresholds(SSEconfig.activeRetrievabilityThresholds)
 )
 export const maturationSmoothing = writable({ enabled: false, days: 7 })
 export let config = writable<SSEconfig>()
@@ -111,6 +118,10 @@ configSubscribe(exposureStabilitySettings, (settings) =>
     saveConfigValue("exposureStabilityThresholds", settings)
 )
 
+configSubscribe(activeRetrievabilitySettings, (settings) =>
+    saveConfigValue("activeRetrievabilityThresholds", settings)
+)
+
 // Data related
 export let data = writable<null | GraphsResponse>(null)
 
@@ -157,10 +168,13 @@ export let card_data: Readable<CardData[] | null> = derived([cids], ([$cids], se
     }
 })
 
+export const activeRetrievabilityRequested = writable(false)
+
 // Shared by current-state heatmaps, preset-specific curves and historical replay.
 const needsFsrsData = derived(
-    [showRevlogStats, shownCategories, showMaturationStats],
-    ([$showRevlogs, $categories, $maturation]) =>
+    [showRevlogStats, shownCategories, showMaturationStats, activeRetrievabilityRequested],
+    ([$showRevlogs, $categories, $maturation, $activeR]) =>
+        $activeR ||
         $showRevlogs ||
         ($categories.misc !== false && $categories.misc !== "removed") ||
         ($maturation && $categories.introduced !== false && $categories.introduced !== "removed")
@@ -174,6 +188,30 @@ export const fsrsPresetData = derived(
         set(null)
         if ($cards && $needed)
             return latestResult(set, () => getFsrsPresetData($cards.map((card) => card.id)))
+    }
+)
+
+export const activeRetrievabilityHistory = derived(
+    [card_data, fsrsPresetData, activeRetrievabilityRequested],
+    ([$cards, $presets, $requested], set: (value: ActiveRetrievabilityHistory | null) => void) => {
+        set(null)
+        if ($requested && $cards && $presets)
+            return latestResult(set, async (signal) => {
+                const history = await loadStatsHistory(
+                    $cards.map((card) => card.id),
+                    0,
+                    signal
+                )
+                try {
+                    return await runStatsTask(
+                        "activeRetrievability",
+                        [history, $cards, $presets.presetsByCard],
+                        signal
+                    )
+                } finally {
+                    history.dispose()
+                }
+            })
     }
 )
 

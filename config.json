@@ -46,5 +46,11 @@
         "repsUpper": 30,
         "s90Lower": 7,
         "s90Upper": 30
+    },
+    "activeRetrievabilityThresholds": {
+        "daysLower": 30,
+        "daysUpper": 180,
+        "rLower": 80,
+        "rUpper": 90
     }
 }

@@ -5,7 +5,12 @@ import { scheduleStatsTask } from "./statsWorkerQueue"
 import { resultTransfers } from "./workerTransfers"
 export { loadStatsHistory } from "./statsHistory"
 
-type HistoryTask = "revlog" | "memorised" | "calibrationSamples" | "maturation"
+type HistoryTask =
+    | "revlog"
+    | "memorised"
+    | "calibrationSamples"
+    | "maturation"
+    | "activeRetrievability"
 type TaskArgs<K extends keyof Tasks> = K extends HistoryTask
     ? Parameters<Tasks[K]> extends [infer First, ...infer Rest]
         ? [First | StatsHistory, ...Rest]
@@ -65,7 +70,8 @@ function startStatsTask<K extends keyof Tasks>(
                 task === "revlog" ||
                 task === "memorised" ||
                 task === "calibrationSamples" ||
-                task === "maturation"
+                task === "maturation" ||
+                task === "activeRetrievability"
             ) {
                 const reviews = copyRevlogValues(asRevlogHistory(args[0] as RevlogInput).values)
                 worker.postMessage(

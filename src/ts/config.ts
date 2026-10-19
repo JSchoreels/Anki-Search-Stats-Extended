@@ -1,3 +1,4 @@
+import type { ActiveRetrievabilityThresholds } from "./activeRetrievabilityMatrix"
 import type { CATEGORIES } from "./categories"
 import type { ExposureStabilityThresholds } from "./exposureStabilityMatrix"
 
@@ -25,6 +26,7 @@ export type SSEconfig = Partial<{
     alwaysAllTime: boolean
     pinnedTrends: Record<string, StoredTrendRange[]>
     exposureStabilityThresholds: ExposureStabilityThresholds
+    activeRetrievabilityThresholds: ActiveRetrievabilityThresholds
 }>
 
 export type DeckConfig = {
