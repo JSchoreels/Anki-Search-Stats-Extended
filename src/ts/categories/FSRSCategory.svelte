@@ -273,6 +273,7 @@
             <li>{i18n("um-plus-help-direction")}</li>
             <li>{i18n("um-plus-help-volume")}</li>
             <li>{i18n("um-plus-help-scores")}</li>
+            <li>{i18n("um-plus-help-percentiles")}</li>
             <li>{i18n("um-plus-help-small-buckets")}</li>
         </ul>
     </CalibrationGraphContainer>

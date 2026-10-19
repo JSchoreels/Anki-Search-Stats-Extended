@@ -17,6 +17,7 @@ export type UmPlusData = {
     fsrsScore: number
     rwkvScore: number
     count: number
+    disagreementPercentiles: { percentile: number; absoluteDisagreement: number }[]
 }
 
 export function visibleUmPlusBins(bins: UmPlusBin[], showSmallBuckets: boolean): UmPlusBin[] {
@@ -113,6 +114,8 @@ export function buildUmPlusData(
     const sumFsrsError = Array<number>(UM_PLUS_BIN_COUNT).fill(0)
     const sumRwkvError = Array<number>(UM_PLUS_BIN_COUNT).fill(0)
     const counts = Array<number>(UM_PLUS_BIN_COUNT).fill(0)
+    const absoluteDisagreements = new Float64Array(sampleCount(samples))
+    let pairedCount = 0
     const offset = UM_PLUS_BINS_PER_UNIT
 
     for (let i = 0; i < sampleCount(samples); i++) {
@@ -123,6 +126,7 @@ export function buildUmPlusData(
         }
 
         const disagreement = fsrs - rwkv
+        absoluteDisagreements[pairedCount++] = Math.abs(disagreement)
         const index = Math.max(
             0,
             Math.min(
@@ -150,11 +154,21 @@ export function buildUmPlusData(
               ]
     )
     const count = counts.reduce((sum, value) => sum + value, 0)
+    const sortedDisagreements = absoluteDisagreements.subarray(0, count).sort()
 
     return {
         bins,
         fsrsScore: weightedRmse(bins, (bin) => bin.fsrsError, count),
         rwkvScore: weightedRmse(bins, (bin) => bin.rwkvError, count),
         count,
+        // Nearest-rank thresholds include at least the named share of reviews.
+        disagreementPercentiles:
+            count === 0
+                ? []
+                : [68, 95, 99.7].map((percentile) => ({
+                      percentile,
+                      absoluteDisagreement:
+                          sortedDisagreements[Math.ceil((percentile * count) / 100) - 1],
+                  })),
     }
 }

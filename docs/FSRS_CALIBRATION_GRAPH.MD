@@ -526,6 +526,17 @@ RWKV disagree, while a slope near `+1` or `-1` indicates that the model tends to
 absorb the disagreement as prediction error. The slope is shown as `n/a` when
 the visible buckets do not contain enough disagreement variation for a fit.
 
+Below the plot, the absolute-disagreement summary shows P68, P95 and P99.7 of
+`abs(FSRS p(recall) - RWKV p(recall))`. These are nearest-rank empirical
+percentiles of the individual eligible paired reviews, before binning. A P95
+threshold means at least 95% of paired reviews have an absolute prediction gap
+at or below that value. Thresholds are rounded upward to 0.1 percentage points
+for display (`pp`); they include small hidden buckets and do not change with
+the visibility toggle. The population counts reviews, not unique cards, so a
+card reviewed repeatedly contributes repeatedly. The percentages are measured
+coverage levels and do not assume a normal distribution or represent standard
+deviations. Empty paired populations have no percentile summary.
+
 Because both models use the same reviews in every bin, their plotted errors obey
 `FSRS error - RWKV error = disagreement`, apart from floating-point rounding.
 

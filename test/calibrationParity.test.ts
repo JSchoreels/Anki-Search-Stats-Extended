@@ -7,7 +7,7 @@ import {
 import { buildRocData, type RocData } from "../src/ts/rocData"
 import { buildRwkvDailyData } from "../src/ts/rwkvDailyData"
 import { runStatsTaskLocally } from "../src/ts/statsTasks"
-import { buildUmPlusData } from "../src/ts/umPlusData"
+import { buildUmPlusData, type UmPlusData } from "../src/ts/umPlusData"
 import { buildCalibrationBins as referenceBins } from "./reference/calibrationBins"
 import { buildRocData as referenceRoc } from "./reference/rocData"
 import { buildRwkvDailyData as referenceDaily } from "./reference/rwkvDailyData"
@@ -18,6 +18,11 @@ function withoutRocUncertainty(data: RocData) {
     const { interval: fsrsInterval, ...fsrsSeries } = fsrs
     const { interval: rwkvInterval, ...rwkvSeries } = rwkv
     return { ...counts, fsrs: fsrsSeries, rwkv: rwkvSeries }
+}
+
+function withoutDisagreementPercentiles(data: UmPlusData) {
+    const { disagreementPercentiles, ...original } = data
+    return original
 }
 
 test.each([0, 1, 4_096, 20_000])(
@@ -65,7 +70,7 @@ test.each([0, 1, 4_096, 20_000])(
         const rwkvMap = Object.fromEntries(list.map((sample, i) => [sample.revlogId, rwkv[i]]))
         expect(buildCalibrationBins(samples, fsrs)).toEqual(referenceBins(list, fsrsMap))
         expect(buildCalibrationBins(samples, rwkv)).toEqual(referenceBins(list, rwkvMap))
-        expect(buildUmPlusData(samples, fsrs, rwkv)).toEqual(
+        expect(withoutDisagreementPercentiles(buildUmPlusData(samples, fsrs, rwkv))).toEqual(
             referenceUmPlus(list, fsrsMap, rwkvMap)
         )
         expect(withoutRocUncertainty(buildRocData(samples, fsrs, rwkv))).toEqual(
@@ -73,7 +78,11 @@ test.each([0, 1, 4_096, 20_000])(
         )
         expect(buildRwkvDailyData(samples, rwkv)).toEqual(referenceDaily(list, rwkvMap))
         const comparison = runStatsTaskLocally("comparison", [samples, fsrs, rwkv])
-        expect({ ...comparison, roc: withoutRocUncertainty(comparison.roc) }).toEqual({
+        expect({
+            ...comparison,
+            umPlus: withoutDisagreementPercentiles(comparison.umPlus),
+            roc: withoutRocUncertainty(comparison.roc),
+        }).toEqual({
             umPlus: referenceUmPlus(list, fsrsMap, rwkvMap),
             roc: referenceRoc(list, fsrsMap, rwkvMap),
             rwkvDaily: referenceDaily(list, rwkvMap),

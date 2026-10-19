@@ -64,7 +64,59 @@ test("UM+ includes only reviews with valid paired predictions", () => {
     expect(data.count).toBe(1)
     expect(data.bins).toHaveLength(1)
     expect(data.bins[0].disagreement).toBeCloseTo(0.2)
+    for (const item of data.disagreementPercentiles) {
+        expect(item.absoluteDisagreement).toBeCloseTo(0.2)
+    }
 })
+
+test("UM+ measures absolute disagreement percentiles per review before binning", () => {
+    const disagreements = [
+        ...Array(680).fill(0.011),
+        ...Array(270).fill(-0.019),
+        ...Array(47).fill(0.4),
+        ...Array(3).fill(-1),
+    ]
+    // Repeated reviews of one card each contribute to the review distribution.
+    const samples = disagreements.map((_, i) => ({ revlogId: i + 1, cardId: 1, actual: 1 }))
+    const data = buildUmPlusData(
+        ...calibrationInputs(
+            samples,
+            Object.fromEntries(disagreements.map((value, i) => [i + 1, Math.max(0, value)])),
+            Object.fromEntries(disagreements.map((value, i) => [i + 1, Math.max(0, -value)]))
+        )
+    )
+
+    expect(data.count).toBe(1000)
+    expect(data.disagreementPercentiles).toEqual([
+        { percentile: 68, absoluteDisagreement: 0.011 },
+        { percentile: 95, absoluteDisagreement: 0.019 },
+        { percentile: 99.7, absoluteDisagreement: 0.4 },
+    ])
+    // P99.7 includes a hidden small bucket, even though the plot hides its points.
+    expect(visibleUmPlusBins(data.bins, false)).toHaveLength(1)
+})
+
+test.each([
+    { disagreements: [], expected: [] },
+    { disagreements: [0], expected: [0, 0, 0] },
+    { disagreements: [0.25, 0.25], expected: [0.25, 0.25, 0.25] },
+    { disagreements: [0, 0.5, 1], expected: [1, 1, 1] },
+])(
+    "UM+ percentile nearest ranks handle empty, tied and small samples: $disagreements",
+    ({ disagreements, expected }) => {
+        const data = buildUmPlusData(
+            ...calibrationInputs(
+                disagreements.map((_, i) => ({ revlogId: i + 1, cardId: i + 1, actual: 1 })),
+                Object.fromEntries(disagreements.map((value, i) => [i + 1, value])),
+                Object.fromEntries(disagreements.map((_, i) => [i + 1, 0]))
+            )
+        )
+
+        expect(data.disagreementPercentiles.map((item) => item.absoluteDisagreement)).toEqual(
+            expected
+        )
+    }
+)
 
 test("paired UM+ bin errors differ by the bin disagreement", () => {
     const samples = groupedSamples(4, 3, 1)

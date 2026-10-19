@@ -4,6 +4,8 @@
 
 ### User facing changes
 
+- Show UM+ absolute-disagreement thresholds for 68%, 95% and 99.7% of paired reviews, with a legend explaining percentage points, repeated card reviews and hidden-bucket coverage.
+
 - Give maturation counts and milestone/new ratios separate full-height graph cards. Default each vertical axis to P90, with an editable percentile and P100 full-range option. Add individual curve visibility controls and optional moving averages that replace the daily lines, with a shared day window and rolling totals for the ratios.
 
 - Add a compact Exposure × Stability matrix in the Lapse section with four saved, editable rep/S90 thresholds. Show active studied card counts and FSRS curve workload in all nine cells, row and column totals, and a main-diagonal total, with explicit population and unavailable-workload coverage.
@@ -35,6 +37,8 @@
 - Identify unloaded data in troubleshooting exports instead of reporting misleading zero counts. Cancelling export writes no file.
 
 ### Technical details
+
+- Calculate nearest-rank disagreement percentiles from individual valid prediction pairs before binning; round thresholds upward to 0.1 percentage points for display without assuming a normal distribution.
 
 - Calculate axis ceilings from the selected raw or averaged daily series maxima, ignore unavailable ratio days, and clip plotted peaks without changing tooltip or trend values. Smooth counts by calendar day and ratios by rolling milestone/introduction totals; preserve partial-window coverage and zero-denominator gaps.
 
