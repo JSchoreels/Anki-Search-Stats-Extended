@@ -41,6 +41,29 @@ export function exposureStabilityThresholds(value: unknown): ExposureStabilityTh
     }
 }
 
+export function exposureStabilityCellSearch(
+    row: number,
+    column: number,
+    thresholds: ExposureStabilityThresholds
+): string {
+    // Exposure is on rows and S90 on columns; index 3 selects a total.
+    const reps = [
+        `prop:reps<${thresholds.repsLower}`,
+        `prop:reps>=${thresholds.repsLower} prop:reps<=${thresholds.repsUpper}`,
+        `prop:reps>${thresholds.repsUpper}`,
+        "",
+    ][row]
+    const stability = [
+        `prop:s<${thresholds.s90Lower}`,
+        `prop:s>=${thresholds.s90Lower} prop:s<=${thresholds.s90Upper}`,
+        `prop:s>${thresholds.s90Upper}`,
+        "",
+    ][column]
+    return ["-is:new -is:suspended -is:buried prop:reps>0 prop:s>0", reps, stability]
+        .filter(Boolean)
+        .join(" ")
+}
+
 export interface ExposureStabilityCard {
     id: number
     reps: number

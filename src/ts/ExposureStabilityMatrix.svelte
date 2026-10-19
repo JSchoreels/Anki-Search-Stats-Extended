@@ -1,9 +1,11 @@
 <script lang="ts">
     import GraphContainer from "./GraphContainer.svelte"
     import { i18n } from "./i18n"
+    import { browserSearchCurrent } from "./search"
     import { card_data, exposureStabilitySettings, fsrsPresetData } from "./stores"
     import {
         buildExposureStabilityMatrix,
+        exposureStabilityCellSearch,
         prepareExposureStabilityCards,
         validExposureStabilityThresholds,
         type ExposureStabilityCell,
@@ -132,10 +134,30 @@
                                 class:matrix-sum={r === 3 || c === 3}
                                 style:--matrix-color={cellColors[r]?.[c] ?? "transparent"}
                             >
-                                <strong>{countFormat.format(cell.count)}</strong>
-                                <span class="workload">
-                                    {i18n("matrix-workload-short", { value: workloadValue(cell) })}
-                                </span>
+                                <button
+                                    type="button"
+                                    class="matrix-cell"
+                                    aria-label={i18n("matrix-browse-cell", {
+                                        count: countFormat.format(cell.count),
+                                        row: rowLabels[r],
+                                        column: columnLabels[c],
+                                    })}
+                                    on:click={() =>
+                                        browserSearchCurrent(
+                                            exposureStabilityCellSearch(
+                                                r,
+                                                c,
+                                                $exposureStabilitySettings
+                                            )
+                                        )}
+                                >
+                                    <strong>{countFormat.format(cell.count)}</strong>
+                                    <span class="workload">
+                                        {i18n("matrix-workload-short", {
+                                            value: workloadValue(cell),
+                                        })}
+                                    </span>
+                                </button>
                             </td>
                         {/each}
                     </tr>
@@ -228,13 +250,34 @@
     }
     td {
         text-align: center;
-        padding: 0.8em 0.1em;
+        padding: 0;
         border-radius: 7px;
         background: color-mix(
             in srgb,
             var(--matrix-color) 24%,
             color-mix(in srgb, var(--fg) 4%, transparent)
         );
+    }
+    .matrix-cell {
+        display: block;
+        width: 100%;
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0.8em 0.1em;
+        border: 0;
+        border-radius: inherit;
+        background: transparent;
+        color: inherit;
+        font: inherit;
+        text-align: inherit;
+        cursor: pointer;
+    }
+    .matrix-cell:hover {
+        background: color-mix(in srgb, var(--fg) 8%, transparent);
+    }
+    .matrix-cell:focus-visible {
+        outline: 2px solid var(--fg-link, var(--fg));
+        outline-offset: -2px;
     }
     td strong,
     td span {

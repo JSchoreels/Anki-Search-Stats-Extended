@@ -768,6 +768,7 @@ maturation-empty = No complete initial learning histories were found in this sea
 maturation-help = Uses the matrix's S90 thresholds: Maturing at ≥{ $low }d and Matured above { $high }d. Each card counts once per milestone, even after a reset or lapse. Full available history is replayed with current resolved FSRS presets; the Stats date range only limits the display. Ratios compare same-day flows, not the eventual success rate of that day's new cards. Days without introductions have no ratio.
 matrix-total-label = Total
 matrix-values-legend = Cards · reviews/day
+matrix-browse-cell = Show { $count } cards: { $row } · { $column }
 matrix-threshold-summary = Thresholds · reps { $repsLow } / { $repsHigh } · S90 { $sLow } / { $sHigh }d
 matrix-workload-short = { $value } /day
 matrix-diagonal-total = Main diagonal ↘: { $count } cards · { $workload } reviews/day

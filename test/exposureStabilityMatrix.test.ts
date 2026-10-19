@@ -4,6 +4,7 @@ import type { ResolvedFsrsPreset } from "../src/ts/config"
 import {
     buildExposureStabilityMatrix,
     DEFAULT_EXPOSURE_STABILITY_THRESHOLDS as defaults,
+    exposureStabilityCellSearch,
     exposureStabilityThresholds,
     prepareExposureStabilityCards,
     validExposureStabilityThresholds,
@@ -18,6 +19,51 @@ const preset = {
 function card(id: number, data = { s: 12, s_int: 10, s_fast: 2, d: 8, dr: 0.9 }): CardData {
     return { id, reps: 5, type: 2, queue: 2, ivl: 500, data: JSON.stringify(data) } as CardData
 }
+
+const activeStudiedSearch = "-is:new -is:suspended -is:buried prop:reps>0 prop:s>0"
+
+test.each<[number, number, string]>([
+    [0, 0, "prop:reps<5 prop:s<7"],
+    [0, 1, "prop:reps<5 prop:s>=7 prop:s<=30"],
+    [0, 2, "prop:reps<5 prop:s>30"],
+    [1, 0, "prop:reps>=5 prop:reps<=30 prop:s<7"],
+    [1, 1, "prop:reps>=5 prop:reps<=30 prop:s>=7 prop:s<=30"],
+    [1, 2, "prop:reps>=5 prop:reps<=30 prop:s>30"],
+    [2, 0, "prop:reps>30 prop:s<7"],
+    [2, 1, "prop:reps>30 prop:s>=7 prop:s<=30"],
+    [2, 2, "prop:reps>30 prop:s>30"],
+])(
+    "cell (%i, %i) searches exposure rows and S90 columns with exact boundaries",
+    (row, column, limits) => {
+        expect(exposureStabilityCellSearch(row, column, defaults)).toBe(
+            `${activeStudiedSearch} ${limits}`
+        )
+    }
+)
+
+test.each<[number, number, string]>([
+    [0, 3, "prop:reps<5"],
+    [1, 3, "prop:reps>=5 prop:reps<=30"],
+    [2, 3, "prop:reps>30"],
+    [3, 0, "prop:s<7"],
+    [3, 1, "prop:s>=7 prop:s<=30"],
+    [3, 2, "prop:s>30"],
+    [3, 3, ""],
+])("total (%i, %i) searches its full row, column or population", (row, column, limits) => {
+    expect(exposureStabilityCellSearch(row, column, defaults)).toBe(
+        [activeStudiedSearch, limits].filter(Boolean).join(" ")
+    )
+})
+
+test("cell searches use applied rep thresholds and decimal S90 thresholds", () => {
+    const thresholds = { repsLower: 10, repsUpper: 50, s90Lower: 0.25, s90Upper: 45.5 }
+    expect(exposureStabilityCellSearch(0, 2, thresholds)).toBe(
+        `${activeStudiedSearch} prop:reps<10 prop:s>45.5`
+    )
+    expect(exposureStabilityCellSearch(1, 1, thresholds)).toBe(
+        `${activeStudiedSearch} prop:reps>=10 prop:reps<=50 prop:s>=0.25 prop:s<=45.5`
+    )
+})
 
 test("all nine cells conserve cards and exact low/high boundaries stay in the middle", () => {
     const cards = [4, 5, 30, 31].flatMap((reps, r) =>
