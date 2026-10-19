@@ -9,6 +9,17 @@
         type ExposureStabilityCell,
     } from "./exposureStabilityMatrix"
 
+    const green = "#8bc34a"
+    const yellow = "#f4df00"
+    const orange = "#ff8800"
+    const red = "#ef3213"
+    // Rows are exposure bands; columns are stability bands, both ordered low to high.
+    const cellColors = [
+        [green, green, orange],
+        [yellow, green, yellow],
+        [red, yellow, green],
+    ]
+
     let repsLower: number | undefined = $exposureStabilitySettings.repsLower
     let repsUpper: number | undefined = $exposureStabilitySettings.repsUpper
     let s90Lower: number | undefined = $exposureStabilitySettings.s90Lower
@@ -119,7 +130,7 @@
                         {#each row as cell, c}
                             <td
                                 class:matrix-sum={r === 3 || c === 3}
-                                style:--matrix-heat={`${r < 3 && c < 3 && matrix.totalWorkload ? (38 * cell.workload) / matrix.totalWorkload : 0}%`}
+                                style:--matrix-color={cellColors[r]?.[c] ?? "transparent"}
                             >
                                 <strong>{countFormat.format(cell.count)}</strong>
                                 <span class="workload">
@@ -221,7 +232,7 @@
         border-radius: 7px;
         background: color-mix(
             in srgb,
-            var(--fg-link) var(--matrix-heat),
+            var(--matrix-color) 24%,
             color-mix(in srgb, var(--fg) 4%, transparent)
         );
     }
