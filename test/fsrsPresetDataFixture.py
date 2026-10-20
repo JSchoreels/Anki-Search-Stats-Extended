@@ -51,8 +51,33 @@ class Backend:
         return [NS(card_id=cid, preset_id=preset(cid).id) for cid in cids]
 
 
-def run(mode):
+RETRIEVABILITY = {10: 0.83, 12: 0.0, 14: 1.0}
+
+
+def metric(cid):
+    return NS(
+        card_id=cid,
+        fsrs_retrievability=RETRIEVABILITY.get(cid, 0.0),
+        HasField=lambda field: cid in RETRIEVABILITY,
+    )
+
+
+def run(mode, metrics_mode="batch", cids=None):
     calls = []
+    batch_calls = []
+    stats_calls = []
+    cids = sorted(CARDS) if cids is None else cids
+
+    def card_memory_metrics(ids, *, include_retrievability):
+        assert include_retrievability is True
+        batch_calls.append(list(ids))
+        if metrics_mode == "raises":
+            raise RuntimeError("metrics failed")
+        return [metric(cid) for cid in ids]
+
+    def card_stats_data(cid):
+        stats_calls.append(cid)
+        return metric(cid)
 
     def fsrs_preset_for_card(cid):
         calls.append(cid)
@@ -83,21 +108,36 @@ def run(mode):
         _backend=Backend(mode),
         db=NS(all=db_all),
         fsrs_preset_for_card=fsrs_preset_for_card,
-        card_memory_metrics=lambda cids, include_retrievability: [],
+        card_stats_data=card_stats_data,
     )
+    if metrics_mode != "missing":
+        col.card_memory_metrics = card_memory_metrics
     globals_ = {
         "mw": NS(col=col),
         "orjson": NS(loads=json.loads, dumps=lambda v: json.dumps(v).encode()),
         "Response": lambda body: body,
-        "request": NS(data=json.dumps(sorted(CARDS))),
+        "request": NS(data=json.dumps(cids)),
         "print": lambda *args: None,
     }
     exec(code, globals_)
-    data = json.loads(globals_["fsrs_preset_data"]())
+    try:
+        data = json.loads(globals_["fsrs_preset_data"]())
+    except RuntimeError as error:
+        return {"error": str(error), "statsCalls": stats_calls}
     expanded = {cid: data["presets"][index] for cid, index in data["cards"].items()}
-    return {"expanded": expanded, "calls": len(calls), "presets": len(data["presets"])}
+    return {
+        "expanded": expanded,
+        "calls": len(calls),
+        "presets": len(data["presets"]),
+        "retrievability": data["retrievability"],
+        "batchCalls": batch_calls,
+        "statsCalls": stats_calls,
+    }
 
 
 result = {mode: run(mode) for mode in ("batch", "missing", "raises")}
+result["legacy"] = run("missing", "missing")
+result["empty"] = run("missing", "missing", [])
+result["metricsError"] = run("batch", "raises")
 print(json.dumps(result))
 sys.exit(0)

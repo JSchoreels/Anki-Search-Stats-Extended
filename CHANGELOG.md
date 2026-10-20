@@ -4,6 +4,8 @@
 
 ### User facing changes
 
+- Restore FSRS preset loading and the stability/retrievability heatmap on older fork builds, including portable build 88, without the missing `card_memory_metrics` error. Newer builds retain batch loading; older builds use slower native Card Info reads.
+
 - Show UM+ absolute-disagreement thresholds for 68%, 95% and 99.7% of paired reviews, with a legend explaining percentage points, repeated card reviews and hidden-bucket coverage.
 
 - Give maturation counts and milestone/new ratios separate full-height graph cards. Default each vertical axis to P90, with an editable percentile and P100 full-range option. Add individual curve visibility controls and optional moving averages that replace the daily lines, with a shared day window and rolling totals for the ratios.
@@ -37,6 +39,8 @@
 - Identify unloaded data in troubleshooting exports instead of reporting misleading zero counts. Cancelling export writes no file.
 
 ### Technical details
+
+- Detect `Collection.card_memory_metrics` by capability and fall back to per-card `card_stats_data` only when it is absent. Preserve native retrievability, optional-field semantics, valid zero values, preset routing and the existing response format. Card Info may initialize missing card metadata through Anki's supported API.
 
 - Calculate nearest-rank disagreement percentiles from individual valid prediction pairs before binning; round thresholds upward to 0.1 percentage points for display without assuming a normal distribution.
 

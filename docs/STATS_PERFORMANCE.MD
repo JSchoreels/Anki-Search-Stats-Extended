@@ -126,8 +126,17 @@ loads fresh data. Searches using RWKV properties always reload because their
 matching cards may change when scores become available.
 
 FSRS preset loading first prepares the native batch resolver using
-`card_memory_metrics(..., include_retrievability=True)`, then reads resolved
-presets per card. This avoids repeated cold search preparation. The endpoint
+`card_memory_metrics(..., include_retrievability=True)` when available, then reads
+resolved presets per card. This avoids repeated cold search preparation. Fork
+builds before 91, including portable build 88, lack that API; SSE uses
+`card_stats_data(card_id)` per card to read the native `fsrs_retrievability`
+instead. Capability detection also supports older forks independently of their
+version string. This fallback loads full Card Info, including review history,
+and is slower on large searches. It retains Card Info's native initialization
+of missing last-review timestamps and reviewed-card memory state. Values absent
+from Card Info remain omitted, and zero retrievability remains a valid value.
+An empty search calls neither metrics API. Errors from an available batch API
+are propagated rather than hidden by fallback. The endpoint
 returns `{presets: [...], cards: {cardId: presetIndex}, retrievability: {cardId: R}}`,
 deduplicating complete settings rather than preset ids so deck/card overrides
 remain intact. The returned native R values are reused by the S×R heatmap;

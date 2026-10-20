@@ -221,11 +221,20 @@ def _fsrs_preset_routes(cids: list[int]):
 
 def fsrs_preset_data() -> bytes:
     cids = [int(cid) for cid in orjson.loads(request.data)]
-    metrics = {
-        str(entry.card_id): entry.fsrs_retrievability
-        for entry in mw.col.card_memory_metrics(cids, include_retrievability=True)
-        if entry.HasField("fsrs_retrievability")
-    } if cids else {}
+    metrics = {}
+    if cids:
+        batch = getattr(mw.col, "card_memory_metrics", None)
+        # Older fork builds expose the same native R through Card Info only.
+        entries = (
+            batch(cids, include_retrievability=True)
+            if callable(batch)
+            else (mw.col.card_stats_data(cid) for cid in cids)
+        )
+        metrics = {
+            str(entry.card_id): entry.fsrs_retrievability
+            for entry in entries
+            if entry.HasField("fsrs_retrievability")
+        }
     routes = _fsrs_preset_routes(cids) if cids else None
     presets = []
     indices = {}
