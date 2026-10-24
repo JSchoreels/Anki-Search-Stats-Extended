@@ -41,6 +41,7 @@
         "bad"
     ],
     "alwaysAllTime": false,
+    "pinnedGraphs": [],
     "exposureStabilityThresholds": {
         "repsLower": 5,
         "repsUpper": 30,

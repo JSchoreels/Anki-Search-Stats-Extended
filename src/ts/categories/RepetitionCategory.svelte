@@ -22,7 +22,7 @@
 </script>
 
 <GraphCategory hidden_title={i18n("repetition-distribution")} config_name="repetition">
-    <GraphContainer>
+    <GraphContainer graphId="repetition:repetition-load">
         <h1>{i18n("repetition-load")}</h1>
         <IntervalGraph
             intervals={repetitions_burden}
@@ -41,7 +41,7 @@
             {i18n("repetition-load-help")}
         </p>
     </GraphContainer>
-    <GraphContainer>
+    <GraphContainer graphId="repetition:repetition-distribution">
         <h1>{i18n("repetition-distribution")}</h1>
         <IntervalGraph
             intervals={repetitions}
@@ -57,7 +57,7 @@
         />
         <p>{i18n("repetition-distribution-help")}</p>
     </GraphContainer>
-    <GraphContainer>
+    <GraphContainer graphId="repetition:repetition-total">
         <h1>{i18n("repetition-total")}</h1>
         <IntervalGraph
             intervals={repetitions.map((e, i) => e * i)}

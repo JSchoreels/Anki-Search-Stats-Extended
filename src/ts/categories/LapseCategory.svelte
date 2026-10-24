@@ -18,7 +18,7 @@
 </script>
 
 <GraphCategory hidden_title={i18n("lapse-distribution")} config_name="lapse">
-    <GraphContainer>
+    <GraphContainer graphId="lapse:lapse-load">
         <h1>{i18n("lapse-load")}</h1>
         <IntervalGraph
             intervals={lapses_burden}
@@ -38,7 +38,7 @@
             {i18n("lapse-load-help")}
         </p>
     </GraphContainer>
-    <GraphContainer>
+    <GraphContainer graphId="lapse:lapse-distribution">
         <h1>{i18n("lapse-distribution")}</h1>
         <IntervalGraph
             intervals={lapses}
@@ -57,7 +57,7 @@
             {i18n("lapse-distribution-help")}
         </p>
     </GraphContainer>
-    <GraphContainer>
+    <GraphContainer graphId="lapse:lapse-total">
         <h1>{i18n("lapse-total")}</h1>
         <IntervalGraph
             intervals={lapses.map((e, i) => e * i)}

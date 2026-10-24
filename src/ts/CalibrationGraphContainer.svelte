@@ -2,10 +2,11 @@
     import GraphContainer from "./GraphContainer.svelte"
     import MemorisedCalculator from "./MemorisedCalculator.svelte"
     import { showFsrsStats, showRevlogStats } from "./stores"
+    export let graphId = ""
 </script>
 
 <!-- Calibration graphs only need FSRS stats enabled, not the finished Memorised replay. -->
-<GraphContainer>
+<GraphContainer {graphId}>
     <slot name="title"></slot>
     {#if $showFsrsStats && $showRevlogStats}
         <slot name="graph"></slot>

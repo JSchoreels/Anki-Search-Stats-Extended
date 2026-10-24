@@ -132,7 +132,7 @@
 </script>
 
 <GraphCategory hidden_title={i18n("card-count-time-machine")} config_name="timeMachine">
-    <RevlogGraphContainer>
+    <RevlogGraphContainer graphId="timeMachine:card-count-time-machine">
         <h1 slot="title">{i18n("card-count-time-machine")}</h1>
         <svelte:fragment slot="graph">
             <Pie
@@ -177,7 +177,7 @@
             <Warning>{i18n("generic-truncated-warning")}</Warning>
         {/if}
     </RevlogGraphContainer>
-    <RevlogGraphContainer>
+    <RevlogGraphContainer graphId="timeMachine:review-interval-time-machine">
         <h1 slot="title">{i18n("review-interval-time-machine")}</h1>
         <svelte:fragment slot="graph">
             <BarScrollable data={time_machine_bar} left_aligned />
@@ -192,7 +192,7 @@
             <Warning>{i18n("generic-truncated-warning")}</Warning>
         {/if}
     </RevlogGraphContainer>
-    <RevlogGraphContainer>
+    <RevlogGraphContainer graphId="timeMachine:daily-hourly-breakdown">
         <h1 slot="title">{i18n("daily-hourly-breakdown")}</h1>
         <svelte:fragment slot="graph">
             <div class="options">

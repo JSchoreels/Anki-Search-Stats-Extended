@@ -120,7 +120,7 @@
     $: chartLabel = i18n(mode === "counts" ? "maturation-counts-title" : "maturation-ratios-title")
 </script>
 
-<GraphContainer>
+<GraphContainer graphId={`introduced:maturation-${mode}`}>
     <h1>{i18n(mode === "counts" ? "maturation-title" : "maturation-ratios-heading")}</h1>
     {#if dailySeries && $maturationHistory?.cards.length}
         <div class="chart-controls">

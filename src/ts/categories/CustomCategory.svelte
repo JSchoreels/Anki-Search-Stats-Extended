@@ -10,7 +10,7 @@
 </script>
 
 <GraphCategory hidden_title={i18n("custom-bar")} config_name="custom">
-    <GraphContainer>
+    <GraphContainer graphId="custom:todays-retention">
         <h1>{i18n("todays-retention")}</h1>
         {#if false && $data?.trueRetention}
             <NoGraph>Placeholder</NoGraph>
@@ -21,14 +21,14 @@
             {i18n("todays-retention-help")}
         </p>
     </GraphContainer>
-    <GraphContainer>
+    <GraphContainer graphId="custom:custom-bar">
         <h1>{i18n("custom-bar")}</h1>
         <CustomBar />
         <p>
             {i18n("custom-bar-help")}
         </p>
     </GraphContainer>
-    <GraphContainer>
+    <GraphContainer graphId="custom:custom-pie">
         <h1>{i18n("custom-pie")}</h1>
         <CustomPie />
         <p>

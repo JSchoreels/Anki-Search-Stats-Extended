@@ -4,6 +4,7 @@
     import { i18n } from "./i18n"
     import About from "./About.svelte"
     import GraphOrder from "./GraphOrder.svelte"
+    import FavoriteGraphs from "./FavoriteGraphs.svelte"
 
     import { CATEGORIES } from "./categories"
 
@@ -11,10 +12,11 @@
 </script>
 
 <div style:--graph-width={`${width}px`} style:--graph-height={`${height}px`}>
+    <FavoriteGraphs />
     <hr />
     <h1 class="header">{i18n("title-search-stats-extended")}</h1>
     <GraphOrder />
-    {#each $categoryOrder as category}
+    {#each $categoryOrder as category (category)}
         {@const { component } = CATEGORIES[category]}
         <svelte:component this={component} />
     {/each}

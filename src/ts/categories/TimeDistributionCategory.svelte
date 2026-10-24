@@ -152,7 +152,7 @@
 </script>
 
 <GraphCategory hidden_title={i18n("time-distribution")} config_name="time">
-    <RevlogGraphContainer>
+    <RevlogGraphContainer graphId="time:time-distribution">
         <h1 slot="title">{i18n("time-distribution")}</h1>
         <IntervalGraph
             slot="graph"
@@ -173,7 +173,7 @@
             {i18n("suspended-cards-warning")}
         </p>
     </RevlogGraphContainer>
-    <RevlogGraphContainer>
+    <RevlogGraphContainer graphId="time:time-totals">
         <h1 slot="title">{i18n("time-totals")}</h1>
         <IntervalGraph
             slot="graph"
@@ -195,7 +195,7 @@
             {i18n("time-totals-help")}
         </p>
     </RevlogGraphContainer>
-    <MemorisedGraphContainer>
+    <MemorisedGraphContainer graphId="time:time-distribution-by-retrievability">
         <h1 slot="title">{i18n("time-distribution-by-retrievability")}</h1>
         <BarScrollable
             slot="graph"
@@ -227,7 +227,7 @@
         </div>
         <p>{i18n("time-distribution-by-retrievability-help")}</p>
     </MemorisedGraphContainer>
-    <MemorisedGraphContainer>
+    <MemorisedGraphContainer graphId="time:time-distribution-by-stability">
         <h1 slot="title">{i18n("time-distribution-by-stability")}</h1>
         <BarScrollable
             slot="graph"
@@ -256,7 +256,7 @@
         </div>
         <p>{i18n("time-distribution-by-stability-help")}</p>
     </MemorisedGraphContainer>
-    <RevlogGraphContainer>
+    <RevlogGraphContainer graphId="time:time-distribution-by-repetitions">
         <h1 slot="title">{i18n("time-distribution-by-repetitions")}</h1>
         <BarScrollable
             slot="graph"
@@ -285,7 +285,7 @@
         </div>
         <p>{i18n("time-distribution-by-repetitions-help")}</p>
     </RevlogGraphContainer>
-    <MemorisedGraphContainer>
+    <MemorisedGraphContainer graphId="time:time-distribution-by-difficulty">
         <h1 slot="title">{i18n("time-distribution-by-difficulty")}</h1>
         <BarScrollable
             slot="graph"

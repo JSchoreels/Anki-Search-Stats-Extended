@@ -87,7 +87,7 @@
 </script>
 
 <GraphCategory hidden_title={i18n("introduced")} config_name="introduced">
-    <RevlogGraphContainer>
+    <RevlogGraphContainer graphId="introduced:active-cards-over-time">
         <h1 slot="title">{i18n("active-cards-over-time")}</h1>
         <LineOrCandlestick
             slot="graph"
@@ -132,7 +132,7 @@
             </Warning>
         {/if}
     </RevlogGraphContainer>
-    <RevlogGraphContainer>
+    <RevlogGraphContainer graphId="introduced:introduced">
         <h1 slot="title">{i18n("introduced")}</h1>
         <BarScrollable
             slot="graph"
@@ -154,7 +154,7 @@
     </RevlogGraphContainer>
     <MaturationGraph mode="counts" />
     <MaturationGraph mode="ratios" />
-    <RevlogGraphContainer>
+    <RevlogGraphContainer graphId="introduced:forgotten">
         <h1 slot="title">{i18n("forgotten")}</h1>
         <BarScrollable
             slot="graph"
@@ -175,7 +175,7 @@
             <Warning>{i18n("forgotten-truncated-warning")}</Warning>
         {/if}
     </RevlogGraphContainer>
-    <RevlogGraphContainer>
+    <RevlogGraphContainer graphId="introduced:introductory-rating">
         <h1 slot="title">{i18n("introductory-rating")}</h1>
         <BarScrollable
             slot="graph"

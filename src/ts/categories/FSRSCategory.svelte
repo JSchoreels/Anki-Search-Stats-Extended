@@ -181,7 +181,7 @@
 </script>
 
 <GraphCategory hidden_title="FSRS" config_name="fsrs">
-    <MemorisedGraphContainer>
+    <MemorisedGraphContainer graphId="fsrs:memorised">
         <h1 slot="title">{i18n("memorised")}</h1>
         <MemorisedBar slot="graph" burden={$revlogStats?.burden ?? []} />
         {#if truncated}
@@ -194,7 +194,7 @@
             {i18n("memorised-help2")}
         </p>
     </MemorisedGraphContainer>
-    <CalibrationGraphContainer>
+    <CalibrationGraphContainer graphId="fsrs:calibration">
         <h1 slot="title">
             {i18n(
                 $calibrationMode === "rwkv"
@@ -249,7 +249,7 @@
             {i18n("fsrs-calibration-help")}
         </p>
     </CalibrationGraphContainer>
-    <CalibrationGraphContainer>
+    <CalibrationGraphContainer graphId="fsrs:um-plus">
         <h1 slot="title">{i18n("um-plus")}</h1>
         <div slot="graph" class="calibration-panel">
             {#if umPlusWarnings.length > 0}
@@ -276,7 +276,7 @@
             <li>{i18n("um-plus-help-small-buckets")}</li>
         </ul>
     </CalibrationGraphContainer>
-    <CalibrationGraphContainer>
+    <CalibrationGraphContainer graphId="fsrs:roc">
         <h1 slot="title">{i18n("roc")}</h1>
         <div slot="graph" class="calibration-panel">
             {#if umPlusWarnings.length > 0}
@@ -302,7 +302,7 @@
     </CalibrationGraphContainer>
     <CurrentDisagreement />
     {#each dailyMetrics as metric}
-        <CalibrationGraphContainer>
+        <CalibrationGraphContainer graphId={`fsrs:daily-${metric}`}>
             <h1 slot="title">{i18n(`daily-prediction-${metric}`)}</h1>
             <div slot="graph" class="calibration-panel">
                 {#if umPlusWarnings.length}
@@ -322,7 +322,7 @@
             <p>{i18n("daily-prediction-sample-help")}</p>
         </CalibrationGraphContainer>
     {/each}
-    <MemorisedGraphContainer>
+    <MemorisedGraphContainer graphId="fsrs:stability-time-machine">
         <h1 slot="title">{i18n("stability-time-machine")}</h1>
         <BarScrollable slot="graph" data={stability_time_machine_bar} left_aligned />
         <TimeMachineScroll min={time_machine_min} />
@@ -331,7 +331,7 @@
             <Warning>{i18n("generic-truncated-warning")}</Warning>
         {/if}
     </MemorisedGraphContainer>
-    <MemorisedGraphContainer>
+    <MemorisedGraphContainer graphId="fsrs:difficulty-time-machine">
         <h1 slot="title">{i18n("difficulty-time-machine")}</h1>
         <label class="scroll">
             {i18n("zoom")}
@@ -349,7 +349,7 @@
             <Warning>{i18n("generic-truncated-warning")}</Warning>
         {/if}
     </MemorisedGraphContainer>
-    <MemorisedGraphContainer>
+    <MemorisedGraphContainer graphId="fsrs:average-stability-over-time">
         <h1 slot="title">{i18n("average-stability-over-time")}</h1>
         <BarScrollable
             slot="graph"

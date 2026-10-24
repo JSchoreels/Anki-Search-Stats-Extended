@@ -4,6 +4,8 @@
 
 ### User facing changes
 
+- Star favorite add-on graphs to keep them above Anki's built-in charts, below the search controls. Favorites remember their order, retain their current controls when moved, and remain accessible when their original category is collapsed or hidden.
+
 - Add FSRS to Daily Recall Gap and Daily Surprise, with independent FSRS / RWKV / Both controls. Show a configurable 7-day moving average by default and fade the daily lines and dots to grey; disable smoothing to restore the colored daily values.
 
 - Restore FSRS preset loading and the stability/retrievability heatmap on older fork builds, including portable build 88, without the missing `card_memory_metrics` error. Newer builds retain batch loading; older builds use slower native Card Info reads.
@@ -41,6 +43,8 @@
 - Identify unloaded data in troubleshooting exports instead of reporting misleading zero counts. Cancelling export writes no file.
 
 ### Technical details
+
+- Store Favorites in the ordered `pinnedGraphs` add-on setting using stable graph IDs and serialized configuration writes. Relocate live graph cards instead of duplicating them, and keep automatic matrix, current-retrievability, and preset requests scoped to visible or pinned graphs.
 
 - Reuse the comparison worker's held-out FSRS predictions for daily scores while preserving each model's independent eligible sample. Share the trailing daily-average helper with maturation graphs; preserve missing-day and undefined-gap breaks, and expose raw and averaged values through mouse and keyboard tooltips.
 

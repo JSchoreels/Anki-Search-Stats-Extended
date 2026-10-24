@@ -2,6 +2,7 @@
     import { onMount, onDestroy } from "svelte"
     import GraphContainer from "./GraphContainer.svelte"
     import { i18n } from "./i18n"
+    import { graphVisibility } from "./graphVisibility"
     import { browserSearchCurrent } from "./search"
     import {
         activeRetrievabilityHistory,
@@ -13,9 +14,8 @@
         activeRetrievabilityCellSearch,
         validActiveRetrievabilityThresholds,
     } from "./activeRetrievabilityMatrix"
-    onMount(() => {
-        activeRetrievabilityRequested.set(true)
-    })
+    const visible = graphVisibility("lapse:active-retrievability")
+    onMount(() => visible.subscribe(activeRetrievabilityRequested.set))
     onDestroy(() => {
         activeRetrievabilityRequested.set(false)
     })
@@ -74,7 +74,7 @@
     })
 </script>
 
-<GraphContainer>
+<GraphContainer graphId="lapse:active-retrievability">
     <div class="matrix-heading">
         <h1>{i18n("active-r-title")}</h1>
         <span>{i18n("matrix-values-legend")}</span>
@@ -175,6 +175,7 @@
 
 <style lang="scss">
     .matrix-heading {
+        padding-right: 2.5em;
         display: flex;
         flex-wrap: wrap;
         align-items: baseline;

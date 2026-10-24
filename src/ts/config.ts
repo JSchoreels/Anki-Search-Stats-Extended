@@ -25,6 +25,7 @@ export type SSEconfig = Partial<{
     autoMemorisedStats: boolean
     alwaysAllTime: boolean
     pinnedTrends: Record<string, StoredTrendRange[]>
+    pinnedGraphs: string[]
     exposureStabilityThresholds: ExposureStabilityThresholds
     activeRetrievabilityThresholds: ActiveRetrievabilityThresholds
 }>

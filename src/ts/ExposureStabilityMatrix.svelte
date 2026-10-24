@@ -79,7 +79,7 @@
     }
 </script>
 
-<GraphContainer>
+<GraphContainer graphId="lapse:exposure-stability">
     <div class="matrix-heading">
         <h1>{i18n("matrix-title")}</h1>
         <span>{i18n("matrix-values-legend")}</span>
@@ -177,6 +177,7 @@
 
 <style lang="scss">
     .matrix-heading {
+        padding-right: 2.5em;
         display: flex;
         flex-wrap: wrap;
         align-items: baseline;

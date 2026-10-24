@@ -41,7 +41,7 @@
         renderCurrentRetrievabilityGraph(svg, bins, { colorByBucketShift, model: groupingModel })
 </script>
 
-<GraphContainer>
+<GraphContainer graphId="fsrs:current-retrievability">
     <h1>{i18n("current-retrievability")}</h1>
     {#if !response || response.status === "pending"}
         <p>{i18n("loading")}</p>

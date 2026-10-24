@@ -9,21 +9,21 @@
 </script>
 
 <GraphCategory hidden_title={i18n("review-speed-trend")} config_name="misc">
-    <GraphContainer>
+    <GraphContainer graphId="misc:review-speed-trend">
         <h1>{i18n("review-speed-trend")}</h1>
         <DayTimings data={$data?.reviews} />
         <p>
             {i18n("review-speed-trend-help")}
         </p>
     </GraphContainer>
-    <GraphContainer>
+    <GraphContainer graphId="misc:sxr-heatmap">
         <h1>{i18n("sxr-heatmap")}</h1>
         <SRHeatmap cardData={$card_data} searchString={$searchString} />
         <p>
             {i18n("sxr-heatmap-help")}
         </p>
     </GraphContainer>
-    <GraphContainer>
+    <GraphContainer graphId="misc:ease-factors">
         <h1>{i18n("ease-factors")}</h1>
         <EaseFactor></EaseFactor>
         <p>

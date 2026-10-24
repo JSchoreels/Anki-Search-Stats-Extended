@@ -29,7 +29,7 @@
 </script>
 
 <GraphCategory hidden_title={i18n("load-trend")} config_name="load">
-    <RevlogGraphContainer>
+    <RevlogGraphContainer graphId="load:load-trend">
         <h1 slot="title">{i18n("load-trend")}</h1>
         <LineOrCandlestick
             slot="graph"
@@ -58,7 +58,7 @@
             <Warning>{i18n("generic-truncated-warning")}</Warning>
         {/if}
     </RevlogGraphContainer>
-    <RevlogGraphContainer>
+    <RevlogGraphContainer graphId="load:introduced-load">
         <h1 slot="title">{i18n("introduced-load")}</h1>
         <LineOrCandlestick
             slot="graph"
@@ -106,7 +106,7 @@
         metricLabelKey="lapse-count"
         colour="#bd3f09"
     />
-    <RevlogGraphContainer>
+    <RevlogGraphContainer graphId="load:learn-reviews-per-card">
         <h1 slot="title">{i18n("learn-reviews-per-card")}</h1>
         <IntervalGraph
             slot="graph"

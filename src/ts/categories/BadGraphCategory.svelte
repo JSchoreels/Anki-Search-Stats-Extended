@@ -85,7 +85,7 @@
 </script>
 
 <GraphCategory hidden_title={i18n("bad-graph")} config_name="bad">
-    <MemorisedGraphContainer>
+    <MemorisedGraphContainer graphId="bad:leech-detector">
         <h1 slot="title">{i18n("leech-detector")}</h1>
         <label>
             {i18n("zoom")}
@@ -99,7 +99,7 @@
             </a>
         </p>
     </MemorisedGraphContainer>
-    <RevlogGraphContainer>
+    <RevlogGraphContainer graphId="bad:naive-sibling-similarity">
         <h1 slot="title">{i18n("naive-sibling-similarity")}</h1>
         <BarScrollable
             slot="graph"
@@ -129,7 +129,7 @@
             {i18n("naive-sibling-similarity-help")}
         </p>
     </RevlogGraphContainer>
-    <RevlogGraphContainer>
+    <RevlogGraphContainer graphId="bad:rating-fatigue">
         <h1 slot="title">{i18n("rating-fatigue")}</h1>
         <BarScrollable
             slot="graph"
@@ -160,7 +160,7 @@
             {i18n("rating-fatigue-help")}
         </p>
     </RevlogGraphContainer>
-    <MemorisedGraphContainer>
+    <MemorisedGraphContainer graphId="bad:fsrs-loss-by-fatigue">
         <h1 slot="title">{i18n("fsrs-loss-by-fatigue")}</h1>
         <BarScrollable
             slot="graph"
@@ -185,7 +185,7 @@
             {i18n("fsrs-loss-by-fatigue-help")}
         </p>
     </MemorisedGraphContainer>
-    <MemorisedGraphContainer>
+    <MemorisedGraphContainer graphId="bad:average-stability-over-reps">
         <h1 slot="title">{i18n("average-stability-over-reps")}</h1>
         <BarScrollable
             slot="graph"

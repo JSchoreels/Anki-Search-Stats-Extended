@@ -13,6 +13,7 @@ import {
 import { calculateCardDataPies } from "./CardDataPies"
 import { DEFAULT_ORDER, type SSEconfig, type SSEother } from "./config"
 import { exposureStabilityThresholds } from "./exposureStabilityMatrix"
+import { createGraphFavorites } from "./graphFavorites"
 import { latestResult } from "./latestResult"
 import type { MaturationHistory } from "./maturation"
 import {
@@ -58,6 +59,10 @@ export const activeRetrievabilitySettings = writable(
 export const maturationSmoothing = writable({ enabled: false, days: 7 })
 export let config = writable<SSEconfig>()
 export let shownCategories = writable(SSEconfig.categories ?? {})
+export const favoriteGraphs = createGraphFavorites(SSEconfig.pinnedGraphs, async (ids) => {
+    await saveConfigValue("pinnedGraphs", ids)
+    SSEconfig.pinnedGraphs = ids
+})
 export let autoRevlogStats = writable(SSEconfig.autoRevlogStats ?? false)
 export let autoMemorisedStats = writable(SSEconfig.autoMemorisedStats ?? false)
 export let alwaysAllTime = writable(SSEconfig.alwaysAllTime ?? false)
@@ -172,12 +177,22 @@ export const activeRetrievabilityRequested = writable(false)
 
 // Shared by current-state heatmaps, preset-specific curves and historical replay.
 const needsFsrsData = derived(
-    [showRevlogStats, shownCategories, showMaturationStats, activeRetrievabilityRequested],
-    ([$showRevlogs, $categories, $maturation, $activeR]) =>
+    [
+        showRevlogStats,
+        shownCategories,
+        showMaturationStats,
+        activeRetrievabilityRequested,
+        favoriteGraphs.pinned,
+    ],
+    ([$showRevlogs, $categories, $maturation, $activeR, $pinned]) =>
         $activeR ||
         $showRevlogs ||
         ($categories.misc !== false && $categories.misc !== "removed") ||
-        ($maturation && $categories.introduced !== false && $categories.introduced !== "removed")
+        $pinned.includes("misc:sxr-heatmap") ||
+        $pinned.includes("misc:ease-factors") ||
+        ($maturation &&
+            (($categories.introduced !== false && $categories.introduced !== "removed") ||
+                $pinned.some((id) => id.startsWith("introduced:maturation-"))))
 )
 export const fsrsPresetData = derived(
     [card_data, needsFsrsData],

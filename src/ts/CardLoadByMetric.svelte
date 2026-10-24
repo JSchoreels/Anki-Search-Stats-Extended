@@ -127,7 +127,7 @@
     } satisfies BarChart
 </script>
 
-<GraphContainer>
+<GraphContainer graphId={`load:card-load-${metric}`}>
     <h1>{i18n(titleKey)}</h1>
     <BarScrollable
         data={bar_data}

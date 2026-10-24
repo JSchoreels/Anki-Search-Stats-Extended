@@ -14,14 +14,14 @@
 </script>
 
 <GraphCategory hidden_title={i18n("interval-distribution")} config_name="interval">
-    <GraphContainer>
+    <GraphContainer graphId="interval:interval-distribution">
         <h1>{i18n("interval-distribution")}</h1>
         <IntervalGraph {intervals} bind:last={interval_last} bind:steps={interval_steps} />
         <p>
             {i18n("interval-distribution-help")}
         </p>
     </GraphContainer>
-    <GraphContainer>
+    <GraphContainer graphId="interval:interval-load">
         <h1>{i18n("interval-load")}</h1>
         <BurdenPie {intervals} bind:last={interval_last} bind:steps={interval_steps} />
         <p>

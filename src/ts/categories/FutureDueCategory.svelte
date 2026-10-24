@@ -40,7 +40,7 @@
 </script>
 
 <GraphCategory hidden_title={i18n("future-due-types")} config_name="due">
-    <GraphContainer>
+    <GraphContainer graphId="due:future-due-types">
         <h1>{i18n("future-due-types")}</h1>
         {#if $card_data}
             <DueBar />
@@ -51,7 +51,7 @@
             {i18n("future-due-types-help")}
         </p>
     </GraphContainer>
-    <GraphContainer>
+    <GraphContainer graphId="due:future-due-retention">
         <h1>{i18n("future-due-retention")}</h1>
         {#if _.sum(target_R_days) > 0}
             <BarScrollable
@@ -83,7 +83,7 @@
             {i18n("future-due-retention-help")}
         </p>
     </GraphContainer>
-    <GraphContainer>
+    <GraphContainer graphId="due:intra-day-due">
         <h1>{i18n("intra-day-due")}</h1>
         <IntraDayDueBar></IntraDayDueBar>
         <p>

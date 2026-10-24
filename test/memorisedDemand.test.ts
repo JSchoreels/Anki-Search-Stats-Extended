@@ -11,6 +11,47 @@ afterEach(() => {
     jest.resetModules()
 })
 
+test.each([
+    [[], false],
+    [["misc:review-speed-trend"], false],
+    [["misc:sxr-heatmap"], true],
+    [["misc:ease-factors"], true],
+] as [string[], boolean][])(
+    "saved favorites %j request only their needed presets",
+    async (pinnedGraphs, presetsNeeded) => {
+        const originalFetch = global.fetch,
+            originalConfig = global.SSEconfig
+        global.SSEconfig = {
+            categories: { misc: false, lapse: false, introduced: false },
+            pinnedGraphs,
+        } as never
+        const requests: string[] = []
+        const loadHistory = jest.fn()
+        global.fetch = jest.fn(async (url: string) => {
+            requests.push(url)
+            if (url.endsWith("cardData"))
+                return response({ columns: ["id", "did", "odid"], data: [[10, 1, 0]] })
+            return response({ presets: [], cards: {}, retrievability: {} })
+        }) as typeof fetch
+        jest.doMock("../src/ts/statsWorkerClient", () => ({
+            loadStatsHistory: loadHistory,
+            runStatsTask: jest.fn(),
+        }))
+        try {
+            const stores = await import("../src/ts/stores")
+            stores.cids.set([10])
+            await flush()
+            expect(requests.some((url) => url.endsWith("fsrsPresetData"))).toBe(presetsNeeded)
+            expect(requests.some((url) => url.endsWith("writeConfig"))).toBe(false)
+            expect(loadHistory).not.toHaveBeenCalled()
+            stores.cids.set(null)
+        } finally {
+            global.fetch = originalFetch
+            global.SSEconfig = originalConfig
+        }
+    }
+)
+
 test.each([undefined, true, false, "removed"])(
     "Lapse visibility %s needs neither current presets nor review history",
     async (visibility) => {

@@ -11,7 +11,7 @@
 </script>
 
 <GraphCategory hidden_title={i18n("forgetting-curve")} config_name="forgettingCurve">
-    <RevlogGraphContainer>
+    <RevlogGraphContainer graphId="forgettingCurve:forgetting-curve">
         <h1 slot="title">{i18n("forgetting-curve")}</h1>
         <ForgettingCurve
             slot="graph"
@@ -24,7 +24,7 @@
             <Warning>{i18n("generic-truncated-warning")}</Warning>
         {/if}
     </RevlogGraphContainer>
-    <RevlogGraphContainer>
+    <RevlogGraphContainer graphId="forgettingCurve:first-short-term-forgetting-curve">
         <h1 slot="title">{i18n("first-short-term-forgetting-curve")}</h1>
         <ForgettingCurve
             slot="graph"

@@ -1,42 +1,57 @@
 <script lang="ts">
     import type { CATEGORIES } from "./categories"
-    import { shownCategories } from "./stores"
+    import { derived } from "svelte/store"
+    import { setContext } from "svelte"
+    import { categoryHasPinnedGraphs, GRAPH_CATEGORY_VISIBLE } from "./graphFavorites"
+    import { favoriteGraphs, shownCategories } from "./stores"
 
     // If falsy, Disables hide button
     export let hidden_title = ""
     export let config_name: keyof typeof CATEGORIES | "graphOrder"
 
-    let hidden = SSEconfig?.categories?.[config_name] === false
+    const { pinned: pinnedGraphs } = favoriteGraphs
+    const categoryVisible = derived(
+        shownCategories,
+        (categories) =>
+            categories[config_name] !== "removed" &&
+            (!hidden_title || categories[config_name] !== false)
+    )
+    setContext(GRAPH_CATEGORY_VISIBLE, categoryVisible)
+    $: hidden = $shownCategories[config_name] === false
+    $: removed = $shownCategories[config_name] === "removed"
+    $: hasFavorites = categoryHasPinnedGraphs($pinnedGraphs, config_name)
 </script>
 
-{#if $shownCategories[config_name] !== "removed"}
-    <label>
-        <div class={`separator ${hidden ? "hidden" : ""}`}>
-            {#if hidden_title}
-                <button
-                    class="btn"
-                    on:click={() => {
-                        hidden = !hidden
-                        $shownCategories[config_name] = !hidden
-                    }}
-                >
-                    &gt;
-                </button>
-                {#if hidden}
-                    <h3>{hidden_title}...</h3>
+{#if !removed || hasFavorites}
+    {#if !removed}
+        <label>
+            <div class={`separator ${hidden ? "hidden" : ""}`}>
+                {#if hidden_title}
+                    <button
+                        class="btn"
+                        on:click={() => {
+                            $shownCategories[config_name] = hidden
+                        }}
+                    >
+                        &gt;
+                    </button>
+                    {#if hidden}
+                        <h3>{hidden_title}...</h3>
+                    {/if}
                 {/if}
-            {/if}
-            <hr />
-        </div>
-    </label>
-    <div class="category">
-        {#if !hidden || !hidden_title}
+                <hr />
+            </div>
+        </label>
+    {/if}
+    <div class="category" hidden={!$categoryVisible}>
+        {#if $categoryVisible || hasFavorites}
             <slot />
         {/if}
     </div>
 {/if}
 
 <style lang="scss">
+    @use "./graphGrid.scss" as *;
     label {
         display: contents;
     }
@@ -77,34 +92,9 @@
 
     // Copied from anki/ts/graphs/GraphsPage.svelte
     div.category {
-        display: grid;
-        gap: 1em;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-        // required on Safari to stretch whole width
-        width: calc(100vw - 3em);
-        margin-left: 1em;
-        margin-right: 1em;
-
-        @media only screen and (max-width: 600px) {
-            width: calc(100vw - 1rem);
-            margin-left: 0.5rem;
-            margin-right: 0.5rem;
-        }
-
-        @media only screen and (max-width: 1400px) {
-            grid-template-columns: 1fr 1fr;
-        }
-        @media only screen and (max-width: 1200px) {
-            grid-template-columns: 1fr;
-        }
-        @media only screen and (max-width: 600px) {
-            font-size: 12px;
-        }
-
-        @media only print {
-            // grid layout does not honor page-break-inside
-            display: block;
-            margin-top: 3em;
+        @include graph-grid;
+        &[hidden] {
+            display: none;
         }
     }
 </style>

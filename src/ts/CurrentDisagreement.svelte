@@ -4,6 +4,7 @@
     import CurrentRetrievability from "./CurrentRetrievability.svelte"
     import { cids } from "./stores"
     import { i18n } from "./i18n"
+    import { graphVisibility } from "./graphVisibility"
     import { getCurrentCardDisagreement } from "./search"
     import {
         buildCurrentDisagreementBins,
@@ -33,7 +34,8 @@
         response = null
         if (ids) void load(ids, current)
     }
-    $: restart($cids)
+    const visible = graphVisibility("fsrs:current-disagreement", "fsrs:current-retrievability")
+    $: restart($visible ? $cids : null)
     $: bins = buildCurrentDisagreementBins(response?.rows ?? [])
     $: paired = bins.reduce((sum, bin) => sum + bin.cids.length, 0)
     $: if (svg) renderCurrentDisagreementGraph(svg, bins)
@@ -43,7 +45,7 @@
     })
 </script>
 
-<GraphContainer>
+<GraphContainer graphId="fsrs:current-disagreement">
     <h1>{i18n("current-disagreement")}</h1>
     {#if !response || response.status === "pending"}
         <p>{i18n("loading")}</p>

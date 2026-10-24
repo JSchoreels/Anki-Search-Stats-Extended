@@ -24,7 +24,7 @@ Average R is the arithmetic mean of one retrievability sample per included Anki 
 
 Defaults are 30 / 180 days and 80% / 90% Average R. Positive whole-day thresholds and R percentages in (0, 100] are saved as `activeRetrievabilityThresholds` (`daysLower`, `daysUpper`, `rLower`, `rUpper`); each upper value must exceed its lower value. Invalid saved settings use defaults. Both axes ascend, with inclusive middle bands. Cell colors and neutral totals match Exposure × Stability. Each cell and row/column/grand/diagonal total shows count plus stored-interval workload `sum(1 / max(card.ivl, 1))`, and opens exactly its cached card IDs through the current-search Browser bridge. Empty cells use `cid:0`.
 
-The visible matrix requests full history and resolved presets automatically, independently of Memorised/calibration. Its worker computes per-card metrics once and releases history. Threshold changes only regroup these cached values. Search changes, hiding the category, and closing the view cancel obsolete requests and dispose history. The Statistics date range does not limit this lifetime calculation.
+The visible matrix requests full history and resolved presets automatically, independently of Memorised/calibration. Its worker computes per-card metrics once and releases history. Threshold changes only regroup these cached values. Search changes, hiding the category when this matrix is not pinned in Favorites, and closing the view cancel obsolete requests and dispose history. A pinned matrix remains visible and calculated when its category is hidden; pinning another Lapse graph does not activate this matrix. The Statistics date range does not limit this lifetime calculation.
 
 ## Daily maturation and introductions
 

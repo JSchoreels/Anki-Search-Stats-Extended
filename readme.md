@@ -4,6 +4,8 @@ Like the new anki stats screen? Want more? This is the addon for you.
 
 ## Config
 
+- **pinnedGraphs**: Graph cards selected with the star beside their heading. Favorites appear above Anki's native graphs, remain accessible when their category is collapsed or hidden, and are remembered in pin order. Star a card again to return it to its category. See [Favorite graphs](docs/GRAPH_FAVORITES.MD).
+
 - **activeRetrievabilityThresholds**: Editable Time Active × Average R cutoffs in Lapse (defaults: `daysLower: 30`, `daysUpper: 180`, `rLower: 80`, `rUpper: 90`). Time includes suspended periods and both introduction and current Anki days; Average R samples each day’s final replayed state, using now for today. Full history and current presets load automatically when visible. Incomplete histories are reported and excluded. See [stability metrics](docs/FSRS_STABILITY.MD).
 - **exposureStabilityThresholds**: Four editable cutoffs for the Exposure × Stability matrix in the Lapse section. Defaults: `repsLower: 5`, `repsUpper: 30`, `s90Lower: 7`, `s90Upper: 30`. The middle bands include both endpoints. Apply thresholds in the panel to save them. Cells and row/column/diagonal totals show active studied card counts and scheduled daily load from stored intervals, using the same formula as Future Due's Daily load; new and inactive cards are excluded. The S90 cutoffs also define Maturing and Matured in the Introduced section's Daily maturation graph. See [stability metrics](docs/FSRS_STABILITY.MD).
      

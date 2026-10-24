@@ -82,7 +82,7 @@
 </script>
 
 <GraphCategory hidden_title={i18n("ratings")} config_name="rating">
-    <RevlogGraphContainer>
+    <RevlogGraphContainer graphId="rating:ratings">
         <h1 slot="title">{i18n("ratings")}</h1>
         <BarScrollable
             slot="graph"
@@ -111,7 +111,7 @@
             {i18n("ratings-help")}
         </p>
     </RevlogGraphContainer>
-    <RevlogGraphContainer>
+    <RevlogGraphContainer graphId="rating:ratings-by-duration">
         <h1 slot="title">{i18n("ratings-by-duration")}</h1>
         <BarScrollable
             slot="graph"
@@ -140,7 +140,7 @@
             {i18n("ratings-by-duration-help")}
         </p>
     </RevlogGraphContainer>
-    <RevlogGraphContainer>
+    <RevlogGraphContainer graphId="rating:interval-ratings">
         <h1 slot="title">{i18n("interval-ratings")}</h1>
         <BarScrollable
             slot="graph"
@@ -168,7 +168,7 @@
         </label>
         <p>{i18n("interval-ratings-help")}</p>
     </RevlogGraphContainer>
-    <RevlogGraphContainer>
+    <RevlogGraphContainer graphId="rating:time-ratings">
         <h1 slot="title">{i18n("time-ratings")}</h1>
         <BarScrollable
             slot="graph"
@@ -195,7 +195,7 @@
             {i18n("time-ratings-help")}
         </p>
     </RevlogGraphContainer>
-    <RevlogGraphContainer>
+    <RevlogGraphContainer graphId="rating:grade-distribution-by-retrievability">
         <h1 slot="title">{i18n("grade-distribution-by-retrievability")}</h1>
         <BarScrollable
             slot="graph"
@@ -225,7 +225,7 @@
         </div>
         <p>{i18n("grade-distribution-by-retrievability-help")}</p>
     </RevlogGraphContainer>
-    <RevlogGraphContainer>
+    <RevlogGraphContainer graphId="rating:grade-distribution-by-stability">
         <h1 slot="title">{i18n("grade-distribution-by-stability")}</h1>
         <BarScrollable
             slot="graph"
@@ -246,7 +246,7 @@
         </div>
         <p>{i18n("grade-distribution-by-stability-help")}</p>
     </RevlogGraphContainer>
-    <RevlogGraphContainer>
+    <RevlogGraphContainer graphId="rating:grade-distribution-by-repetitions">
         <h1 slot="title">{i18n("grade-distribution-by-repetitions")}</h1>
         <BarScrollable
             slot="graph"
@@ -272,7 +272,7 @@
         </div>
         <p>{i18n("grade-distribution-by-repetitions-help")}</p>
     </RevlogGraphContainer>
-    <RevlogGraphContainer>
+    <RevlogGraphContainer graphId="rating:grade-distribution-by-difficulty">
         <h1 slot="title">{i18n("grade-distribution-by-difficulty")}</h1>
         <BarScrollable
             slot="graph"

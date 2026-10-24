@@ -820,3 +820,9 @@ active-r-help = Time Active counts calendar Anki days from initial learning thro
 
 active-r-loading = Replaying lifetime history and calculating daily Average R…
 active-r-workload-help = Workload sums 1 / max(stored scheduled interval, 1 day) for the included cards. Incomplete histories and new or inactive cards are excluded, so its total can differ from Future Due’s Daily load.
+
+# Favorite graph cards
+favorite-graphs = Favorite graphs
+graph-pin = Pin graph to Favorites
+graph-unpin = Remove graph from Favorites
+graph-pin-save-failed = Could not save Favorites. Please try again.
