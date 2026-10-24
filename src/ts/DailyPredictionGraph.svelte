@@ -5,11 +5,14 @@
     import { i18n } from "./i18n"
     import { onDestroy } from "svelte"
     import { tooltipShown } from "./stores"
+    import { dragZoom, type ZoomRange } from "./dragZoom"
+    import ZoomControls from "./ZoomControls.svelte"
 
     export let fsrs: DailyPredictionPoint[]
     export let rwkv: DailyPredictionPoint[]
     export let metric: DailyPredictionMetric
     let svg: SVGElement | undefined
+    let zoomRange: ZoomRange | undefined
     let mode: "fsrs" | "rwkv" | "both" = "both"
     let smoothing = true
     let days = 7
@@ -24,7 +27,18 @@
         { model: "rwkv", data: rwkv },
     ].filter((item) => mode === "both" || item.model === mode) as DailyPredictionSeries[]
     $: hasData = series.some((item) => item.data.length)
-    $: if (svg) renderDailyPredictionGraph(svg, series, metric, smoothing ? days : null)
+    $: zoomOptions = svg
+        ? renderDailyPredictionGraph(
+              svg,
+              series,
+              metric,
+              smoothing ? days : null,
+              zoomRange,
+              (range) => {
+                  zoomRange = range
+              }
+          )
+        : undefined
     onDestroy(() => tooltipShown.set(false))
 </script>
 
@@ -71,7 +85,18 @@
     </p>
 {/each}
 {#if hasData}
-    <svg bind:this={svg} role="img" aria-label={i18n(`daily-prediction-${metric}`)}></svg>
+    <ZoomControls
+        zoomed={!!zoomRange}
+        reset={() => {
+            zoomRange = undefined
+        }}
+    />
+    <svg
+        bind:this={svg}
+        use:dragZoom={zoomOptions}
+        role="img"
+        aria-label={i18n(`daily-prediction-${metric}`)}
+    ></svg>
     {#if smoothing}<p class="average-help">{i18n("daily-prediction-average-help")}</p>{/if}
 {/if}
 

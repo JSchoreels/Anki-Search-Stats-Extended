@@ -199,3 +199,35 @@ test("moving averages preserve undefined recall gaps and allow one model to be u
     )
     expect(svg.innerHTML).not.toMatch(/NaN|Infinity/)
 })
+
+test("daily zoom crops both models and tooltips after averaging the full history", () => {
+    const svg = svgElement()
+    const data = [point(20000, 20), point(20001, 2), point(20002, 4), point(20004, 6)]
+    const onZoom = jest.fn()
+    const options = render(
+        svg,
+        [
+            { model: "fsrs", data },
+            { model: "rwkv", data },
+        ],
+        "standardizedGap",
+        3,
+        { start: 20002, end: 20004 },
+        onZoom
+    )!
+    expect(svg.querySelectorAll(".daily-prediction-hover")).toHaveLength(2)
+    expect(svg.querySelectorAll(".daily-prediction-point")).toHaveLength(4)
+    expect(svg.querySelector(".daily-prediction-hover")?.getAttribute("aria-label")).toContain(
+        "daily-prediction-average-value: 3, 8.667"
+    )
+    expect(
+        svg.querySelector(".daily-prediction-average")?.getAttribute("d")!.match(/M/g)
+    ).toHaveLength(2)
+    expect(svg.innerHTML).not.toMatch(/NaN|Infinity/)
+    options.onSelect(0, 0.33)
+    expect(onZoom).toHaveBeenCalledWith({ start: 20002, end: 20002 })
+    expect(data[0].standardizedGap).toBe(20)
+    render(svg, [{ model: "fsrs", data }], "standardizedGap", 3, { start: 20003, end: 20003 })
+    expect(svg.querySelectorAll(".daily-prediction-hover")).toHaveLength(0)
+    expect(svg.innerHTML).not.toMatch(/NaN|Infinity/)
+})

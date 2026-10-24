@@ -69,8 +69,10 @@
 
     function extraRender({ x, y, svg, maxValue }: ExtraRenderInput<BarChart>) {
         const now = new Date(Date.now())
+        const hourX = x(now.getHours().toFixed(0))
+        if (hourX === undefined) return
         const lineX =
-            x(now.getHours().toFixed(0))! + // Go to the label
+            hourX + // Go to the label
             ((x.bandwidth() + x.padding()) * now.getMinutes()) / 60 + // Intra hour
             x.bandwidth() / 2 // Make sure line lines up with ticks
         const bottom = y(0)

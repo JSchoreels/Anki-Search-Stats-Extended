@@ -1,16 +1,57 @@
 <script lang="ts">
     import _ from "lodash"
-    import { renderBarChart, type BarChart, type ExtraRenderInput } from "./bar"
+    import {
+        barDateLabeler,
+        barHourLabeler,
+        renderBarChart,
+        type BarChart,
+        type ExtraRenderInput,
+    } from "./bar"
     import NoGraph from "./NoGraph.svelte"
+    import {
+        boundedZoom,
+        dragZoom,
+        selectedZoomRange,
+        type ZoomRange,
+        type DragZoomOptions,
+    } from "./dragZoom"
+    import ZoomControls from "./ZoomControls.svelte"
+    import { defaultGraphBounds } from "./graph"
 
     let svg: SVGElement | null = null
     export let extraRender = (chart: ExtraRenderInput<BarChart>) => {}
 
     export let data: BarChart
+    export let zoomable: boolean | undefined = undefined
+    export let onZoom: ((range: ZoomRange) => void) | undefined = undefined
+    export let zoomed = false
+    export let resetZoom: () => void = () => {
+        localZoom = undefined
+    }
+    let localZoom: ZoomRange | undefined
+    let zoomOptions: DragZoomOptions | undefined
+    $: canZoom =
+        zoomable ?? (data.columnLabeler === barDateLabeler || data.columnLabeler === barHourLabeler)
+    $: visibleRange = boundedZoom(localZoom, { start: 0, end: data.data.length - 1 })
+    function selectRange(start: number, end: number) {
+        const range = selectedZoomRange(visibleRange, start, end, true)
+        if (onZoom) onZoom(range)
+        else localZoom = range
+    }
     $: {
         if (svg && data.data.length) {
-            const chart = renderBarChart(data, svg as any)
+            const chart = renderBarChart(
+                { ...data, data: data.data.slice(visibleRange.start, visibleRange.end + 1) },
+                svg as any
+            )
             extraRender(chart)
+            zoomOptions =
+                canZoom && chart.chart.data.length > 1
+                    ? {
+                          ...defaultGraphBounds(),
+                          onSelect: selectRange,
+                      }
+                    : undefined
         }
     }
 
@@ -33,7 +74,8 @@
             </div>
         {/each}
     </div>
-    <svg bind:this={svg}>
+    {#if canZoom}<ZoomControls zoomed={zoomed || !!localZoom} reset={resetZoom} />{/if}
+    <svg bind:this={svg} use:dragZoom={zoomOptions}>
         <pattern
             id="stripe"
             patternUnits="userSpaceOnUse"

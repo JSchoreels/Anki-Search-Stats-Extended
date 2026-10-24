@@ -4,6 +4,7 @@ import {
     type DailyPredictionMetric,
     type DailyPredictionPoint,
 } from "./dailyPredictionData"
+import { boundedZoom, selectedZoomRange, type ZoomRange } from "./dragZoom"
 import {
     clearChart,
     COMPARISON_REFERENCE_COLOUR,
@@ -44,12 +45,19 @@ export function renderDailyPredictionGraph(
     svg: SVGElement,
     series: DailyPredictionSeries[],
     metric: DailyPredictionMetric,
-    averageDays: number | null = null
+    averageDays: number | null = null,
+    zoomRange?: ZoomRange,
+    onZoom?: (range: ZoomRange) => void
 ) {
     clearChart(svg)
     tooltipShown.set(false)
-    const data = series.flatMap((item) => item.data)
-    if (!data.length) return
+    const allData = series.flatMap((item) => item.data)
+    if (!allData.length) return
+    const domain = boundedZoom(zoomRange, {
+        start: d3.min(allData, (point) => point.day)!,
+        end: d3.max(allData, (point) => point.day)!,
+    })
+    const data = allData.filter((point) => point.day >= domain.start && point.day <= domain.end)
     const prepared = series
         .filter((item) => item.data.length)
         .map((item) => ({
@@ -62,14 +70,25 @@ export function renderDailyPredictionGraph(
         }))
 
     const { width, height } = comparisonGraphBounds()
-    const firstDay = d3.min(data, (point) => point.day)!
-    const lastDay = d3.max(data, (point) => point.day)!
+    const firstDay = domain.start
+    const lastDay = domain.end
     // Day indices already account for Anki's rollover; UTC keeps their calendar labels intact.
     const x = d3
         .scaleUtc()
         .domain([new Date((firstDay - 0.5) * day_ms), new Date((lastDay + 0.5) * day_ms)])
         .range([0, width])
-    const magnitude = d3.max(data, (point) => Math.abs(point[metric] ?? 0)) || 1
+    const visibleAverages = prepared.flatMap(
+        (item) =>
+            item.average?.filter(
+                (_value, index) =>
+                    item.data[index].day >= firstDay && item.data[index].day <= lastDay
+            ) ?? []
+    )
+    const magnitude =
+        Math.max(
+            d3.max(data, (point) => Math.abs(point[metric] ?? 0)) || 0,
+            d3.max(visibleAverages, (value) => Math.abs(value ?? 0)) || 0
+        ) || 1
     const y = d3
         .scaleLinear()
         .domain(metric === "standardizedGap" ? [-magnitude, magnitude] : [0, magnitude])
@@ -129,6 +148,7 @@ export function renderDailyPredictionGraph(
             .y((point) => y(point.value!))
         const points: { day: number; value: number | null; average: number | null }[] = []
         item.data.forEach((point, index) => {
+            if (point.day < firstDay || point.day > lastDay) return
             if (index && point.day > item.data[index - 1].day + 1) {
                 points.push({ day: point.day - 1, value: null, average: null })
             }
@@ -245,4 +265,12 @@ export function renderDailyPredictionGraph(
             tooltipShown.set(true)
         })
         .on("mouseleave blur", () => tooltipShown.set(false))
+
+    if (onZoom && lastDay > firstDay)
+        return {
+            width,
+            height,
+            onSelect: (start: number, end: number) =>
+                onZoom(selectedZoomRange(domain, start, end, true)),
+        }
 }

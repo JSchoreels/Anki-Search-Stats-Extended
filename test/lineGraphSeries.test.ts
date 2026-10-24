@@ -74,3 +74,28 @@ test("P90 clips peaks without changing tooltip values and P100 restores the full
     expect(svg.querySelector(".line-plot")?.hasAttribute("clip-path")).toBe(false)
     expect(svg.textContent).toContain("1,000")
 })
+
+test("line zoom rescales visible values, bounds the date range and retains source totals", () => {
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg")
+    const values = [1000, 10, 20, 30, 5000]
+    const onZoom = jest.fn()
+    const options = renderLineChart(svg, values, "Memorised", {
+        zoomRange: { start: 1, end: 3 },
+        onZoom,
+    })!
+    expect(svg.querySelectorAll(".hover-bar")).toHaveLength(3)
+    expect(svg.textContent).not.toContain("1,000")
+    expect(svg.querySelector("path.line-series")?.getAttribute("d")).not.toMatch(/NaN|Infinity/)
+    svg.querySelectorAll(".hover-bar")[1].dispatchEvent(new MouseEvent("mouseover"))
+    expect(get(tooltip).text).toContain("Memorised: 20")
+    options.onSelect(0, 0.5)
+    expect(onZoom).toHaveBeenLastCalledWith({ start: 1, end: 2 })
+    expect(values).toEqual([1000, 10, 20, 30, 5000])
+    renderLineChart(svg, values, "Memorised", {
+        dayRange: { start: 2, end: 3 },
+        zoomRange: { start: 0, end: 4 },
+    })
+    expect(svg.querySelectorAll(".hover-bar")).toHaveLength(2)
+    renderLineChart(svg, values, "Memorised", { zoomRange: { start: 2, end: 2 } })
+    expect(svg.querySelectorAll(".line-isolated-point")).toHaveLength(1)
+})

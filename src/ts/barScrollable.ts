@@ -2,6 +2,23 @@ export type ScrollableBarDatum = {
     values?: number[]
 }
 
+export type BarWindow = { bins: number; offset: number }
+
+/** Zoom a window without changing its grouping or shared numeric navigation stores. */
+export function zoomBarWindow(
+    window: BarWindow,
+    binSize: number,
+    visibleBins: number,
+    start: number,
+    end: number,
+    leftAligned: boolean
+): BarWindow {
+    return {
+        bins: end - start + 1,
+        offset: Math.abs(window.offset) + (leftAligned ? start : visibleBins - 1 - end) * binSize,
+    }
+}
+
 export function effectiveBarDataLength(data: ScrollableBarDatum[]) {
     for (let index = data.length - 1; index >= 0; index--) {
         if ((data[index]?.values ?? []).some((value) => Number.isFinite(value) && value !== 0)) {

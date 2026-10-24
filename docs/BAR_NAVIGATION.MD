@@ -21,7 +21,7 @@ from printed output.
 
 ## Domain and grouping
 
-The visible width remains `bins × binSize` source buckets. Scrolling changes
+The visible width is `bins × binSize` source buckets before zooming. Scrolling changes
 the offset, not the bar width or aggregation method. Grouped counts, ratios,
 means, medians, cumulative values, trend ranges, tooltips, and bar-click actions
 continue through the same calculation path as numeric scrolling.
@@ -40,9 +40,14 @@ For such values, the scrollbar's displayed position is clamped to its nearest
 end; dragging it chooses an offset within its available range. A range that fits
 the entire window has no scrollbar.
 
+Date-axis bars also support [drag-to-zoom](TIME_AXIS_ZOOM.MD). A zoom selects
+whole displayed buckets and reduces the local window width. The scrollbar and
+Scroll field navigate that smaller window until **Reset zoom** restores normal
+navigation. This local zoom does not move charts sharing the usual Scroll store.
+Standalone date/hour bars and candlestick charts support the same drag gesture.
+
 No configuration setting, persisted data, database operation, dependency, or
-prediction request is added. Standalone bars and candlestick charts keep their
-existing navigation.
+prediction request is added.
 
 ## Verification
 

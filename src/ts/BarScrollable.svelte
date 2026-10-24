@@ -26,6 +26,8 @@
         barScrollOffset,
         barScrollPosition,
         leftAlignedBarWindowEnd,
+        zoomBarWindow,
+        type BarWindow,
     } from "./barScrollable"
     import {
         createGraphTrendSessionState,
@@ -58,10 +60,32 @@
     export let asRatio = false
     export let aggregateValues: undefined | ((start: number, width: number) => number[]) = undefined
 
+    let zoomWindow: BarWindow | undefined
+    $: viewWindow = zoomWindow ?? { bins, offset }
+    $: viewBins = viewWindow.bins
+    $: viewOffset = viewWindow.offset
+    $: dateAxis = trend_date_axis || data.columnLabeler === barDateLabeler
+
+    function changeOffset(value: number) {
+        if (zoomWindow) zoomWindow = { ...zoomWindow, offset: value }
+        else offset = value
+    }
+
+    function zoomBars(range: import("./dragZoom").ZoomRange) {
+        zoomWindow = zoomBarWindow(
+            viewWindow,
+            binSize,
+            bars.length,
+            range.start,
+            range.end,
+            left_aligned
+        )
+    }
+
     $: min = left_aligned ? 0 : 1
-    $: absOffset = Math.abs(offset)
-    $: requestedOffset = left_aligned ? absOffset + bins * binSize + min : -absOffset
-    $: leftmost = requestedOffset - bins * binSize
+    $: absOffset = Math.abs(viewOffset)
+    $: requestedOffset = left_aligned ? absOffset + viewBins * binSize + min : -absOffset
+    $: leftmost = requestedOffset - viewBins * binSize
 
     $: binSize = Number.isFinite(binSize) && binSize >= 1 ? Math.floor(binSize) : 1
     $: realOffset = left_aligned
@@ -72,24 +96,22 @@
         realOffset == 0 || realOffset >= data.data.length ? undefined : realOffset
     )
 
-    $: scrollExtent = barScrollExtent(
-        data.data,
-        left_aligned,
-        trend_date_axis || data.columnLabeler === barDateLabeler
-    )
-    $: scrollMaximum = Math.max(0, scrollExtent - bins * binSize)
-    $: scrollPosition = barScrollPosition(offset, scrollMaximum, left_aligned)
-    $: scrollThumbWidth = `${(100 * bins * binSize) / (bins * binSize + scrollMaximum)}%`
+    $: scrollExtent = barScrollExtent(data.data, left_aligned, dateAxis)
+    $: scrollMaximum = Math.max(0, scrollExtent - viewBins * binSize)
+    $: scrollPosition = barScrollPosition(viewOffset, scrollMaximum, left_aligned)
+    $: scrollThumbWidth = `${(100 * viewBins * binSize) / (viewBins * binSize + scrollMaximum)}%`
     // Align with the plot inside Bar's viewBox (-40 … width + 10).
     const axisViewWidth = defaultGraphBounds().width + 50
     const axisScrollLeftMargin = `${(100 * 40) / axisViewWidth}%`
     const axisScrollWidth = `${(100 * defaultGraphBounds().width) / axisViewWidth}%`
 
     function scrollAxis(event: Event) {
-        offset = barScrollOffset(
-            (event.currentTarget as HTMLInputElement).valueAsNumber,
-            scrollMaximum,
-            left_aligned
+        changeOffset(
+            barScrollOffset(
+                (event.currentTarget as HTMLInputElement).valueAsNumber,
+                scrollMaximum,
+                left_aligned
+            )
         )
     }
 
@@ -135,7 +157,7 @@
     function inner_extra_render(chart: ExtraRenderInput<BarChart>) {
         extraRender(chart)
 
-        limitArea(chart, limit_area_width(chart.x, limit, offset, binSize, min, realOffset))
+        limitArea(chart, limit_area_width(chart.x, limit, viewOffset, binSize, min, realOffset))
 
         const trend_data = chart.chart.data.map((datum) => {
             const range = trendRangeFromAxisDatum(datum)
@@ -294,11 +316,25 @@
     </label>
     <label>
         {i18n("scroll")}
-        <input type="number" bind:value={offset} step={binSize} />
+        <input
+            type="number"
+            value={viewOffset}
+            on:input={(event) => changeOffset(event.currentTarget.valueAsNumber)}
+            step={binSize}
+        />
     </label>
 </div>
 
-<Bar data={{ ...data, data: bars, barWidth: binSize }} extraRender={inner_extra_render}></Bar>
+<Bar
+    data={{ ...data, data: bars, barWidth: binSize }}
+    extraRender={inner_extra_render}
+    zoomable={dateAxis}
+    onZoom={zoomBars}
+    zoomed={!!zoomWindow}
+    resetZoom={() => {
+        zoomWindow = undefined
+    }}
+></Bar>
 
 {#if scrollMaximum > 0}
     <input

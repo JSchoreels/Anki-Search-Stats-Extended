@@ -836,3 +836,7 @@ graph-hide-save-failed = Could not save hidden graphs. Please try again.
 show-hidden-graphs = Show hidden graphs ({$count})
 hide-hidden-graphs = Hide hidden graphs ({$count})
 hidden-graphs = Hidden graphs
+
+# Time-axis navigation
+graph-drag-zoom-help = Drag across the plot to zoom. Press Esc to cancel.
+graph-reset-zoom = Reset zoom

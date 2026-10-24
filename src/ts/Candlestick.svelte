@@ -1,6 +1,11 @@
 <script lang="ts">
     import _ from "lodash"
-    import { plotCandlestick, type CandlestickDatum, type CandlestickGraph } from "./Candlestick"
+    import {
+        candlestickWindowStart,
+        plotCandlestick,
+        type CandlestickDatum,
+        type CandlestickGraph,
+    } from "./Candlestick"
     import { limit_area_width, limitArea } from "./bar"
     import { selectableTrendLine } from "./trend"
     import {
@@ -23,6 +28,10 @@
         removeTrendFromAll,
     } from "./trendSession"
     import { i18n } from "./i18n"
+    import { dragZoom, selectedZoomRange } from "./dragZoom"
+    import { zoomBarWindow, type BarWindow } from "./barScrollable"
+    import { defaultGraphBounds } from "./graph"
+    import ZoomControls from "./ZoomControls.svelte"
 
     let svg: SVGElement | null = null
 
@@ -32,6 +41,27 @@
     export let data: CandlestickGraph
     export let limit = 0
     export let trend = true
+    let zoomWindow: BarWindow | undefined
+    $: viewWindow = zoomWindow ?? { bins, offset }
+    $: viewBins = viewWindow.bins
+    $: viewOffset = viewWindow.offset
+    $: zoomOptions =
+        bars?.length > 1
+            ? {
+                  ...defaultGraphBounds(),
+                  onSelect: selectRange,
+              }
+            : undefined
+
+    function selectRange(start: number, end: number) {
+        const range = selectedZoomRange({ start: 0, end: bars.length - 1 }, start, end, true)
+        zoomWindow = zoomBarWindow(viewWindow, binSize, bars.length, range.start, range.end, false)
+    }
+
+    function changeOffset(value: number) {
+        if (zoomWindow) zoomWindow = { ...zoomWindow, offset: value }
+        else offset = value
+    }
     export let trend_data: GraphTrendSessionState["visibleTrends"] = []
     export let current_trend: GraphTrendSessionState["previewTrend"] = undefined
     let trendSession: GraphTrendSessionState = createGraphTrendSessionState()
@@ -70,9 +100,9 @@
         trendSession = createGraphTrendSessionState()
     }
 
-    $: realOffset = -Math.abs(offset)
+    $: realOffset = -Math.abs(viewOffset)
 
-    $: leftmost = -(bins * binSize) + realOffset
+    $: leftmost = -(viewBins * binSize) + realOffset
     $: binSize = binSize > 0 ? binSize : 1
     $: separate_bars = data.data.slice(leftmost, realOffset == 0 ? undefined : realOffset)
 
@@ -104,9 +134,17 @@
 
     $: {
         if (svg && data.data.length) {
-            const chart = plotCandlestick({ ...data, data: bars, bar_width: binSize }, svg as any)
+            const start = candlestickWindowStart(
+                data,
+                data.data.length - bins * binSize - Math.abs(offset),
+                data.data.length + leftmost
+            )
+            const chart = plotCandlestick(
+                { ...data, start, data: bars, bar_width: binSize },
+                svg as any
+            )
 
-            limitArea(chart, limit_area_width(chart.x, limit, offset, binSize, 1))
+            limitArea(chart, limit_area_width(chart.x, limit, viewOffset, binSize, 1))
 
             if (trend) {
                 const { initialPinnedRanges, migratedStoredRanges } = loadPinnedTrendRanges(
@@ -203,11 +241,22 @@
     </label>
     <label>
         {i18n("scroll")}
-        <input type="number" bind:value={offset} step={binSize} />
+        <input
+            type="number"
+            value={viewOffset}
+            on:input={(event) => changeOffset(event.currentTarget.valueAsNumber)}
+            step={binSize}
+        />
     </label>
 </div>
 
-<svg bind:this={svg}></svg>
+<ZoomControls
+    zoomed={!!zoomWindow}
+    reset={() => {
+        zoomWindow = undefined
+    }}
+/>
+<svg bind:this={svg} use:dragZoom={zoomOptions}></svg>
 
 <style>
     div.options {

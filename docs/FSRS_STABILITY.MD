@@ -48,6 +48,10 @@ This document describes how stability-related values are computed for FSRS graph
 
 ## Average Stability Over Time
 
+Daily maturation and Average Stability Over Time support local
+[drag-to-zoom](TIME_AXIS_ZOOM.MD). Maturation retains its percentile control
+and calculates smoothing from the full prepared history before cropping.
+
 - Source: [`getMemorisedDays()`](/Users/jschoreels/workspace/Anki-Search-Stats-Extended/src/ts/MemorisedBar.ts)
 - Output fields:
     - `day_means`

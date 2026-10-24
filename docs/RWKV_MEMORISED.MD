@@ -15,6 +15,11 @@ Cards, Notes, Cards by Burden, and Average Retrievability support RWKV.
 Retrievability & Stability and the B-W matrix remain FSRS-only because RWKV
 does not expose equivalent stability and difficulty state.
 
+Memorised's Total and Trend views support [drag-to-zoom](TIME_AXIS_ZOOM.MD).
+Zoom changes only the displayed dates, preserves cumulative totals and drawn
+trends, and has a local **Reset zoom** control. FSRS and RWKV share the selected
+date range when both are displayed.
+
 ## Computation boundary
 
 The add-on starts and polls the adapted Anki build through these add-on media

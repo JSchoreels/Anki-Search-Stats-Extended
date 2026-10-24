@@ -32,6 +32,21 @@ export type CandlestickGraph = {
 export const CANDLESTICK_GREEN = "green"
 export const CANDLESTICK_RED = "red"
 
+/** Shift a cumulative baseline when a local zoom/pan changes the first visible day. */
+export function candlestickWindowStart(
+    graph: CandlestickGraph,
+    baseStart: number,
+    visibleStart: number
+) {
+    const clamp = (index: number) => Math.max(0, Math.min(graph.data.length, index))
+    const base = clamp(baseStart)
+    const visible = clamp(visibleStart)
+    const delta = graph.data
+        .slice(Math.min(base, visible), Math.max(base, visible))
+        .reduce((sum, datum) => sum + (datum?.delta || 0), 0)
+    return graph.start + (visible >= base ? delta : -delta)
+}
+
 export function plotCandlestick(
     graph: CandlestickGraph,
     svg: SVGElement

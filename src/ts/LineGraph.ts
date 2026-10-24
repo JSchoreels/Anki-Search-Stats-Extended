@@ -1,4 +1,5 @@
 import * as d3 from "d3"
+import { boundedZoom, selectedZoomRange, type ZoomRange } from "./dragZoom"
 import { clearChart, defaultGraphBounds } from "./graph"
 import { day_ms } from "./revlogGraphs"
 import { tooltip, tooltipShown } from "./stores"
@@ -6,6 +7,7 @@ import { tooltipX } from "./tooltip"
 import {
     selectableTrendLine,
     type DrawnTrend,
+    type InitialTrend,
     type TrendLine,
     type TrendRange,
     type TrendSelectionController,
@@ -104,6 +106,9 @@ export function renderLineChart(
         onPinnedRangesChange = () => {},
         series = undefined,
         dayRange = undefined,
+        zoomRange = undefined,
+        onZoom = undefined,
+        initialTrends = [],
         bounds = undefined,
         formatY = undefined,
         showIsolatedPoints = false,
@@ -116,6 +121,9 @@ export function renderLineChart(
         onPinnedRangesChange?: (ranges: TrendRange[]) => void
         series?: LineChartSeries[]
         dayRange?: { start: number; end: number }
+        zoomRange?: ZoomRange
+        onZoom?: (range: ZoomRange) => void
+        initialTrends?: InitialTrend[]
         bounds?: { width: number; height: number; marginLeft?: number }
         formatY?: (value: number) => string
         showIsolatedPoints?: boolean
@@ -145,12 +153,16 @@ export function renderLineChart(
         .map((item) => item.data.findIndex((value) => value))
         .filter((index) => index >= 0)
     const first_non_zero_index = d3.min(first_non_zero_indexes) ?? -1
-    const start_index = dayRange?.start ?? (first_non_zero_index === -1 ? 0 : first_non_zero_index)
+    const domain = boundedZoom(zoomRange, {
+        start: dayRange?.start ?? (first_non_zero_index === -1 ? 0 : first_non_zero_index),
+        end: dayRange?.end ?? Math.max(...chartSeries.map((item) => item.data.length)) - 1,
+    })
+    const start_index = domain.start
 
     const seriesData = chartSeries.map((item) => ({
         ...item,
         points: Array.from(item.data)
-            .slice(start_index, dayRange ? dayRange.end + 1 : undefined)
+            .slice(start_index, domain.end + 1)
             .map((value, index) => ({
                 value: value ?? 0,
                 date: new Date((start_index + index) * day_ms),
@@ -261,7 +273,7 @@ export function renderLineChart(
             .text((item) => item.label)
     }
 
-    if (showIsolatedPoints) {
+    if (showIsolatedPoints || domain.start === domain.end) {
         for (const item of seriesData) {
             plot.append("g")
                 .selectAll("circle")
@@ -337,6 +349,7 @@ export function renderLineChart(
         onPreviewTrendChange,
         onControllerReady,
         initialPinnedTrends,
+        initialTrends,
         onPinnedRangesChange,
         drawDefaultTrend: false,
     })
@@ -344,4 +357,11 @@ export function renderLineChart(
     axis.on("mouseover", () => tooltipShown.set(true)).on("mouseleave", () =>
         tooltipShown.set(false)
     )
+
+    if (onZoom && domain.end > domain.start)
+        return {
+            width,
+            height,
+            onSelect: (start: number, end: number) => onZoom(selectedZoomRange(domain, start, end)),
+        }
 }
