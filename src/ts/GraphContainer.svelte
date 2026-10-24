@@ -2,21 +2,33 @@
     import { getContext } from "svelte"
     import { readable, type Readable } from "svelte/store"
     import { GRAPH_CATEGORY_VISIBLE, placeFavoriteGraph } from "./graphFavorites"
+    import { graphIsVisible } from "./graphPreferences"
     import { i18n } from "./i18n"
-    import { favoriteGraphs } from "./stores"
+    import { favoriteGraphs, hiddenGraphs, showHiddenGraphs } from "./stores"
 
     export let graphId = ""
     const categoryVisible = getContext<Readable<boolean>>(GRAPH_CATEGORY_VISIBLE) ?? readable(true)
     const { pinned: pinnedGraphs } = favoriteGraphs
+    const { ids: hiddenIds } = hiddenGraphs
     let saving = false
-    let failed = false
+    let failure = ""
     $: pinned = $pinnedGraphs.includes(graphId)
-    $: visible = !graphId || $categoryVisible || pinned
+    $: hidden = $hiddenIds.includes(graphId)
+    $: visible =
+        !graphId ||
+        graphIsVisible(graphId, $categoryVisible, $pinnedGraphs, $hiddenIds, $showHiddenGraphs)
 
     async function togglePin() {
         if (saving) return
         saving = true
-        failed = !(await favoriteGraphs.toggle(graphId))
+        failure = (await favoriteGraphs.toggle(graphId)) ? "" : "graph-pin-save-failed"
+        saving = false
+    }
+
+    async function toggleHidden() {
+        if (saving) return
+        saving = true
+        failure = (await hiddenGraphs.toggle(graphId)) ? "" : "graph-hide-save-failed"
         saving = false
     }
 </script>
@@ -27,22 +39,37 @@
             class="container graph"
             class:pinnable={!!graphId}
             data-graph-id={graphId || undefined}
-            use:placeFavoriteGraph={{ id: graphId, favorites: favoriteGraphs }}
+            use:placeFavoriteGraph={{
+                id: graphId,
+                favorites: favoriteGraphs,
+                hidden: hiddenGraphs,
+            }}
         >
             {#if graphId}
-                <button
-                    class="graph-pin"
-                    class:pinned
-                    type="button"
-                    aria-pressed={pinned}
-                    aria-label={i18n(pinned ? "graph-unpin" : "graph-pin")}
-                    title={i18n(pinned ? "graph-unpin" : "graph-pin")}
-                    aria-busy={saving}
-                    on:click={togglePin}
-                >
-                    <span aria-hidden="true">{pinned ? "★" : "☆"}</span>
-                </button>
-                {#if failed}<small role="alert">{i18n("graph-pin-save-failed")}</small>{/if}
+                <div class="graph-actions">
+                    <button
+                        class="graph-hide"
+                        type="button"
+                        aria-busy={saving}
+                        title={i18n(hidden ? "graph-unhide-help" : "graph-hide-help")}
+                        on:click={toggleHidden}
+                    >
+                        {i18n(hidden ? "graph-unhide" : "graph-hide")}
+                    </button>
+                    <button
+                        class="graph-pin"
+                        class:pinned
+                        type="button"
+                        aria-pressed={pinned}
+                        aria-label={i18n(pinned ? "graph-unpin" : "graph-pin")}
+                        title={i18n(pinned ? "graph-unpin" : "graph-pin")}
+                        aria-busy={saving}
+                        on:click={togglePin}
+                    >
+                        <span aria-hidden="true">{pinned ? "★" : "☆"}</span>
+                    </button>
+                </div>
+                {#if failure}<small role="alert">{i18n(failure)}</small>{/if}
             {/if}
             <slot />
         </div>
@@ -54,10 +81,22 @@
     .graph-position {
         display: contents;
     }
-    .graph-pin {
+    .graph-actions {
         position: absolute;
         right: 0.7em;
         top: 0.7em;
+        display: flex;
+        align-items: center;
+        gap: 0.4em;
+        @media print {
+            display: none;
+        }
+    }
+    .graph-hide {
+        font-size: 0.8em;
+        cursor: pointer;
+    }
+    .graph-pin {
         background: transparent;
         border: 1px solid transparent;
         font-size: 1.4em;
@@ -122,6 +161,6 @@
         padding-bottom: 0.25em;
     }
     .pinnable :global(h1) {
-        padding-right: 1.5em;
+        padding-right: 4em;
     }
 </style>

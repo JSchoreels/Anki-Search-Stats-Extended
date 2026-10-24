@@ -16,14 +16,17 @@ test.each([
     [["misc:review-speed-trend"], false],
     [["misc:sxr-heatmap"], true],
     [["misc:ease-factors"], true],
-] as [string[], boolean][])(
+    [["misc:sxr-heatmap"], false, ["misc:sxr-heatmap"]],
+    [[], false, ["misc:sxr-heatmap", "misc:ease-factors"], true],
+] as [string[], boolean, string[]?, boolean?][])(
     "saved favorites %j request only their needed presets",
-    async (pinnedGraphs, presetsNeeded) => {
+    async (pinnedGraphs, presetsNeeded, hiddenGraphs = [], misc = false) => {
         const originalFetch = global.fetch,
             originalConfig = global.SSEconfig
         global.SSEconfig = {
-            categories: { misc: false, lapse: false, introduced: false },
+            categories: { misc, lapse: false, introduced: false },
             pinnedGraphs,
+            hiddenGraphs,
         } as never
         const requests: string[] = []
         const loadHistory = jest.fn()
@@ -44,6 +47,14 @@ test.each([
             expect(requests.some((url) => url.endsWith("fsrsPresetData"))).toBe(presetsNeeded)
             expect(requests.some((url) => url.endsWith("writeConfig"))).toBe(false)
             expect(loadHistory).not.toHaveBeenCalled()
+            if (hiddenGraphs.length) {
+                stores.showHiddenGraphs.set(true)
+                await flush()
+                expect(requests.some((url) => url.endsWith("fsrsPresetData"))).toBe(true)
+                expect(get(stores.hiddenGraphs.ids)).toEqual(hiddenGraphs)
+                expect(requests.some((url) => url.endsWith("writeConfig"))).toBe(false)
+                expect(loadHistory).not.toHaveBeenCalled()
+            }
             stores.cids.set(null)
         } finally {
             global.fetch = originalFetch

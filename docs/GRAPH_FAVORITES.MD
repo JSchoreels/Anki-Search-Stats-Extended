@@ -1,7 +1,7 @@
 # Favorite graphs
 
-Every standalone Search Stats Extended graph card has a star button beside its
-heading. Activate the star to move that card into **Favorite graphs**, above
+Every standalone Search Stats Extended graph card has a star button and a Hide
+button beside its heading. Activate the star to move that card into **Favorite graphs**, above
 Anki's built-in charts and below the native search and date-range controls.
 Activate it again to return the card to its original category and position.
 The empty Favorites section is hidden. Configuration, About, and the nested
@@ -15,11 +15,39 @@ start an extra calculation. Graph controls keep their existing persistence rules
 pinning does not save temporary settings such as the daily moving-average window.
 
 Favorite graphs remain accessible when their original category is collapsed or
-hidden through Graph Order. Other graphs in that category stay hidden. Unpinning
+hidden through Graph Order, unless the graph is individually hidden. Other graphs in that category stay hidden. Unpinning
 a graph from a hidden category removes it from Favorites; expand or show the
 category to access it again. Category reordering does not reorder Favorites.
 Favorites appear in the order they were pinned; removing and pinning a graph
 again places it last.
+
+## Hidden graphs
+
+**Hide** removes a graph from its category or Favorites. **Show hidden graphs (N)**
+appears above the native Anki charts, below the search controls. It temporarily
+reveals the saved hidden cards together in a **Hidden graphs** section above
+Favorites, including cards from collapsed or removed categories. Use **Hide hidden
+graphs (N)** to close that section without changing the saved choices.
+
+Each revealed card has an **Unhide** button to restore it permanently. A hidden
+favorite keeps its saved pin and returns to Favorites when restored. Other cards
+return to their original category; expand or show that category when necessary.
+Pinning a card while it is in Hidden graphs does not unhide it. Hidden status
+takes priority over pinning until the card is restored.
+
+The reveal toggle starts off on each Statistics visit and resets when the last
+hidden card is restored. The top toggle disappears when no hidden cards remain.
+Hiding a card unmounts its contents, following the same temporary-control rules
+as collapsing a category; it does not add persistence for its local graph options.
+Restoring a currently revealed card moves its live node and retains those controls.
+
+`hiddenGraphs` is a saved array of the same stable graph IDs as `pinnedGraphs`,
+initially empty. Hidden cards are shown in the order they were hidden. Loading
+the saved list and toggling the temporary reveal mode do not write configuration.
+Hide/Unhide actions serialize cumulative changes through `writeConfig`, and only
+change the UI after successful saves. Failed writes keep the previous state and
+display a retry message on the affected card. Pin and hidden preferences use the
+shared `graphPreferences` helper, with independent saved lists.
 
 ## Saved settings
 
@@ -48,30 +76,34 @@ card's controls. No review history, card data, or collection database is changed
 
 ## Layout and data ownership
 
-`GraphContainer` moves the live card to the Favorites grid while retaining its
+`GraphContainer` moves the live card to the Favorites or revealed-hidden grid while retaining its
 original location. The grid uses the same responsive columns as normal graph
 categories. Its host is inserted before native `.graphs-container`, including
 when Anki mounts that container after the add-on. Teardown removes relocated
 cards and the Favorites host without touching native charts or controls.
 
-A category with saved favorites remains mounted when hidden, but its unpinned
-graph contents do not mount. Graph-specific automatic requests also follow
+A category with visible favorites or revealed hidden graphs remains mounted even
+when collapsed or removed, but its other hidden graph contents do not mount.
+Graph-specific automatic requests also follow
 visibility: the Time Active matrix requests history only when that matrix is
 visible or pinned; current disagreement/retrievability requests run when either
 of those cards is visible or pinned. A pinned heatmap or ease-factor graph can
 load the resolved presets it needs even when Misc is collapsed. A pinned review
-speed graph does not request those presets. Existing explicit calculation gates
+speed graph does not request those presets. Individually hidden cards do not
+activate these requests until revealed; hiding also overrides a saved pin.
+Existing explicit calculation gates
 remain in place.
 
 ## Verification
 
-`test/graphFavorites.test.ts` covers saved order, serialized writes, failed saves,
+`test/graphFavorites.test.ts` and `test/hiddenGraphs.test.ts` cover saved order, serialized writes, failed saves,
 live-node and focus preservation, exact return positions, mount order, late native
 mounting, and teardown. `test/memorisedDemand.test.ts` checks that restored
-favorites load only the needed presets and do not write configuration or request
-review history on startup. The Svelte UI smoke flow exercises pin/unpin on the
-daily graphs, retained smoothing controls, category collapse/removal, saved pins,
-failure/retry, and native-page-safe teardown.
+favorites load only the needed presets, honor individual hiding, and do not write
+configuration or request review history on startup. The Svelte UI smoke flow
+exercises Hide, temporary reveal, Unhide, Favorites precedence, collapsed/removed
+categories, saved hidden choices, failure/retry, retained restored controls, and
+native-page-safe teardown.
 
 Build with `npm run build`, package with `./package.sh`, and install with
 `./copy_to_anki.sh`. Reopening Statistics loads frontend changes.

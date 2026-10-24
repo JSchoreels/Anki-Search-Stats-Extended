@@ -1,45 +1,15 @@
 import { derived, get, writable } from "svelte/store"
+import { createGraphPreference, type HiddenGraphs } from "./graphPreferences"
 
 export const GRAPH_CATEGORY_VISIBLE = Symbol("graph-category-visible")
 
-export function normalizePinnedGraphs(value: unknown): string[] {
-    return Array.isArray(value)
-        ? [
-              ...new Set(
-                  value.filter((id): id is string => typeof id === "string" && id.includes(":"))
-              ),
-          ]
-        : []
-}
-
-export function categoryHasPinnedGraphs(pinned: string[], category: string) {
-    return pinned.some((id) => id.startsWith(`${category}:`))
-}
-
 export function createGraphFavorites(initial: unknown, save: (ids: string[]) => Promise<void>) {
-    const pinned = writable(normalizePinnedGraphs(initial))
+    const { ids: pinned, toggle } = createGraphPreference(
+        initial,
+        save,
+        "Failed to save favorite graphs"
+    )
     const target = writable<HTMLElement | null>(null)
-    let writes = Promise.resolve()
-
-    function toggle(id: string): Promise<boolean> {
-        const result = writes.then(async () => {
-            const previous = get(pinned)
-            const next = previous.includes(id)
-                ? previous.filter((item) => item !== id)
-                : [...previous, id]
-            try {
-                await save(next)
-                pinned.set(next)
-                return true
-            } catch (error) {
-                console.warn("Failed to save favorite graphs", error)
-                return false
-            }
-        })
-        writes = result.then(() => undefined)
-        return result
-    }
-
     return { pinned, target, toggle }
 }
 
@@ -48,13 +18,15 @@ export type GraphFavorites = ReturnType<typeof createGraphFavorites>
 /** Move the live card, preserving its Svelte state and its original return position. */
 export function placeFavoriteGraph(
     node: HTMLElement,
-    options: { id: string; favorites: GraphFavorites }
+    options: { id: string; favorites: GraphFavorites; hidden: HiddenGraphs }
 ) {
     if (!options.id) return
     const home = document.createComment("graph-home")
     node.before(home)
     let id = options.id
     const { pinned, target } = options.favorites
+    const hiddenIds = options.hidden.ids
+    const hiddenTarget = options.hidden.target
     function move(parent: Node, next: Node | null) {
         if (node.parentNode === parent && node.nextSibling === next) return
         const focused = node.contains(document.activeElement)
@@ -63,7 +35,15 @@ export function placeFavoriteGraph(
         parent.insertBefore(node, next)
         focused?.focus({ preventScroll: true })
     }
-    function place([ids, destination]: [string[], HTMLElement | null]) {
+    function place([pins, favoritesTarget, hidden, hiddenDestination]: [
+        string[],
+        HTMLElement | null,
+        string[],
+        HTMLElement | null,
+    ]) {
+        const isHidden = hidden.includes(id)
+        const ids = isHidden ? hidden : pins
+        const destination = isHidden ? hiddenDestination : favoritesTarget
         const index = ids.indexOf(id)
         if (index >= 0 && destination) {
             const next = Array.from(destination.children).find(
@@ -74,11 +54,13 @@ export function placeFavoriteGraph(
             if (home.parentNode) move(home.parentNode, home.nextSibling)
         }
     }
-    const stop = derived([pinned, target], (values) => values).subscribe(place)
+    const stop = derived([pinned, target, hiddenIds, hiddenTarget], (values) => values).subscribe(
+        place
+    )
     return {
         update(next: typeof options) {
             id = next.id
-            place([get(pinned), get(target)])
+            place([get(pinned), get(target), get(hiddenIds), get(hiddenTarget)])
         },
         destroy() {
             stop()

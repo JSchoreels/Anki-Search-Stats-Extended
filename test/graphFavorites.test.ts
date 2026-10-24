@@ -1,20 +1,28 @@
 /** @jest-environment jsdom */
 
-import { get } from "svelte/store"
+import { get, writable } from "svelte/store"
 import {
     aboveNativeGraphs,
-    categoryHasPinnedGraphs,
     createGraphFavorites,
-    normalizePinnedGraphs,
     placeFavoriteGraph,
 } from "../src/ts/graphFavorites"
+
+import {
+    categoryHasGraphs,
+    createGraphPreference,
+    normalizeGraphIds,
+} from "../src/ts/graphPreferences"
+const hiddenSelection = () => ({
+    ...createGraphPreference([], async () => {}, "test hidden"),
+    target: writable<HTMLElement | null>(null),
+})
 
 afterEach(() => document.body.replaceChildren())
 
 test("saved graph IDs are unique, namespaced, and independent of localized titles", () => {
-    expect(normalizePinnedGraphs(undefined)).toEqual([])
+    expect(normalizeGraphIds(undefined)).toEqual([])
     expect(
-        normalizePinnedGraphs([
+        normalizeGraphIds([
             "fsrs:daily-logLoss",
             null,
             2,
@@ -24,8 +32,8 @@ test("saved graph IDs are unique, namespaced, and independent of localized title
             "rating:ratings",
         ])
     ).toEqual(["fsrs:daily-logLoss", "rating:ratings"])
-    expect(categoryHasPinnedGraphs(["fsrs:daily-logLoss"], "fsrs")).toBe(true)
-    expect(categoryHasPinnedGraphs(["fsrs:daily-logLoss"], "f")).toBe(false)
+    expect(categoryHasGraphs(["fsrs:daily-logLoss"], "fsrs")).toBe(true)
+    expect(categoryHasGraphs(["fsrs:daily-logLoss"], "f")).toBe(false)
 })
 
 test("pinning and unpinning serialize cumulative saves and retain their order on reload", async () => {
@@ -67,7 +75,11 @@ test("moving a card preserves its node, controls, focus, and exact return positi
     graph.querySelector("input")!.value = "14"
     const favorites = createGraphFavorites([], async () => {})
     favorites.target.set(destination)
-    const action = placeFavoriteGraph(graph, { id: "fsrs:daily-logLoss", favorites })!
+    const action = placeFavoriteGraph(graph, {
+        id: "fsrs:daily-logLoss",
+        favorites,
+        hidden: hiddenSelection(),
+    })!
     button.focus()
     await favorites.toggle("fsrs:daily-logLoss")
     expect(destination.firstElementChild).toBe(graph)
@@ -91,7 +103,10 @@ test("saved pin order wins over mount order and cards return home when the targe
         const node = document.createElement("section")
         node.dataset.graphId = id
         home.append(node)
-        return { node, action: placeFavoriteGraph(node, { id, favorites })! }
+        return {
+            node,
+            action: placeFavoriteGraph(node, { id, favorites, hidden: hiddenSelection() })!,
+        }
     })
     expect([...destination.children].map((node) => (node as HTMLElement).dataset.graphId)).toEqual([
         "rating:ratings",

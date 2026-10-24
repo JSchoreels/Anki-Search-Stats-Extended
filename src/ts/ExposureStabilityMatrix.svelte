@@ -177,7 +177,7 @@
 
 <style lang="scss">
     .matrix-heading {
-        padding-right: 2.5em;
+        padding-right: 6em;
         display: flex;
         flex-wrap: wrap;
         align-items: baseline;

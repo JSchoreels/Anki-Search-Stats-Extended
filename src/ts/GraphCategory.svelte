@@ -2,14 +2,16 @@
     import type { CATEGORIES } from "./categories"
     import { derived } from "svelte/store"
     import { setContext } from "svelte"
-    import { categoryHasPinnedGraphs, GRAPH_CATEGORY_VISIBLE } from "./graphFavorites"
-    import { favoriteGraphs, shownCategories } from "./stores"
+    import { GRAPH_CATEGORY_VISIBLE } from "./graphFavorites"
+    import { categoryHasGraphs } from "./graphPreferences"
+    import { favoriteGraphs, hiddenGraphs, showHiddenGraphs, shownCategories } from "./stores"
 
     // If falsy, Disables hide button
     export let hidden_title = ""
     export let config_name: keyof typeof CATEGORIES | "graphOrder"
 
     const { pinned: pinnedGraphs } = favoriteGraphs
+    const { ids: hiddenIds } = hiddenGraphs
     const categoryVisible = derived(
         shownCategories,
         (categories) =>
@@ -19,10 +21,14 @@
     setContext(GRAPH_CATEGORY_VISIBLE, categoryVisible)
     $: hidden = $shownCategories[config_name] === false
     $: removed = $shownCategories[config_name] === "removed"
-    $: hasFavorites = categoryHasPinnedGraphs($pinnedGraphs, config_name)
+    $: hasFavorites = categoryHasGraphs(
+        $pinnedGraphs.filter((id) => !$hiddenIds.includes(id)),
+        config_name
+    )
+    $: hasRevealed = $showHiddenGraphs && categoryHasGraphs($hiddenIds, config_name)
 </script>
 
-{#if !removed || hasFavorites}
+{#if !removed || hasFavorites || hasRevealed}
     {#if !removed}
         <label>
             <div class={`separator ${hidden ? "hidden" : ""}`}>
@@ -44,7 +50,7 @@
         </label>
     {/if}
     <div class="category" hidden={!$categoryVisible}>
-        {#if $categoryVisible || hasFavorites}
+        {#if $categoryVisible || hasFavorites || hasRevealed}
             <slot />
         {/if}
     </div>

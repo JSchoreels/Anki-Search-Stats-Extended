@@ -42,6 +42,7 @@
     ],
     "alwaysAllTime": false,
     "pinnedGraphs": [],
+    "hiddenGraphs": [],
     "exposureStabilityThresholds": {
         "repsLower": 5,
         "repsUpper": 30,

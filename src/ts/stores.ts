@@ -14,6 +14,7 @@ import { calculateCardDataPies } from "./CardDataPies"
 import { DEFAULT_ORDER, type SSEconfig, type SSEother } from "./config"
 import { exposureStabilityThresholds } from "./exposureStabilityMatrix"
 import { createGraphFavorites } from "./graphFavorites"
+import { createGraphPreference, graphIsVisible } from "./graphPreferences"
 import { latestResult } from "./latestResult"
 import type { MaturationHistory } from "./maturation"
 import {
@@ -62,6 +63,21 @@ export let shownCategories = writable(SSEconfig.categories ?? {})
 export const favoriteGraphs = createGraphFavorites(SSEconfig.pinnedGraphs, async (ids) => {
     await saveConfigValue("pinnedGraphs", ids)
     SSEconfig.pinnedGraphs = ids
+})
+export const hiddenGraphs = {
+    ...createGraphPreference(
+        SSEconfig.hiddenGraphs,
+        async (ids) => {
+            await saveConfigValue("hiddenGraphs", ids)
+            SSEconfig.hiddenGraphs = ids
+        },
+        "Failed to save hidden graphs"
+    ),
+    target: writable<HTMLElement | null>(null),
+}
+export const showHiddenGraphs = writable(false)
+hiddenGraphs.ids.subscribe((ids) => {
+    if (!ids.length) showHiddenGraphs.set(false)
 })
 export let autoRevlogStats = writable(SSEconfig.autoRevlogStats ?? false)
 export let autoMemorisedStats = writable(SSEconfig.autoMemorisedStats ?? false)
@@ -183,16 +199,28 @@ const needsFsrsData = derived(
         showMaturationStats,
         activeRetrievabilityRequested,
         favoriteGraphs.pinned,
+        hiddenGraphs.ids,
+        showHiddenGraphs,
     ],
-    ([$showRevlogs, $categories, $maturation, $activeR, $pinned]) =>
-        $activeR ||
-        $showRevlogs ||
-        ($categories.misc !== false && $categories.misc !== "removed") ||
-        $pinned.includes("misc:sxr-heatmap") ||
-        $pinned.includes("misc:ease-factors") ||
-        ($maturation &&
-            (($categories.introduced !== false && $categories.introduced !== "removed") ||
-                $pinned.some((id) => id.startsWith("introduced:maturation-"))))
+    ([$showRevlogs, $categories, $maturation, $activeR, $pinned, $hidden, $showHidden]) => {
+        const visible = (id: string, category: string) =>
+            graphIsVisible(
+                id,
+                $categories[category] !== false && $categories[category] !== "removed",
+                $pinned,
+                $hidden,
+                $showHidden
+            )
+        return (
+            $activeR ||
+            $showRevlogs ||
+            visible("misc:sxr-heatmap", "misc") ||
+            visible("misc:ease-factors", "misc") ||
+            ($maturation &&
+                (visible("introduced:maturation-counts", "introduced") ||
+                    visible("introduced:maturation-ratios", "introduced")))
+        )
+    }
 )
 export const fsrsPresetData = derived(
     [card_data, needsFsrsData],
