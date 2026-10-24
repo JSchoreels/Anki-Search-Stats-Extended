@@ -5,10 +5,14 @@
     import About from "./About.svelte"
     import GraphOrder from "./GraphOrder.svelte"
     import FavoriteGraphs from "./FavoriteGraphs.svelte"
+    import HiddenGraphs from "./HiddenGraphs.svelte"
+    import { onMount } from "svelte"
+    import { connectGraphVisibilityButton } from "./graphVisibilityButton"
 
     import { CATEGORIES } from "./categories"
 
     const { width, height } = defaultGraphBounds()
+    onMount(connectGraphVisibilityButton)
 </script>
 
 <div style:--graph-width={`${width}px`} style:--graph-height={`${height}px`}>
@@ -21,6 +25,7 @@
         <svelte:component this={component} />
     {/each}
     <About></About>
+    <HiddenGraphs />
 </div>
 
 <div

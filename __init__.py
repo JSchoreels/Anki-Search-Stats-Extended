@@ -15,6 +15,7 @@ from aqt import QDesktopServices, QUrl, gui_hooks, mw
 from aqt.stats import NewDeckStats
 
 from .fsrs_calibration import CalibrationService, missing_rwkv_validation_reviews
+from .graph_controls import add_hidden_graphs_button, handle_graph_visibility_command
 from .troubleshooting import add_export_button, handle_export_command
 
 addon_dir = Path(os.path.dirname(__file__))
@@ -41,6 +42,9 @@ def getAvailableLangs():
 
 
 def new_refresh(self: NewDeckStats):
+    hidden_graphs_button = getattr(self, "_sse_hidden_graphs_button", None)
+    if hidden_graphs_button is not None:
+        hidden_graphs_button.setEnabled(False)
     with (
         open(addon_dir / "stats.min.js", encoding="utf-8") as f
     ):  # Putting this inside the function allows you to rebuild the page without restarting anki
@@ -92,6 +96,7 @@ def new_refresh(self: NewDeckStats):
 NewDeckStats.refresh = wrap(NewDeckStats.refresh, new_refresh, "after")
 if hasattr(gui_hooks, "stats_dialog_will_show"):
     gui_hooks.stats_dialog_will_show.append(add_export_button)
+    gui_hooks.stats_dialog_will_show.append(add_hidden_graphs_button)
 
 # Search endpoint
 from anki.utils import int_time
@@ -151,6 +156,8 @@ post_handlers["currentCardDisagreement"] = current_card_disagreement
 
 
 def current_disagreement_bridge(self, cmd, _old):
+    if handle_graph_visibility_command(self, cmd):
+        return True
     if handle_export_command(self, cmd):
         return True
     if cmd.startswith("currentDisagreementBrowse:"):

@@ -1,5 +1,6 @@
 <script lang="ts">
     import GraphContainer from "./GraphContainer.svelte"
+    import GraphSvg from "./GraphSvg.svelte"
     import { i18n } from "./i18n"
     import type { CurrentDisagreementResponse } from "./currentDisagreementData"
     import { buildCurrentRetrievabilityBins } from "./currentRetrievabilityData"
@@ -14,7 +15,6 @@
     export let response: CurrentDisagreementResponse | null = null
     export let retry: () => void
 
-    let svg: SVGElement | undefined
     let colorByBucketShift = false
     let groupingModel: CurrentRetrievabilityModel = "fsrs"
     const shiftLegendRows = [
@@ -37,8 +37,6 @@
     $: membershipSeries = CURRENT_RETRIEVABILITY_SERIES.filter(
         ({ key }) => key === "both" || key === groupingModel
     )
-    $: if (svg)
-        renderCurrentRetrievabilityGraph(svg, bins, { colorByBucketShift, model: groupingModel })
 </script>
 
 <GraphContainer graphId="fsrs:current-retrievability">
@@ -52,21 +50,11 @@
         <fieldset class="grouping-model">
             <legend>{i18n("current-retrievability-group-by")}</legend>
             <label>
-                <input
-                    type="radio"
-                    name="current-retrievability-model"
-                    value="fsrs"
-                    bind:group={groupingModel}
-                />
+                <input type="radio" value="fsrs" bind:group={groupingModel} />
                 FSRS
             </label>
             <label>
-                <input
-                    type="radio"
-                    name="current-retrievability-model"
-                    value="rwkv"
-                    bind:group={groupingModel}
-                />
+                <input type="radio" value="rwkv" bind:group={groupingModel} />
                 RWKV
             </label>
         </fieldset>
@@ -74,7 +62,13 @@
             <input type="checkbox" bind:checked={colorByBucketShift} />
             {i18n("current-retrievability-color-by-shift")}
         </label>
-        <svg bind:this={svg}></svg>
+        <GraphSvg
+            render={(svg) =>
+                renderCurrentRetrievabilityGraph(svg, bins, {
+                    colorByBucketShift,
+                    model: groupingModel,
+                })}
+        />
         <div class="legend" class:shift-legend={colorByBucketShift}>
             {#if colorByBucketShift}
                 <span class="legend-title">{i18n("current-retrievability-shift-legend")}</span>

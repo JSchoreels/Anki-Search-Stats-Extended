@@ -120,6 +120,23 @@ test("saved pin order wins over mount order and cards return home when the targe
     expect(home.childNodes).toHaveLength(0)
 })
 
+test("a category copy stays at home while the managed favorite moves above the charts", () => {
+    const favorites = createGraphFavorites(["rating:ratings"], async () => {})
+    document.body.innerHTML =
+        '<div id="home"><section data-graph-id="rating:ratings"></section></div><div id="favorites"></div>'
+    const graph = document.querySelector<HTMLElement>("section")!
+    favorites.target.set(document.querySelector("#favorites"))
+    const action = placeFavoriteGraph(graph, {
+        id: "rating:ratings",
+        favorites,
+        hidden: hiddenSelection(),
+        relocate: false,
+    })
+    expect(action).toBeUndefined()
+    expect(graph.parentElement!.id).toBe("home")
+    expect(document.querySelector("#favorites")!.childElementCount).toBe(0)
+})
+
 test("Favorites sit below native search controls and above native graphs, with clean teardown", () => {
     document.body.innerHTML =
         '<main><form></form><div class="graphs-container"></div></main><div id="addon"><section id="favorites"></section></div>'

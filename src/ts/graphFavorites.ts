@@ -18,9 +18,9 @@ export type GraphFavorites = ReturnType<typeof createGraphFavorites>
 /** Move the live card, preserving its Svelte state and its original return position. */
 export function placeFavoriteGraph(
     node: HTMLElement,
-    options: { id: string; favorites: GraphFavorites; hidden: HiddenGraphs }
+    options: { id: string; favorites: GraphFavorites; hidden: HiddenGraphs; relocate?: boolean }
 ) {
-    if (!options.id) return
+    if (!options.id || options.relocate === false) return
     const home = document.createComment("graph-home")
     node.before(home)
     let id = options.id

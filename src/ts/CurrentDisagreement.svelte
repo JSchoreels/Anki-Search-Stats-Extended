@@ -1,6 +1,7 @@
 <script lang="ts">
     import { onDestroy } from "svelte"
     import GraphContainer from "./GraphContainer.svelte"
+    import GraphSvg from "./GraphSvg.svelte"
     import CurrentRetrievability from "./CurrentRetrievability.svelte"
     import { cids } from "./stores"
     import { i18n } from "./i18n"
@@ -12,7 +13,6 @@
     } from "./currentDisagreementData"
     import { renderCurrentDisagreementGraph } from "./CurrentDisagreementGraph"
 
-    let svg: SVGElement | undefined
     let response: CurrentDisagreementResponse | null = null
     let generation = 0
     let timer: ReturnType<typeof setTimeout> | undefined
@@ -38,7 +38,6 @@
     $: restart($visible ? $cids : null)
     $: bins = buildCurrentDisagreementBins(response?.rows ?? [])
     $: paired = bins.reduce((sum, bin) => sum + bin.cids.length, 0)
-    $: if (svg) renderCurrentDisagreementGraph(svg, bins)
     onDestroy(() => {
         generation++
         clearTimeout(timer)
@@ -55,7 +54,7 @@
             {i18n("current-disagreement-retry")}
         </button>
     {:else if paired}
-        <svg bind:this={svg}></svg>
+        <GraphSvg render={(svg) => renderCurrentDisagreementGraph(svg, bins)} />
     {:else}
         <p>{i18n("current-disagreement-no-data")}</p>
     {/if}
