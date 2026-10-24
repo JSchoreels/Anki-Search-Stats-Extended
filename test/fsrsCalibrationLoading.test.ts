@@ -201,7 +201,13 @@ test.each([
             expect(fsrs.bins.reduce((sum, bin) => sum + (bin?.count ?? 0), 0)).toBe(count)
             expect(get(stores.calibrationComparison)?.umPlus.count).toBe(paired)
             expect(get(stores.calibrationComparison)?.roc.count).toBe(paired)
-            // Daily RWKV eligibility remains independent of paired FSRS eligibility.
+            // Daily scores retain each model's own eligible held-out sample.
+            expect(
+                get(stores.calibrationComparison)?.fsrsDaily.reduce(
+                    (sum, day) => sum + day.count,
+                    0
+                )
+            ).toBe(paired)
             expect(get(stores.calibrationComparison)?.rwkvDaily[0].count).toBe(1)
             stores.cids.set(null)
         } finally {

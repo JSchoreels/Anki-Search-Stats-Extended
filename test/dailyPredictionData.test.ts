@@ -1,5 +1,5 @@
+import { buildDailyPredictionData, dailyPredictionAverage } from "../src/ts/dailyPredictionData"
 import { dayToMs } from "../src/ts/revlogGraphs"
-import { buildRwkvDailyData } from "../src/ts/rwkvDailyData"
 import { calibrationInputs } from "./calibrationInputs"
 
 const firstDay = 20000
@@ -12,7 +12,7 @@ const review = (day: number, index: number, actual: number) => ({
 test("daily scores use each review's probability and average recall on the identical sample", () => {
     const remembered = review(firstDay, 0, 1)
     const forgotten = review(firstDay, 1, 0)
-    const [point] = buildRwkvDailyData(
+    const [point] = buildDailyPredictionData(
         ...calibrationInputs([remembered, forgotten], {
             [remembered.revlogId]: 0.9,
             [forgotten.revlogId]: 0.5,
@@ -36,7 +36,7 @@ test("the same retention gap is more unexpected across more reviews while averag
         )
     )
     const predictions = Object.fromEntries(samples.map((sample) => [sample.revlogId, 0.9]))
-    const [small, large] = buildRwkvDailyData(...calibrationInputs(samples, predictions))
+    const [small, large] = buildDailyPredictionData(...calibrationInputs(samples, predictions))
 
     expect(small.standardizedGap).toBeCloseTo(-1.490712)
     expect(large.standardizedGap).toBeCloseTo(-4.714045)
@@ -45,7 +45,7 @@ test("the same retention gap is more unexpected across more reviews while averag
 
 test("confident mistakes and unlikely successes both increase surprise", () => {
     const samples = [0, 0, 1].map((actual, index) => review(firstDay + index, 0, actual))
-    const points = buildRwkvDailyData(
+    const points = buildDailyPredictionData(
         ...calibrationInputs(samples, {
             [samples[0].revlogId]: 0.99,
             [samples[1].revlogId]: 0.6,
@@ -73,19 +73,19 @@ test("missing and invalid predictions or outcomes are excluded, leaving sorted s
         [samples[6].revlogId]: 0.5,
     }
     expect(
-        buildRwkvDailyData(...calibrationInputs([...samples].reverse(), predictions)).map(
+        buildDailyPredictionData(...calibrationInputs([...samples].reverse(), predictions)).map(
             (point) => point.day
         )
     ).toEqual([firstDay, firstDay + 2])
-    expect(buildRwkvDailyData(...calibrationInputs(samples, {}))).toEqual([])
-    expect(buildRwkvDailyData(...calibrationInputs([], predictions))).toEqual([])
+    expect(buildDailyPredictionData(...calibrationInputs(samples, {}))).toEqual([])
+    expect(buildDailyPredictionData(...calibrationInputs([], predictions))).toEqual([])
 })
 
 test("deterministic probabilities retain exact recall and finite loss but have no standardized gap", () => {
     const samples = [1, 0, 0, 1].map((actual, index) =>
         review(firstDay + Math.floor(index / 2), index, actual)
     )
-    const [correct, wrong] = buildRwkvDailyData(
+    const [correct, wrong] = buildDailyPredictionData(
         ...calibrationInputs(
             samples,
             Object.fromEntries(
@@ -109,12 +109,12 @@ test("reviews on either side of Anki's 4am rollover belong to different days", (
     try {
         global.SSEother = { ...previous, rollover: 4 }
         jest.isolateModules(() => {
-            const { buildRwkvDailyData } = require("../src/ts/rwkvDailyData")
+            const { buildDailyPredictionData } = require("../src/ts/dailyPredictionData")
             // Match the add-on's current-offset convention even when this test runs in winter.
             const boundary = Date.UTC(2026, 8, 27, 4) + new Date().getTimezoneOffset() * 60000
             const before = boundary - 60000
             const after = boundary + 60000
-            const data = buildRwkvDailyData(
+            const data = buildDailyPredictionData(
                 ...calibrationInputs(
                     [
                         { revlogId: before, cardId: 1, actual: 1 },
@@ -133,4 +133,41 @@ test("reviews on either side of Anki's 4am rollover belong to different days", (
     } finally {
         global.SSEother = previous
     }
+})
+
+test("moving averages weight available days equally and use calendar-day windows", () => {
+    const samples = [
+        review(firstDay, 0, 1),
+        ...Array.from({ length: 9 }, (_, i) => review(firstDay + 1, i, 0)),
+        review(firstDay + 3, 0, 1),
+    ]
+    const data = buildDailyPredictionData(
+        ...calibrationInputs(
+            samples,
+            Object.fromEntries(
+                samples.map((sample) => [sample.revlogId, sample.actual ? 0.5 : 0.75])
+            )
+        )
+    )
+    expect(data.map((point) => point.logLoss)).toEqual([1, 2, 1])
+    expect(dailyPredictionAverage(data, "logLoss", 2)).toEqual([1, 1.5, 1])
+    expect(dailyPredictionAverage(data, "logLoss", 7)).toEqual([1, 1.5, 4 / 3])
+    expect(dailyPredictionAverage(data, "logLoss", 1)).toEqual([1, 2, 1])
+    expect(dailyPredictionAverage([], "logLoss", 7)).toEqual([])
+    expect(() => dailyPredictionAverage(data, "logLoss", 0)).toThrow(
+        "Invalid moving average window"
+    )
+})
+
+test("undefined standardized gaps are excluded from the average and remain gaps", () => {
+    const samples = [0, 1, 2, 10].map((offset) => review(firstDay + offset, 0, 1))
+    const data = buildDailyPredictionData(
+        ...calibrationInputs(
+            samples,
+            Object.fromEntries(
+                samples.map((sample, index) => [sample.revlogId, index === 1 ? 1 : 0.5])
+            )
+        )
+    )
+    expect(dailyPredictionAverage(data, "standardizedGap", 7)).toEqual([1, null, 1, 1])
 })

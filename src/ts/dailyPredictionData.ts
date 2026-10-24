@@ -1,7 +1,8 @@
 import { type CalibrationSamples, sampleCount } from "./calibrationSamples"
+import { dailyMovingAverage } from "./dailyMovingAverage"
 import { dayFromMs } from "./revlogGraphs"
 
-export type RwkvDailyPoint = {
+export type DailyPredictionPoint = {
     day: number
     count: number
     actualRecall: number
@@ -10,15 +11,28 @@ export type RwkvDailyPoint = {
     logLoss: number
 }
 
-export type RwkvDailyMetric = "standardizedGap" | "logLoss"
+export type DailyPredictionMetric = "standardizedGap" | "logLoss"
+
+export function dailyPredictionAverage(
+    data: DailyPredictionPoint[],
+    metric: DailyPredictionMetric,
+    days: number
+): (number | null)[] {
+    if (!data.length) return []
+    const firstDay = data[0].day
+    const values = new Array<number | null>(data[data.length - 1].day - firstDay + 1).fill(null)
+    for (const point of data) values[point.day - firstDay] = point[metric]
+    const averaged = dailyMovingAverage(values, days)
+    return data.map((point) => averaged[point.day - firstDay])
+}
 
 // Keep impossible outcomes finite without altering the probabilities used for R or variance.
 const MIN_OUTCOME_PROBABILITY = 1e-15
 
-export function buildRwkvDailyData(
+export function buildDailyPredictionData(
     samples: CalibrationSamples,
     predictions: Float64Array
-): RwkvDailyPoint[] {
+): DailyPredictionPoint[] {
     const days = new Map<
         number,
         { count: number; actual: number; predicted: number; variance: number; loss: number }

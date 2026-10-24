@@ -505,28 +505,33 @@ b-w-matrix = B-W Matrix
 predicted = Predicted
 actual = Actual
 
-rwkv-daily-standardizedGap = RWKV Daily Recall Gap
-rwkv-daily-logLoss = RWKV Daily Surprise
-rwkv-daily-standardizedGap-axis = Standardized gap
-rwkv-daily-logLoss-axis = Bits per review
-rwkv-daily-standardizedGap-value = Standardized gap: {$value}
-rwkv-daily-logLoss-value = Average surprise: {$value} bits per review
-rwkv-daily-actual = Actual R: {$value}%
-rwkv-daily-predicted = Predicted R: {$value}%
-rwkv-daily-count = Eligible reviews: {$count}
-rwkv-daily-gap-unavailable = unavailable (zero predicted variance)
-rwkv-daily-no-data = No eligible RWKV review predictions are available for this search and date range.
-rwkv-daily-standardizedGap-help =
+daily-prediction-standardizedGap = Daily Recall Gap
+daily-prediction-logLoss = Daily Surprise
+daily-prediction-standardizedGap-axis = Standardized gap
+daily-prediction-logLoss-axis = Bits per review
+daily-prediction-standardizedGap-value = Standardized gap: {$value}
+daily-prediction-logLoss-value = Average surprise: {$value} bits per review
+daily-prediction-actual = Actual R: {$value}%
+daily-prediction-predicted = Predicted R: {$value}%
+daily-prediction-count = Eligible reviews: {$count}
+daily-prediction-gap-unavailable = unavailable (zero predicted variance)
+daily-prediction-no-data = No eligible {$model} review predictions are available for this search and date range.
+daily-prediction-moving-average = Moving average
+daily-prediction-average-days = Moving average window in days
+daily-prediction-average-value = {$days}-day average: {$value}
+daily-prediction-average-series = {$label} ({$days}-day average)
+daily-prediction-average-help = Colored lines show the trailing moving average; grey lines and dots show the daily values (FSRS solid, RWKV dashed). Each available day has equal weight. Missing days and unavailable scores are excluded and remain gaps.
+daily-prediction-standardizedGap-help =
     Actual recalls minus expected recalls, divided by the expected standard deviation: sum(actual - predicted) / sqrt(sum(predicted × (1 - predicted))).
-    Positive values mean you remembered more than RWKV expected; negative values mean less. Further from zero means a more unexpected day, accounting for review count and prediction confidence.
+    Positive values mean you remembered more than the model expected; negative values mean less. Further from zero means a more unexpected day, accounting for review count and prediction confidence.
     This assumes independent outcomes, so use it as a diagnostic score rather than an exact significance test. The gap is unavailable when predicted variance is zero.
-rwkv-daily-logLoss-help =
+daily-prediction-logLoss-help =
     Average log loss in bits per review: -log2(predicted R) when remembered, or -log2(1 - predicted R) when forgotten.
     Higher means more surprise, especially for confident mistakes. Surprising successes and failures both contribute instead of cancelling out.
     This also reflects the uncertainty of the cards reviewed; it is not a pure calibration score.
-rwkv-daily-sample-help =
-    Uses the same eligible review sample as RWKV Calibration, grouped by Anki day. Again counts as forgotten; Hard, Good and Easy count as remembered.
-    Same-day repetitions and excluded calibration reviews are omitted. Only reviews with eligible RWKV predictions are included. Days without eligible predictions remain gaps.
+daily-prediction-sample-help =
+    Uses each model's eligible held-out review predictions, grouped by Anki day. Again counts as forgotten; Hard, Good and Easy count as remembered.
+    Same-day repetitions and excluded calibration reviews are omitted. FSRS and RWKV use their available predictions independently, so their review counts can differ. Days without eligible predictions remain gaps. FSRS replay estimates are excluded.
 
 show-question = Show?
 increase-date-range = Increase date range

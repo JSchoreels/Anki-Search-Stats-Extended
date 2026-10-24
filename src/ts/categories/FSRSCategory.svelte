@@ -12,7 +12,7 @@
     import UMPlus from "../UMPlus.svelte"
     import ROC from "../ROC.svelte"
     import CurrentDisagreement from "../CurrentDisagreement.svelte"
-    import RwkvDailyGraph from "../RwkvDailyGraph.svelte"
+    import DailyPredictionGraph from "../DailyPredictionGraph.svelte"
     import ForgettingCurve from "../ForgettingCurve.svelte"
     import TimeMachineScroll from "../TimeMachineScroll.svelte"
     import { i18n, i18n_bundle, i18n_pattern } from "../i18n"
@@ -40,9 +40,9 @@
     import type { PieDatum } from "../pie"
     import _ from "lodash"
     import * as d3 from "d3"
-    import type { RwkvDailyMetric } from "../rwkvDailyData"
+    import type { DailyPredictionMetric } from "../dailyPredictionData"
 
-    const rwkvDailyMetrics: RwkvDailyMetric[] = ["standardizedGap", "logLoss"]
+    const dailyMetrics: DailyPredictionMetric[] = ["standardizedGap", "logLoss"]
 
     $: truncated = $searchLimit !== 0
     $: realScroll = -Math.abs($scroll)
@@ -162,8 +162,7 @@
               : ($fsrsCalibrationStats?.warnings ?? [])
     $: umPlusData = $calibrationComparison?.umPlus
     $: rocData = $calibrationComparison?.roc
-    $: rwkvDailyData = $calibrationComparison?.rwkvDaily ?? []
-    // UM+ and ROC only use held-out cached FSRS predictions, never the replay fallback.
+    // Comparisons and daily FSRS scores use held-out cached predictions, never replay.
     $: fsrsHeldOutMissing =
         !!$fsrsCalibrationStats &&
         $fsrsCalibrationStats.cachedPredictionCount === 0 &&
@@ -302,23 +301,25 @@
         </ul>
     </CalibrationGraphContainer>
     <CurrentDisagreement />
-    {#each rwkvDailyMetrics as metric}
+    {#each dailyMetrics as metric}
         <CalibrationGraphContainer>
-            <h1 slot="title">{i18n(`rwkv-daily-${metric}`)}</h1>
+            <h1 slot="title">{i18n(`daily-prediction-${metric}`)}</h1>
             <div slot="graph" class="calibration-panel">
-                {#if $rwkvCalibrationStats?.warnings.length}
-                    <Warning always>{$rwkvCalibrationStats.warnings.join(" ")}</Warning>
+                {#if umPlusWarnings.length}
+                    <Warning always>{umPlusWarnings.join(" ")}</Warning>
                 {/if}
                 {#if $calibrationComparison === null}
                     <div class="calibration-message">{i18n("loading")}</div>
-                {:else if rwkvDailyData.length}
-                    <RwkvDailyGraph data={rwkvDailyData} {metric} />
                 {:else}
-                    <div class="calibration-message">{i18n("rwkv-daily-no-data")}</div>
+                    <DailyPredictionGraph
+                        fsrs={$calibrationComparison.fsrsDaily}
+                        rwkv={$calibrationComparison.rwkvDaily}
+                        {metric}
+                    />
                 {/if}
             </div>
-            <p>{i18n(`rwkv-daily-${metric}-help`)}</p>
-            <p>{i18n("rwkv-daily-sample-help")}</p>
+            <p>{i18n(`daily-prediction-${metric}-help`)}</p>
+            <p>{i18n("daily-prediction-sample-help")}</p>
         </CalibrationGraphContainer>
     {/each}
     <MemorisedGraphContainer>

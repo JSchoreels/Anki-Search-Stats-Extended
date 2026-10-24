@@ -5,6 +5,7 @@ import {
 } from "./calibrationPredictions"
 import type { CalibrationSamples } from "./calibrationSamples"
 import { selectCalibrationSamples } from "./calibrationSampleSelection"
+import { buildDailyPredictionData } from "./dailyPredictionData"
 import { calculateMaturationHistory } from "./maturation"
 import {
     buildCalibrationBinCounts,
@@ -14,7 +15,6 @@ import {
 } from "./MemorisedBar"
 import { calculateRevlogStats } from "./revlogGraphs"
 import { buildRocData } from "./rocData"
-import { buildRwkvDailyData } from "./rwkvDailyData"
 import { buildUmPlusData } from "./umPlusData"
 
 async function calibrationPredictions(
@@ -32,7 +32,8 @@ function comparison(samples: CalibrationSamples, fsrs: Float64Array, rwkv: Float
     return {
         umPlus: buildUmPlusData(samples, fsrs, rwkv),
         roc: buildRocData(samples, fsrs, rwkv),
-        rwkvDaily: buildRwkvDailyData(samples, rwkv),
+        fsrsDaily: buildDailyPredictionData(samples, fsrs),
+        rwkvDaily: buildDailyPredictionData(samples, rwkv),
     }
 }
 

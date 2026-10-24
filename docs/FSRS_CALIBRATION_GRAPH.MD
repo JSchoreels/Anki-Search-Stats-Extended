@@ -105,7 +105,7 @@ validated response uses replay through the `calibrationReplay` task. Graph
 calculations continue to accept only finite probabilities within `[0, 1]`.
 
 Once history and both calibration stores load, the `comparison` worker task
-builds UM+, ROC, and RWKV daily results, with replay-only FSRS predictions
+builds UM+, ROC, and both models' daily results, with replay-only FSRS predictions
 replaced by `NaN` (see the ROC section). The page displays loading until this
 result is ready and cancels obsolete computations through `latestResult`.
 Warnings remain logged on the main thread and displayed by the existing panels.
@@ -475,10 +475,13 @@ counts unchanged. Toggling shift coloring changes neither bar totals nor card
 positions. Both controls are local to this chart; they do not persist settings
 or request new predictions.
 
-The Card Retrievability comparison is followed by **RWKV Daily Recall Gap** and
-**RWKV Daily Surprise**. These reuse eligible RWKV review predictions without
-requiring paired FSRS predictions. Their calculations, daily grouping, and
-interpretation are documented in [Daily RWKV surprise](RWKV_DAILY_SURPRISE.MD).
+The Card Retrievability comparison is followed by **Daily Recall Gap** and
+**Daily Surprise**. Each has an independent FSRS / RWKV / Both selector and an
+editable moving average, enabled initially for 7 days, with raw daily values in
+grey. The graphs reuse each model's eligible predictions independently; FSRS
+uses held-out cached predictions, without the calibration replay fallback. Their
+calculations, daily grouping, and interpretation are documented in
+[Daily FSRS and RWKV surprise](RWKV_DAILY_SURPRISE.MD).
 
 ## FSRS vs RWKV UM+
 
@@ -583,7 +586,8 @@ FSRS calibration graph, but the comparison receives `NaN` FSRS predictions:
 replaying current parameters, usually optimised on these same reviews, would
 favour FSRS against held-out RWKV predictions. Both panels show loading while
 FSRS calibration generation is queued or running, then a held-out-unavailable
-message if the cache stays empty. RWKV daily graphs are unaffected.
+message if the cache stays empty. Daily RWKV scores remain available independently; daily FSRS scores use the
+same held-out cache boundary.
 
 ## Calibration Confidence Intervals
 

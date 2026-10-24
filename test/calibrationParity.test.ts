@@ -1,11 +1,11 @@
 import { alignPredictions, calibrationSamplesFrom } from "../src/ts/calibrationSamples"
+import { buildDailyPredictionData } from "../src/ts/dailyPredictionData"
 import {
     buildCalibrationBinCounts,
     buildCalibrationBins,
     withConfidenceIntervals,
 } from "../src/ts/MemorisedBar"
 import { buildRocData, type RocData } from "../src/ts/rocData"
-import { buildRwkvDailyData } from "../src/ts/rwkvDailyData"
 import { runStatsTaskLocally } from "../src/ts/statsTasks"
 import { buildUmPlusData, type UmPlusData } from "../src/ts/umPlusData"
 import { buildCalibrationBins as referenceBins } from "./reference/calibrationBins"
@@ -76,7 +76,7 @@ test.each([0, 1, 4_096, 20_000])(
         expect(withoutRocUncertainty(buildRocData(samples, fsrs, rwkv))).toEqual(
             referenceRoc(list, fsrsMap, rwkvMap)
         )
-        expect(buildRwkvDailyData(samples, rwkv)).toEqual(referenceDaily(list, rwkvMap))
+        expect(buildDailyPredictionData(samples, rwkv)).toEqual(referenceDaily(list, rwkvMap))
         const comparison = runStatsTaskLocally("comparison", [samples, fsrs, rwkv])
         expect({
             ...comparison,
@@ -85,6 +85,7 @@ test.each([0, 1, 4_096, 20_000])(
         }).toEqual({
             umPlus: referenceUmPlus(list, fsrsMap, rwkvMap),
             roc: referenceRoc(list, fsrsMap, rwkvMap),
+            fsrsDaily: referenceDaily(list, fsrsMap),
             rwkvDaily: referenceDaily(list, rwkvMap),
         })
     }
