@@ -92,3 +92,7 @@ Changing the bar width, scroll, success filter, same-day filter, or mean/median
 option recalculates those displayed statistics from the same selected samples.
 Widths use whole source buckets. Retrievability series retain all 100 one-percent
 buckets so sparse/highest-value data cannot shift the axis labels.
+
+Shared bar charts also provide a draggable scrollbar directly below the x-axis,
+synchronized with the numeric Scroll field. It uses the same offset and grouped
+sample calculations described above. See [Bar chart navigation](BAR_NAVIGATION.MD).

@@ -51,6 +51,8 @@ include-re-introduced = Include re-introduced
 include-filtered = Include Filtered
 bar-width = Bar Width
 scroll = Scroll
+bar-x-axis-scroll = Scroll x-axis
+bar-x-axis-scroll-help = Drag to move along the x-axis. Use the arrow keys for one bucket, or Home and End to reach either end.
 as-ratio = As Ratio
 
 loading = Loading...

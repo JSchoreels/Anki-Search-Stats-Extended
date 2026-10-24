@@ -1,6 +1,7 @@
 <script lang="ts">
     import _ from "lodash"
     import {
+        barDateLabeler,
         limitArea,
         limit_area_width,
         type BarChart,
@@ -20,7 +21,12 @@
         trendRangeFromAxisDatum,
         visibleTrendRangeFromAxisData,
     } from "./trendAxis"
-    import { leftAlignedBarWindowEnd } from "./barScrollable"
+    import {
+        barScrollExtent,
+        barScrollOffset,
+        barScrollPosition,
+        leftAlignedBarWindowEnd,
+    } from "./barScrollable"
     import {
         createGraphTrendSessionState,
         type GraphTrendSessionState,
@@ -30,6 +36,7 @@
         removeTrendFromAll,
     } from "./trendSession"
     import { i18n } from "./i18n"
+    import { defaultGraphBounds } from "./graph"
 
     export let data: BarChart
     export let extraRender = (chart: ExtraRenderInput<BarChart>) => {}
@@ -64,6 +71,27 @@
         leftmost,
         realOffset == 0 || realOffset >= data.data.length ? undefined : realOffset
     )
+
+    $: scrollExtent = barScrollExtent(
+        data.data,
+        left_aligned,
+        trend_date_axis || data.columnLabeler === barDateLabeler
+    )
+    $: scrollMaximum = Math.max(0, scrollExtent - bins * binSize)
+    $: scrollPosition = barScrollPosition(offset, scrollMaximum, left_aligned)
+    $: scrollThumbWidth = `${(100 * bins * binSize) / (bins * binSize + scrollMaximum)}%`
+    // Align with the plot inside Bar's viewBox (-40 … width + 10).
+    const axisViewWidth = defaultGraphBounds().width + 50
+    const axisScrollLeftMargin = `${(100 * 40) / axisViewWidth}%`
+    const axisScrollWidth = `${(100 * defaultGraphBounds().width) / axisViewWidth}%`
+
+    function scrollAxis(event: Event) {
+        offset = barScrollOffset(
+            (event.currentTarget as HTMLInputElement).valueAsNumber,
+            scrollMaximum,
+            left_aligned
+        )
+    }
 
     let trendSession: GraphTrendSessionState = createGraphTrendSessionState()
     let migrated_temporal_store_keys = new Set<string>()
@@ -272,6 +300,23 @@
 
 <Bar data={{ ...data, data: bars, barWidth: binSize }} extraRender={inner_extra_render}></Bar>
 
+{#if scrollMaximum > 0}
+    <input
+        class="x-axis-scroll"
+        type="range"
+        min="0"
+        max={scrollMaximum}
+        step="1"
+        value={scrollPosition}
+        on:input={scrollAxis}
+        aria-label={i18n("bar-x-axis-scroll")}
+        title={i18n("bar-x-axis-scroll-help")}
+        style:--scroll-thumb-width={scrollThumbWidth}
+        style:margin-left={axisScrollLeftMargin}
+        style:width={axisScrollWidth}
+    />
+{/if}
+
 {#if trendSession.visibleTrends.length || trendSession.previewTrend !== undefined}
     <TrendValue
         trends={trendSession.visibleTrends}
@@ -301,5 +346,47 @@
 
     input {
         min-width: 5em;
+    }
+
+    .x-axis-scroll {
+        appearance: none;
+        min-width: 0;
+        height: 0.9em;
+        margin-top: 0.25em;
+        margin-bottom: 0.75em;
+        padding: 0;
+        border: 0;
+        border-radius: 0.5em;
+        background: color-mix(in srgb, var(--fg) 8%, transparent);
+        cursor: pointer;
+    }
+
+    .x-axis-scroll::-webkit-slider-thumb {
+        appearance: none;
+        width: max(24px, var(--scroll-thumb-width));
+        height: 0.9em;
+        border-radius: 0.5em;
+        background: color-mix(in srgb, var(--fg) 40%, transparent);
+        cursor: grab;
+    }
+
+    .x-axis-scroll::-moz-range-thumb {
+        width: max(24px, var(--scroll-thumb-width));
+        height: 0.9em;
+        border: 0;
+        border-radius: 0.5em;
+        background: color-mix(in srgb, var(--fg) 40%, transparent);
+        cursor: grab;
+    }
+
+    .x-axis-scroll:focus-visible {
+        outline: 2px solid currentColor;
+        outline-offset: 3px;
+    }
+
+    @media print {
+        .x-axis-scroll {
+            display: none;
+        }
     }
 </style>

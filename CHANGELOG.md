@@ -4,6 +4,8 @@
 
 ### User facing changes
 
+- Drag the new horizontal scrollbar below a bar chart's x-axis to move through its range. It stays synchronized with the numeric Scroll field, follows the axis direction, and supports arrow keys and Home/End.
+
 - Star favorite add-on graphs to keep them above Anki's built-in charts, below the search controls. Favorites remember their order, retain their current controls when moved, and remain accessible when their original category is collapsed or hidden.
 
 - Add FSRS to Daily Recall Gap and Daily Surprise, with independent FSRS / RWKV / Both controls. Show a configurable 7-day moving average by default and fade the daily lines and dots to grey; disable smoothing to restore the colored daily values.
@@ -43,6 +45,8 @@
 - Identify unloaded data in troubleshooting exports instead of reporting misleading zero counts. Cancelling export writes no file.
 
 ### Technical details
+
+- Add shared bar-navigation bounds and bidirectional offset conversion without changing grouping, aggregation, trends, or browse actions. Date navigation skips leading epoch padding while retaining quiet days; scrollbar navigation reuses loaded data and adds no requests or settings.
 
 - Store Favorites in the ordered `pinnedGraphs` add-on setting using stable graph IDs and serialized configuration writes. Relocate live graph cards instead of duplicating them, and keep automatic matrix, current-retrievability, and preset requests scoped to visible or pinned graphs.
 

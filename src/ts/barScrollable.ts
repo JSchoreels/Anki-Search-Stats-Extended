@@ -11,6 +11,29 @@ export function effectiveBarDataLength(data: ScrollableBarDatum[]) {
     return 0
 }
 
+/** Scroll across the loaded domain; calendar padding before the first review is omitted. */
+export function barScrollExtent(
+    data: ScrollableBarDatum[],
+    leftAligned: boolean,
+    dateAxis: boolean
+) {
+    if (leftAligned) return effectiveBarDataLength(data)
+    if (!dateAxis) return data.length
+    const first = data.findIndex((bar) =>
+        (bar?.values ?? []).some((value) => Number.isFinite(value) && value !== 0)
+    )
+    return first < 0 ? 0 : data.length - first
+}
+
+export function barScrollPosition(offset: number, maximum: number, leftAligned: boolean) {
+    const distance = Math.min(maximum, Number.isFinite(offset) ? Math.abs(offset) : 0)
+    return leftAligned ? distance : maximum - distance
+}
+
+export function barScrollOffset(position: number, maximum: number, leftAligned: boolean) {
+    return leftAligned ? position : maximum - position
+}
+
 export function leftAlignedBarWindowEnd(
     leftmost: number,
     requestedEnd: number,
