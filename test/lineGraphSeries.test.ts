@@ -62,6 +62,25 @@ test("bounded daily ratio charts preserve gaps and show isolated values with per
     expect(svg.querySelector("path.line-series")?.getAttribute("d")).not.toContain("NaN")
 })
 
+test("signed line charts place a zero reference between positive and negative values", () => {
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg")
+    renderLineChart(svg, [Number.NaN, Number.NaN, -5, 10], "Rate", {
+        bounds: { width: 270, height: 150 },
+        formatY: (value) => value.toString(),
+        includeNegative: true,
+    })
+
+    const zero = svg.querySelector<SVGLineElement>(".line-zero")
+    const zeroY = Number(zero?.getAttribute("y1"))
+    expect(zero).not.toBeNull()
+    expect(zeroY).toBeGreaterThan(0)
+    expect(zeroY).toBeLessThan(150)
+    expect(svg.querySelector("path.line-series")?.getAttribute("d")).not.toMatch(/NaN|Infinity/)
+    expect(svg.querySelectorAll(".hover-bar")).toHaveLength(2)
+    svg.querySelectorAll(".hover-bar")[0].dispatchEvent(new MouseEvent("mouseover"))
+    expect(get(tooltip).text).toContain("Rate: -5")
+})
+
 test("percentile ceiling uses daily maxima across series and ignores unavailable days", () => {
     const named = (data: number[]) => ({ label: "Cards", color: "steelblue", data })
     expect(

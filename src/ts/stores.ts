@@ -86,6 +86,7 @@ export type CalibrationMode = "fsrs" | "rwkv" | "both"
 export let calibrationMode = writable<CalibrationMode>("fsrs")
 export type MemorisedMode = "fsrs" | "rwkv" | "both"
 export let memorisedMode = writable<MemorisedMode>("fsrs")
+export let memorisedPerReviewMode = writable<MemorisedMode>("fsrs")
 export let categoryOrder = writable([
     ...(SSEconfig.categoryOrder ?? []).filter((c) => DEFAULT_ORDER.includes(c)),
     ...DEFAULT_ORDER.filter((c) => !(SSEconfig.categoryOrder ?? []).includes(c)),
@@ -418,12 +419,18 @@ function anchoredRwkvDays(values: number[] | undefined, firstDay: number | null 
     return result
 }
 
+const rwkvMemorisedRequested = derived(
+    [memorisedMode, memorisedPerReviewMode],
+    ([$memorisedMode, $memorisedPerReviewMode]) =>
+        $memorisedMode !== "fsrs" || $memorisedPerReviewMode !== "fsrs"
+)
+
 derived(
-    [memorisedMode, cids, showMemorisedStats],
-    ([$memorisedMode, $cids, $requested], set: (value: RwkvMemorisedStats | null) => void) => {
+    [rwkvMemorisedRequested, cids, showMemorisedStats],
+    ([$rwkvRequested, $cids, $requested], set: (value: RwkvMemorisedStats | null) => void) => {
         const generation = ++rwkvMemorisedGeneration
         set(null)
-        if ($memorisedMode === "fsrs" || !$cids || !$requested) {
+        if (!$rwkvRequested || !$cids || !$requested) {
             return
         }
 

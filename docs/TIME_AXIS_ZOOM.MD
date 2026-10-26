@@ -7,7 +7,8 @@ Escape before releasing to cancel. **Reset zoom** restores the original view;
 further drags can narrow the range again.
 
 This applies to all add-on calendar-axis line graphs (including Memorised,
-load history and daily maturation), their candlestick Trend views, daily
+Net Memorised per 100 Reviews, load history and daily maturation), their
+candlestick Trend views, daily
 FSRS/RWKV Recall Gap and Surprise, date-axis scrollable bars, Future Due, and
 the hourly intraday Due and daily hourly breakdown charts. Numeric distributions and Anki's built-in charts
 retain their existing interactions.
@@ -34,6 +35,10 @@ continues to contribute. Missing daily
 predictions remain gaps, including a zoom consisting entirely of missing days.
 Both model series use the same selected domain while retaining their own
 samples and tooltips.
+
+Net Memorised per 100 Reviews also calculates its rolling ratio before zooming.
+Its signed vertical axis includes a stronger zero reference so days where
+collection-wide forgetting outweighed gains remain visible.
 
 Bar and candlestick selections snap to whole displayed buckets and keep the
 current Bar Width and aggregation method. Zooming reduces the visible bucket

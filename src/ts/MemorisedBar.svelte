@@ -3,21 +3,15 @@
     import GraphContainer from "./GraphContainer.svelte"
     import type { LineChartSeries } from "./LineGraph"
     import LineOrCandlestick from "./LineOrCandlestick.svelte"
-    import {
-        binSize,
-        cancelRwkvMemorisedComputation,
-        memorisedMode,
-        memorised_stats,
-        rwkvMemorisedStats,
-    } from "./stores"
+    import { binSize, memorisedMode, memorised_stats, rwkvMemorisedStats } from "./stores"
     import { emptyTrendSelectionState, type TrendInfo, type TrendSelectionState } from "./trend"
     import TrendValue from "./TrendValue.svelte"
     import { matrix } from "./matrix"
     import { i18n, i18n_pattern } from "./i18n"
     import { TREND_PERSISTENCE_KEYS } from "./trendPersistenceKeys"
     import MemorisedCalculator from "./MemorisedCalculator.svelte"
-    import Warning from "./Warning.svelte"
     import { plottableDailyMovingAverage } from "./dailyMovingAverage"
+    import MemorisedSourceControls from "./MemorisedSourceControls.svelte"
 
     export let burden: number[] = []
 
@@ -206,31 +200,10 @@
                       ]
                     : undefined
     }
-
-    $: rwkvProgressPercent =
-        $rwkvMemorisedStats?.total && $rwkvMemorisedStats.total > 0
-            ? Math.min(
-                  100,
-                  Math.round((100 * $rwkvMemorisedStats.current) / $rwkvMemorisedStats.total)
-              )
-            : 0
 </script>
 
 {#if $memorised_stats}
-    <div class="memorised-source" role="group" aria-label={i18n("memorised-source")}>
-        <label>
-            <input type="radio" value="fsrs" bind:group={$memorisedMode} />
-            {i18n("memorised-source-fsrs")}
-        </label>
-        <label>
-            <input type="radio" value="rwkv" bind:group={$memorisedMode} />
-            {i18n("memorised-source-rwkv")}
-        </label>
-        <label>
-            <input type="radio" value="both" bind:group={$memorisedMode} />
-            {i18n("memorised-source-both")}
-        </label>
-    </div>
+    <MemorisedSourceControls bind:mode={$memorisedMode} {supportsRwkv} />
     <div class="memorised-average-controls">
         <label>
             <input type="checkbox" bind:checked={smoothing} />
@@ -252,36 +225,6 @@
             </label>
         </form>
     </div>
-    {#if !supportsRwkv && $memorisedMode !== "fsrs"}
-        <Warning always>{i18n("memorised-rwkv-stability-unavailable")}</Warning>
-    {/if}
-    {#if $memorisedMode !== "fsrs" && $rwkvMemorisedStats?.error}
-        <Warning always>{$rwkvMemorisedStats.error}</Warning>
-    {:else if $memorisedMode !== "fsrs" && $rwkvMemorisedStats && !$rwkvMemorisedStats.done}
-        <div class="rwkv-progress">
-            <div>
-                {$rwkvMemorisedStats.phase === "checkpointing"
-                    ? i18n("memorised-rwkv-saving-checkpoint")
-                    : i18n("memorised-rwkv-progress", {
-                          current: $rwkvMemorisedStats.current,
-                          total: $rwkvMemorisedStats.total,
-                          percent: rwkvProgressPercent,
-                      })}
-            </div>
-            <progress
-                max={$rwkvMemorisedStats.total || 1}
-                value={$rwkvMemorisedStats.current}
-                aria-label={i18n("memorised-rwkv-progress-label")}
-            ></progress>
-            <button
-                type="button"
-                disabled={$rwkvMemorisedStats.phase === "checkpointing"}
-                on:click={() => cancelRwkvMemorisedComputation()}
-            >
-                {i18n("cancel")}
-            </button>
-        </div>
-    {/if}
     <LineOrCandlestick
         data={displayData}
         series={displaySeries}
@@ -340,13 +283,6 @@
 {/if}
 
 <style>
-    .memorised-source {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 0.75rem;
-        margin-bottom: 0.5rem;
-    }
-
     .memorised-average-controls {
         display: flex;
         flex-wrap: wrap;
@@ -368,21 +304,5 @@
 
     .average-help {
         font-size: 0.85em;
-    }
-
-    .rwkv-progress {
-        display: grid;
-        grid-template-columns: minmax(0, 1fr) auto;
-        gap: 0.35rem 0.75rem;
-        align-items: center;
-        margin: 0.5rem 0;
-    }
-
-    .rwkv-progress div {
-        grid-column: 1 / -1;
-    }
-
-    .rwkv-progress progress {
-        width: 100%;
     }
 </style>

@@ -6,6 +6,7 @@
     import GraphCategory from "../GraphCategory.svelte"
     import Warning from "../Warning.svelte"
     import MemorisedBar from "../MemorisedBar.svelte"
+    import MemorisedPerReview from "../MemorisedPerReview.svelte"
     import MemorisedGraphContainer from "../MemorisedGraphContainer.svelte"
     import FsrsCalibration from "../FSRSCalibration.svelte"
     import FsrsCalibrationStatus from "../FsrsCalibrationStatus.svelte"
@@ -193,6 +194,14 @@
             <br />
             {i18n("memorised-help2")}
         </p>
+    </MemorisedGraphContainer>
+    <MemorisedGraphContainer graphId="fsrs:memorised-per-review">
+        <h1 slot="title">{i18n("memorised-per-review")}</h1>
+        <MemorisedPerReview slot="graph" />
+        {#if truncated}
+            <Warning>{i18n("memorised-truncated-warning")}</Warning>
+        {/if}
+        <p>{i18n("memorised-per-review-help")}</p>
     </MemorisedGraphContainer>
     <CalibrationGraphContainer graphId="fsrs:calibration">
         <h1 slot="title">

@@ -115,6 +115,7 @@ export function renderLineChart(
         formatY = undefined,
         showIsolatedPoints = false,
         yPercentile = undefined,
+        includeNegative = false,
     }: {
         onTrendsChange?: (trends: DrawnTrend[]) => void
         onPreviewTrendChange?: (trend: TrendLine) => void
@@ -130,6 +131,7 @@ export function renderLineChart(
         formatY?: (value: number) => string
         showIsolatedPoints?: boolean
         yPercentile?: number
+        includeNegative?: boolean
     } = {}
 ) {
     if (!svg) {
@@ -152,7 +154,11 @@ export function renderLineChart(
     const chartSeries =
         series && series.length > 0 ? series : [{ label, data: values, color: "steelblue" }]
     const first_non_zero_indexes = chartSeries
-        .map((item) => item.data.findIndex((value) => value))
+        .map((item) =>
+            item.data.findIndex(
+                (value) => Number.isFinite(value) && (includeNegative || value !== 0)
+            )
+        )
         .filter((index) => index >= 0)
     const first_non_zero_index = d3.min(first_non_zero_indexes) ?? -1
     const domain = boundedZoom(zoomRange, {
@@ -194,11 +200,16 @@ export function renderLineChart(
 
     const lastDay = d3.max(allPoints.map((point) => point.day)) ?? start_index
     const capped = yPercentile !== undefined && yPercentile < 100
-    const yMax = capped
+    const finiteValues = allPoints
+        .map((point) => point.value)
+        .filter((value) => Number.isFinite(value))
+    let yMax = capped
         ? lineChartPercentileCeiling(chartSeries, start_index, lastDay, yPercentile)
-        : Math.max(dayRange ? 1 : 0, d3.max(allPoints.map((point) => point.value)) || 0)
+        : Math.max(dayRange && !includeNegative ? 1 : 0, d3.max(finiteValues) || 0)
+    const yMin = includeNegative ? Math.min(0, d3.min(finiteValues) || 0) : 0
+    if (yMax === yMin) yMax = yMin === 0 ? 1 : 0
 
-    const y = d3.scaleLinear().domain([yMax, 0]).range([0, height])
+    const y = d3.scaleLinear().domain([yMax, yMin]).range([0, height])
     if (!capped) y.nice()
 
     const axis = d3
@@ -208,6 +219,16 @@ export function renderLineChart(
 
     const tickCount = bounds ? Math.max(2, Math.min(7, Math.floor(width / 90))) : 7
     gridLines(axis, x.ticks(tickCount).map(x), y.ticks().map(y), { width, height })
+    if (includeNegative && yMin < 0 && yMax > 0) {
+        axis.append("line")
+            .attr("class", "line-zero")
+            .attr("x1", 0)
+            .attr("x2", width)
+            .attr("y1", y(0))
+            .attr("y2", y(0))
+            .attr("stroke", "currentColor")
+            .attr("opacity", 0.3)
+    }
 
     const yAxis = d3.axisLeft(y)
     if (formatY) yAxis.tickFormat((value) => formatY(Number(value)))

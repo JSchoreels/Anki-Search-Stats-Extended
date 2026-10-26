@@ -37,6 +37,7 @@
     export let formatY: ((value: number) => string) | undefined = undefined
     export let showIsolatedPoints = false
     export let yPercentile: number | undefined = undefined
+    export let includeNegative = false
     export let trend_data: DrawnTrend[] = []
     export let current_trend: TrendLine = undefined
     export let removeTrend: (id: number) => void = () => {}
@@ -111,6 +112,7 @@
             formatY,
             showIsolatedPoints,
             yPercentile,
+            includeNegative,
         })
     }
 </script>

@@ -8,6 +8,7 @@ export const TREND_PERSISTENCE_KEYS = {
         cards: "memorised:cards",
         cardsByBurden: "memorised:cards-by-burden",
         retrievability: "memorised:retrievability",
+        perReview: "memorised:per-review",
     },
     loadTrend: {
         burden: "load-trend:burden",

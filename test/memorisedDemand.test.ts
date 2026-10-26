@@ -227,7 +227,8 @@ test.each(["comparison", "memorised", "automatic", "empty cache"])(
         try {
             const stores = await import("../src/ts/stores")
             stores.cids.set([10])
-            stores.memorisedMode.set("both")
+            if (mode === "memorised") stores.memorisedPerReviewMode.set("both")
+            else stores.memorisedMode.set("both")
             if (mode !== "automatic") stores.requestFsrsStats(mode === "memorised")
             await flush()
             expect(tasks).toContain("calibrationSamples")
@@ -244,6 +245,7 @@ test.each(["comparison", "memorised", "automatic", "empty cache"])(
             }
             expect(tasks.filter((task) => task === "memorised")).toHaveLength(1)
             expect(get(stores.showMemorisedStats)).toBe(true)
+            expect(requests.some((url) => url.endsWith("startRwkvMemorisedHistory"))).toBe(true)
             stores.cids.set(null)
         } finally {
             global.fetch = originalFetch

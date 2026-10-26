@@ -4,6 +4,8 @@
 
 ### User facing changes
 
+- Add a separate Net Memorised per 100 Reviews graph with independent FSRS / RWKV / Both selection. Count every answer or repetition once, show negative days when collection-wide forgetting exceeds gains, and use a configurable 7-day rolling ratio by default while retaining the raw daily line.
+
 - Smooth every Memorised view with a configurable 7-day moving average by default. Colored FSRS/RWKV averages remain comparable while faint grey lines retain the daily estimates; disable smoothing to restore the original daily lines.
 
 - Hide individual add-on graph cards, including favorites, and reveal them with Show hidden graphs at the top of Statistics. Unhide restores a card to its category or saved Favorite position. Hidden choices are remembered between visits.
@@ -49,6 +51,8 @@
 - Identify unloaded data in troubleshooting exports instead of reporting misleading zero counts. Cancelling export writes no file.
 
 ### Technical details
+
+- Compute net Memorised efficiency as 100 times summed daily estimate changes divided by summed review counts, preserving no-review and unavailable-model gaps. Add signed line-chart domains with a zero reference and keep the new graph's source choice independent while sharing the existing RWKV history job.
 
 - Reuse the shared trailing calendar-day average before Memorised zoom cropping, retain raw-series tooltips and FSRS/RWKV line distinctions, and keep smoothing local to the current Statistics view without changing replay or cache data.
 

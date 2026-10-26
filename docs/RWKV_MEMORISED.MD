@@ -31,6 +31,23 @@ series. Averaging uses the complete series before zoom crops the displayed date
 range. The controls are local to the current Statistics view and do not alter
 the estimates, caches, or replay requests.
 
+The separate **Net Memorised per 100 Reviews** graph compares the day-to-day
+change in the collection-wide Memorised estimate with the number of answers in
+the selected history. Every answer or repetition counts once; manual reset
+markers do not. Positive values mean the estimate grew, while negative values
+mean forgetting across the collection outweighed the gains. FSRS, RWKV, and
+Both are selected independently from the main Memorised graph.
+
+Its default seven-day line is a rolling ratio:
+
+`100 × sum(daily Memorised changes) / sum(daily reviews)`
+
+This is intentionally not an average of daily ratios. A day without reviews is
+left as a gap, but its collection-wide memory decay contributes to a later
+rolling window. The faint grey line retains the raw daily ratio. The metric is
+a collection-level efficiency indicator, not a causal estimate of how much the
+specific cards answered that day were learned.
+
 ## Computation boundary
 
 The add-on starts and polls the adapted Anki build through these add-on media
@@ -103,5 +120,7 @@ the latest periodic checkpoint. Neither replaces the last completed cache.
   `/Users/jschoreels/workspace/anki/qt/aqt/rwkv_srs_benchmark.py`
 - Add-on cache and HTTP endpoints: `__init__.py`
 - Polling stores and graph state: `src/ts/stores.ts`
-- Source selector and progress UI: `src/ts/MemorisedBar.svelte`
+- Shared source selector and progress UI: `src/ts/MemorisedSourceControls.svelte`
+- Net-per-review graph and rolling-ratio calculation:
+  `src/ts/MemorisedPerReview.svelte` and `src/ts/memorisedPerReview.ts`
 - Shared trailing-average helper: `src/ts/dailyMovingAverage.ts`

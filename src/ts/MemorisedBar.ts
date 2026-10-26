@@ -342,6 +342,7 @@ export async function getMemorisedDays(
     let totalCards: number[] = []
     let noteRetrievabilityDays: number[] = []
     let stable_retrievability_days: number[] = []
+    let reviewCountsByDay: number[] = []
 
     let cardCounts = cards.reduce(
         (p, c) => {
@@ -557,7 +558,13 @@ export async function getMemorisedDays(
     let day_young_ratio_s90: number[] = []
     let review_days: number[] = []
     const uniqueCids = new Set<number>()
-    for (const review of revlogs) uniqueCids.add(review.cid)
+    for (const review of revlogs) {
+        uniqueCids.add(review.cid)
+        if (review.ease <= 0 || review.id > snapshotNow) continue
+        const reviewDay = dayFromMs(review.id)
+        if (reviewDay <= snapshotToday)
+            reviewCountsByDay[reviewDay] = (reviewCountsByDay[reviewDay] ?? 0) + 1
+    }
     let probabilities: Record<number, number[]> = {}
     const timeSamples = new TimeBucketBuilder(6)
     for (const cid of uniqueCids) probabilities[cid] = [1]
@@ -847,6 +854,7 @@ export async function getMemorisedDays(
     console.timeEnd("Calculating memorised days")
     return {
         retrievabilityDays,
+        reviewCountsByDay,
         totalCards,
         noteRetrievabilityDays,
         stable_retrievability_days,

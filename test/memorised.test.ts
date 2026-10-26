@@ -174,6 +174,24 @@ test("Day Timings", async () => {
     expect(memorised[16]).not.toBe(0)
 })
 
+test("review counts include every answer and exclude manual reset markers", async () => {
+    const card = new RevlogBuilder()
+    const first = card.review(-3000, 3) as Revlog
+    const second = card.review(1, 3) as Revlog
+    const reset = card.review(0, 0) as Revlog
+    const afterReset = card.review(-3000, 1) as Revlog
+    const cram = { ...afterReset, id: afterReset.id + 1, ease: 2, type: 3 } as Revlog
+    const stats = await getMemorisedDaysForTest(
+        [first, second, reset, afterReset, cram],
+        [{ ...card.card(), did: 1 } as any],
+        configs,
+        mappings
+    )
+
+    expect(stats.reviewCountsByDay[dayFromMs(first.id)]).toBe(2)
+    expect(stats.reviewCountsByDay[dayFromMs(reset.id)]).toBe(2)
+})
+
 // https://github.com/open-spaced-repetition/fsrs-rs/blob/a7aaa40498bae992e0be0a1e9a1380e4992aee60/src/inference.rs#L433-L465
 test("Stability", async () => {
     const card = new RevlogBuilder()
