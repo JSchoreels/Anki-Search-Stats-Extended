@@ -38,7 +38,10 @@ samples and tooltips.
 
 Net Memorised per 100 Reviews also calculates its rolling ratio before zooming.
 Its signed vertical axis includes a stronger zero reference so days where
-collection-wide forgetting outweighed gains remain visible.
+collection-wide forgetting outweighed gains remain visible. With its moving
+average enabled, the vertical axis follows the colored rolling-ratio series;
+the grey raw series remains hoverable without expanding the scale. Disabling
+the average restores raw-value scaling.
 
 Bar and candlestick selections snap to whole displayed buckets and keep the
 current Bar Width and aggregation method. Zooming reduces the visible bucket

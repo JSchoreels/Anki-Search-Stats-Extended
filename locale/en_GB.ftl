@@ -361,7 +361,7 @@ memorised-per-review = Net Memorised per 100 Reviews
 memorised-per-review-axis = Net memorised cards per 100 reviews
 memorised-per-review-help =
     Shows the net change in estimated memorised cards for every 100 answers in the selected review history. Each answer or repetition counts once; manual reset markers do not. Positive values mean remembered knowledge grew, while negative values mean collection-wide forgetting exceeded the gains. This is a collection-level efficiency measure, not a causal estimate for only the cards reviewed that day.
-memorised-per-review-average-help = The colored line divides the window's total net memorised change by its total reviews; it does not average daily ratios. Grey lines show the raw daily values (FSRS solid, RWKV dashed). Days without reviews remain gaps, while their memory decay still contributes to later rolling windows.
+memorised-per-review-average-help = The colored line divides the window's total net memorised change by its total reviews; it does not average daily ratios. The vertical scale follows the colored averages. Grey lines show the raw daily values (FSRS solid, RWKV dashed) without stretching that scale; disable Moving average to inspect them at full scale. Days without reviews remain gaps, while their memory decay still contributes to later rolling windows.
 memorised-per-review-no-data = No reviewed days with consecutive Memorised estimates are available for this source yet.
 memorised-rwkv-progress = Computing RWKV history: {$current} / {$total} predictions — {$percent}%
 memorised-rwkv-progress-label = RWKV Memorised history progress

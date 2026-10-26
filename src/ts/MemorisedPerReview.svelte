@@ -101,6 +101,7 @@
                       strokeDasharray: dailyDash,
                       renderOrder: -1,
                       legend: false,
+                      includeInYAxis: false,
                   })),
               ]
             : sources.map(({ label, raw, color }) => ({ label, data: raw, color }))

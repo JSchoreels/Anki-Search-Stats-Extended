@@ -46,6 +46,37 @@ test("renderLineChart draws faint daily underlays behind averaged series", () =>
     expect(svg.textContent).not.toContain("RWKV (daily)")
 })
 
+test("display-only daily outliers do not flatten averaged lines", () => {
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg")
+    const formatY = (value: number) => value.toLocaleString("en-GB")
+
+    renderLineChart(svg, [], "Rate", {
+        bounds: { width: 270, height: 150 },
+        formatY,
+        includeNegative: true,
+        series: [
+            { label: "FSRS (7-day average)", data: [-100, 200], color: "steelblue" },
+            {
+                label: "FSRS (daily)",
+                data: [50_000, -5_000],
+                color: "#888",
+                legend: false,
+                includeInYAxis: false,
+            },
+        ],
+    })
+
+    expect(svg.textContent).not.toContain("50,000")
+    expect(svg.querySelector(".line-plot")?.getAttribute("clip-path")).toMatch(
+        /^url\(#sse-line-clip-/
+    )
+    const zeroY = Number(svg.querySelector(".line-zero")?.getAttribute("y1"))
+    expect(zeroY).toBeGreaterThan(0)
+    expect(zeroY).toBeLessThan(150)
+    svg.querySelectorAll(".hover-bar")[0].dispatchEvent(new MouseEvent("mouseover"))
+    expect(get(tooltip).text).toContain("FSRS (daily): 50,000")
+})
+
 test("bounded daily ratio charts preserve gaps and show isolated values with percentage axes", () => {
     const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg")
     const values = [999, NaN, 200, NaN]

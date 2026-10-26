@@ -57,6 +57,7 @@ export type LineChartSeries = {
     strokeDasharray?: string
     renderOrder?: number
     legend?: boolean
+    includeInYAxis?: boolean
 }
 
 let nextClipId = 0
@@ -200,11 +201,20 @@ export function renderLineChart(
 
     const lastDay = d3.max(allPoints.map((point) => point.day)) ?? start_index
     const capped = yPercentile !== undefined && yPercentile < 100
-    const finiteValues = allPoints
+    const yAxisSeries = seriesData.filter((item) => item.includeInYAxis !== false)
+    const yAxisValues = yAxisSeries
+        .flatMap((item) => item.points)
         .map((point) => point.value)
         .filter((value) => Number.isFinite(value))
+    const useAllSeriesForYAxis = yAxisValues.length === 0
+    const finiteValues = useAllSeriesForYAxis
+        ? allPoints.map((point) => point.value).filter((value) => Number.isFinite(value))
+        : yAxisValues
+    const yAxisChartSeries = useAllSeriesForYAxis
+        ? chartSeries
+        : chartSeries.filter((item) => item.includeInYAxis !== false)
     let yMax = capped
-        ? lineChartPercentileCeiling(chartSeries, start_index, lastDay, yPercentile)
+        ? lineChartPercentileCeiling(yAxisChartSeries, start_index, lastDay, yPercentile)
         : Math.max(dayRange && !includeNegative ? 1 : 0, d3.max(finiteValues) || 0)
     const yMin = includeNegative ? Math.min(0, d3.min(finiteValues) || 0) : 0
     if (yMax === yMin) yMax = yMin === 0 ? 1 : 0
@@ -240,7 +250,8 @@ export function renderLineChart(
         .call(d3.axisBottom(x).ticks(tickCount))
 
     const plot = axis.append("g").attr("class", "line-plot")
-    if (capped) {
+    const clipsSeriesOutsideYAxis = !useAllSeriesForYAxis && yAxisSeries.length < seriesData.length
+    if (capped || clipsSeriesOutsideYAxis) {
         const clipId = `sse-line-clip-${nextClipId++}`
         d3.select(svg)
             .append("defs")

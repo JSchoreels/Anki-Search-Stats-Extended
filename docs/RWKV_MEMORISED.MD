@@ -46,7 +46,10 @@ This is intentionally not an average of daily ratios. A day without reviews is
 left as a gap, but its collection-wide memory decay contributes to a later
 rolling window. The faint grey line retains the raw daily ratio. The metric is
 a collection-level efficiency indicator, not a causal estimate of how much the
-specific cards answered that day were learned.
+specific cards answered that day were learned. While averaging is enabled, the
+vertical scale follows the colored rolling ratios so an extreme raw day with few
+reviews cannot flatten the useful lines. The grey daily values remain available
+in tooltips; disabling averaging restores their full-range scale.
 
 ## Computation boundary
 
