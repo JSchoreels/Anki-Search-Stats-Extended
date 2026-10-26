@@ -42,6 +42,7 @@
     data = Array.from(data)
 
     $: processed_data = cumulative ? mapIndividualToCumulativeData(data) : data
+    $: visibleSeriesCount = series?.filter((item) => item.legend !== false).length ?? 0
 
     let candlestick_data: CandlestickGraph
     $: if (processed_data)
@@ -77,7 +78,7 @@
     }
 </script>
 
-{#if !series || series.length <= 1}
+{#if visibleSeriesCount <= 1}
     <GraphTypeSelector>
         <label>
             <input type="radio" value="total" bind:group={type} />

@@ -4,6 +4,8 @@
 
 ### User facing changes
 
+- Smooth every Memorised view with a configurable 7-day moving average by default. Colored FSRS/RWKV averages remain comparable while faint grey lines retain the daily estimates; disable smoothing to restore the original daily lines.
+
 - Hide individual add-on graph cards, including favorites, and reveal them with Show hidden graphs at the top of Statistics. Unhide restores a card to its category or saved Favorite position. Hidden choices are remembered between visits.
 
 - Drag the new horizontal scrollbar below a bar chart's x-axis to move through its range. It stays synchronized with the numeric Scroll field, follows the axis direction, and supports arrow keys and Home/End.
@@ -47,6 +49,8 @@
 - Identify unloaded data in troubleshooting exports instead of reporting misleading zero counts. Cancelling export writes no file.
 
 ### Technical details
+
+- Reuse the shared trailing calendar-day average before Memorised zoom cropping, retain raw-series tooltips and FSRS/RWKV line distinctions, and keep smoothing local to the current Statistics view without changing replay or cache data.
 
 - Persist the `hiddenGraphs` ID list through the same serialized preference helper as Favorites. Centralize card visibility so hidden status overrides pinning and automatic per-graph requests until the temporary reveal mode is enabled; restore hidden cards even from collapsed or removed categories.
 

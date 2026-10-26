@@ -28,8 +28,9 @@ its zoom. Reset returns to the current unzoomed navigation values.
 
 Line graphs crop the visible calendar domain and fit the vertical axis to
 the visible data. Maturation's existing percentile setting still applies to
-visible selected curves. Moving averages are calculated before cropping, so
-history preceding the selected dates continues to contribute. Missing daily
+visible selected curves. Memorised, maturation, and daily prediction moving
+averages are calculated before cropping, so history preceding the selected dates
+continues to contribute. Missing daily
 predictions remain gaps, including a zoom consisting entirely of missing days.
 Both model series use the same selected domain while retaining their own
 samples and tooltips.

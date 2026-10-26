@@ -21,6 +21,31 @@ test("renderLineChart overlays progressive named series", () => {
     expect(svg.textContent).toContain("RWKV")
 })
 
+test("renderLineChart draws faint daily underlays behind averaged series", () => {
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg")
+
+    renderLineChart(svg, [], "Cards", {
+        series: [
+            { label: "RWKV (7-day average)", data: [1, 2, 3], color: "seagreen" },
+            {
+                label: "RWKV (daily)",
+                data: [1, 3, 2],
+                color: "#888",
+                opacity: 0.35,
+                strokeDasharray: "3 3",
+                renderOrder: -1,
+                legend: false,
+            },
+        ],
+    })
+
+    const paths = [...svg.querySelectorAll<SVGPathElement>("path.line-series")]
+    expect(paths.map((path) => path.getAttribute("stroke"))).toEqual(["#888", "seagreen"])
+    expect(paths[0].getAttribute("stroke-dasharray")).toBe("3 3")
+    expect(paths[0].getAttribute("opacity")).toBe("0.35")
+    expect(svg.textContent).not.toContain("RWKV (daily)")
+})
+
 test("bounded daily ratio charts preserve gaps and show isolated values with percentage axes", () => {
     const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg")
     const values = [999, NaN, 200, NaN]

@@ -17,6 +17,7 @@
     import { TREND_PERSISTENCE_KEYS } from "./trendPersistenceKeys"
     import MemorisedCalculator from "./MemorisedCalculator.svelte"
     import Warning from "./Warning.svelte"
+    import { plottableDailyMovingAverage } from "./dailyMovingAverage"
 
     export let burden: number[] = []
 
@@ -35,6 +36,18 @@
     }
 
     let memorised_type: MemorisedType = MemorisedType.RETRIEVABILITY
+    let smoothing = true
+    let averageDays = 7
+    let draftAverageDays: number | undefined = averageDays
+
+    function applyAverageDays() {
+        if (
+            typeof draftAverageDays === "number" &&
+            Number.isSafeInteger(draftAverageDays) &&
+            draftAverageDays >= 1
+        )
+            averageDays = draftAverageDays
+    }
 
     $: retrievabilityDays = Array.from($memorised_stats?.retrievabilityDays || [])
     $: stable_retrievability_days = Array.from($memorised_stats?.stable_retrievability_days || [])
@@ -102,53 +115,96 @@
     let supportsRwkv = true
 
     $: {
-        let fsrsData: number[]
-        let rwkvData: number[]
+        let rawFsrsData: number[]
+        let rawRwkvData: number[]
         supportsRwkv = true
         if (memorised_type === MemorisedType.NOTES) {
-            fsrsData = Array.from($memorised_stats?.noteRetrievabilityDays ?? [])
-            rwkvData = Array.from($rwkvMemorisedStats?.noteRetrievabilityDays ?? [])
+            rawFsrsData = Array.from($memorised_stats?.noteRetrievabilityDays ?? [])
+            rawRwkvData = Array.from($rwkvMemorisedStats?.noteRetrievabilityDays ?? [])
             displayLabel = i18n("notes")
             displayTrendKey = TREND_PERSISTENCE_KEYS.memorised.notes
         } else if (memorised_type === MemorisedType.CARDS_BY_BURDEN) {
-            fsrsData = cardsByBurdenByDays
-            rwkvData = rwkvCardsByBurdenByDays
+            rawFsrsData = cardsByBurdenByDays
+            rawRwkvData = rwkvCardsByBurdenByDays
             displayLabel = i18n("cards-by-burden")
             displayTrendKey = TREND_PERSISTENCE_KEYS.memorised.cardsByBurden
         } else if (memorised_type === MemorisedType.AVERAGE) {
-            fsrsData = average_r
-            rwkvData = rwkv_average_r
+            rawFsrsData = average_r
+            rawRwkvData = rwkv_average_r
             displayLabel = i18n("retrievability")
             displayTrendKey = TREND_PERSISTENCE_KEYS.memorised.retrievability
         } else if (memorised_type === MemorisedType.STABLE_RETRIEVABILITY) {
-            fsrsData = stable_retrievability_days
-            rwkvData = []
+            rawFsrsData = stable_retrievability_days
+            rawRwkvData = []
             supportsRwkv = false
             displayLabel = i18n("cards-and-stability")
             displayTrendKey = TREND_PERSISTENCE_KEYS.memorised.stableRetrievability
         } else {
-            fsrsData = retrievabilityDays
-            rwkvData = Array.from($rwkvMemorisedStats?.retrievabilityDays ?? [])
+            rawFsrsData = retrievabilityDays
+            rawRwkvData = Array.from($rwkvMemorisedStats?.retrievabilityDays ?? [])
             displayLabel = i18n("cards")
             displayTrendKey = TREND_PERSISTENCE_KEYS.memorised.cards
         }
 
+        const fsrsData = smoothing
+            ? plottableDailyMovingAverage(rawFsrsData, averageDays)
+            : rawFsrsData
+        const rwkvData = smoothing
+            ? plottableDailyMovingAverage(rawRwkvData, averageDays)
+            : rawRwkvData
+        const averageSeries = (label: string, data: number[], color: string) => ({
+            label: i18n("memorised-average-series", { label, days: averageDays }),
+            data,
+            color,
+            strokeWidth: 2.4,
+        })
+        const dailySeries = (
+            label: string,
+            data: number[],
+            strokeDasharray?: string
+        ): LineChartSeries => ({
+            label: i18n("memorised-daily-series", { label }),
+            data,
+            color: "#888",
+            opacity: 0.35,
+            strokeWidth: 1.5,
+            strokeDasharray,
+            renderOrder: -1,
+            legend: false,
+        })
+        const fsrsLabel =
+            $memorisedMode === "fsrs" || !supportsRwkv
+                ? displayLabel
+                : i18n("memorised-source-fsrs")
+        const rwkvLabel = i18n("memorised-source-rwkv")
+
         displayData = supportsRwkv && $memorisedMode === "rwkv" ? rwkvData : fsrsData
         displaySeries =
             supportsRwkv && $memorisedMode === "both"
-                ? [
-                      { label: i18n("memorised-source-fsrs"), data: fsrsData, color: "steelblue" },
-                      { label: i18n("memorised-source-rwkv"), data: rwkvData, color: "seagreen" },
-                  ]
+                ? smoothing
+                    ? [
+                          averageSeries(fsrsLabel, fsrsData, "steelblue"),
+                          averageSeries(rwkvLabel, rwkvData, "seagreen"),
+                          dailySeries(fsrsLabel, rawFsrsData),
+                          dailySeries(rwkvLabel, rawRwkvData, "3 3"),
+                      ]
+                    : [
+                          { label: fsrsLabel, data: fsrsData, color: "steelblue" },
+                          { label: rwkvLabel, data: rwkvData, color: "seagreen" },
+                      ]
                 : supportsRwkv && $memorisedMode === "rwkv"
-                  ? [
-                        {
-                            label: i18n("memorised-source-rwkv"),
-                            data: rwkvData,
-                            color: "seagreen",
-                        },
-                    ]
-                  : undefined
+                  ? smoothing
+                      ? [
+                            averageSeries(rwkvLabel, rwkvData, "seagreen"),
+                            dailySeries(rwkvLabel, rawRwkvData, "3 3"),
+                        ]
+                      : [{ label: rwkvLabel, data: rwkvData, color: "seagreen" }]
+                  : smoothing
+                    ? [
+                          averageSeries(fsrsLabel, fsrsData, "steelblue"),
+                          dailySeries(fsrsLabel, rawFsrsData),
+                      ]
+                    : undefined
     }
 
     $: rwkvProgressPercent =
@@ -174,6 +230,27 @@
             <input type="radio" value="both" bind:group={$memorisedMode} />
             {i18n("memorised-source-both")}
         </label>
+    </div>
+    <div class="memorised-average-controls">
+        <label>
+            <input type="checkbox" bind:checked={smoothing} />
+            {i18n("memorised-moving-average")}
+        </label>
+        <form on:submit|preventDefault={applyAverageDays}>
+            <label>
+                <input
+                    aria-label={i18n("memorised-average-days")}
+                    type="number"
+                    min="1"
+                    step="1"
+                    required
+                    disabled={!smoothing}
+                    bind:value={draftAverageDays}
+                    on:change={applyAverageDays}
+                />
+                {i18n("maturation-days")}
+            </label>
+        </form>
     </div>
     {#if !supportsRwkv && $memorisedMode !== "fsrs"}
         <Warning always>{i18n("memorised-rwkv-stability-unavailable")}</Warning>
@@ -249,6 +326,7 @@
             {i18n("retrievability-and-stability")}
         </label>
     </div>
+    {#if smoothing}<p class="average-help">{i18n("memorised-average-help")}</p>{/if}
 {:else}
     <MemorisedCalculator />
 {/if}
@@ -267,6 +345,29 @@
         flex-wrap: wrap;
         gap: 0.75rem;
         margin-bottom: 0.5rem;
+    }
+
+    .memorised-average-controls {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.5em 1em;
+        margin-bottom: 0.6em;
+        font-size: 0.85em;
+    }
+
+    .memorised-average-controls label {
+        display: flex;
+        align-items: center;
+        gap: 0.4em;
+    }
+
+    .memorised-average-controls input[type="number"] {
+        width: 4.5em;
+    }
+
+    .average-help {
+        font-size: 0.85em;
     }
 
     .rwkv-progress {

@@ -54,6 +54,8 @@ export type LineChartSeries = {
     color: string
     opacity?: number
     strokeWidth?: number
+    strokeDasharray?: string
+    renderOrder?: number
     legend?: boolean
 }
 
@@ -229,13 +231,17 @@ export function renderLineChart(
         plot.attr("clip-path", `url(#${clipId})`)
     }
 
+    const renderedSeriesData = [...seriesData].sort(
+        (left, right) => (left.renderOrder ?? 0) - (right.renderOrder ?? 0)
+    )
     plot.selectAll("path.line-series")
-        .data(seriesData)
+        .data(renderedSeriesData)
         .join("path")
         .attr("class", "line-series")
         .attr("fill", "none")
         .attr("stroke", (item) => item.color)
         .attr("stroke-width", (item) => item.strokeWidth ?? 1.5)
+        .attr("stroke-dasharray", (item) => item.strokeDasharray ?? null)
         .attr("opacity", (item) => item.opacity ?? 1)
         .style("pointer-events", "none")
         .attr("d", (item) =>
@@ -274,7 +280,7 @@ export function renderLineChart(
     }
 
     if (showIsolatedPoints || domain.start === domain.end) {
-        for (const item of seriesData) {
+        for (const item of renderedSeriesData) {
             plot.append("g")
                 .selectAll("circle")
                 .data(

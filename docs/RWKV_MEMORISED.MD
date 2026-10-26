@@ -20,6 +20,17 @@ Zoom changes only the displayed dates, preserves cumulative totals and drawn
 trends, and has a local **Reset zoom** control. FSRS and RWKV share the selected
 date range when both are displayed.
 
+A trailing moving average starts enabled with an editable **7-day** window and
+applies to Cards, Notes, Cards by Burden, Average Retrievability, and the
+FSRS-only Retrievability & Stability view. Colored lines show the average while
+faint grey lines retain the daily estimates; the RWKV daily line is dashed when
+both models are available. Disable **Moving average** to restore the original
+colored daily lines. Each available calendar day has equal weight, the initial
+partial window uses the available history, and a one-day window equals the raw
+series. Averaging uses the complete series before zoom crops the displayed date
+range. The controls are local to the current Statistics view and do not alter
+the estimates, caches, or replay requests.
+
 ## Computation boundary
 
 The add-on starts and polls the adapted Anki build through these add-on media
@@ -93,3 +104,4 @@ the latest periodic checkpoint. Neither replaces the last completed cache.
 - Add-on cache and HTTP endpoints: `__init__.py`
 - Polling stores and graph state: `src/ts/stores.ts`
 - Source selector and progress UI: `src/ts/MemorisedBar.svelte`
+- Shared trailing-average helper: `src/ts/dailyMovingAverage.ts`

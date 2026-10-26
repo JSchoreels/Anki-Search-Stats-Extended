@@ -16,3 +16,8 @@ export function dailyMovingAverage(values: (number | null)[], days: number): (nu
         return typeof value === "number" && Number.isFinite(value) ? sum / count : null
     })
 }
+
+/** Trailing daily mean prepared for line charts, with missing days retained as gaps. */
+export function plottableDailyMovingAverage(values: number[], days: number): number[] {
+    return dailyMovingAverage(values, days).map((value) => value ?? Number.NaN)
+}
