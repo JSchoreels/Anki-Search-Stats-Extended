@@ -16,6 +16,7 @@ from aqt.stats import NewDeckStats
 
 from .fsrs_calibration import CalibrationService, missing_rwkv_validation_reviews
 from .graph_controls import add_hidden_graphs_button, handle_graph_visibility_command
+from . import rwkv_review_gain
 from .troubleshooting import add_export_button, handle_export_command
 
 addon_dir = Path(os.path.dirname(__file__))
@@ -1603,6 +1604,37 @@ def cancel_rwkv_memorised_history() -> bytes:
 
 
 post_handlers["cancelRwkvMemorisedHistory"] = cancel_rwkv_memorised_history
+
+
+def start_rwkv_review_gain() -> bytes:
+    req = orjson.loads(request.data)
+    scheduler = _rwkv_memorised_scheduler()
+    if scheduler is None:
+        return Response(orjson.dumps({
+            "phase": "failed", "done": True,
+            "error": "This Anki build does not provide RWKV historical replay.",
+        }))
+    cids = _positive_ints(req.get("cids", []))
+    day_range = int(req.get("day_range", 0))
+    return Response(orjson.dumps(
+        rwkv_review_gain.start(mw, scheduler, cids, _revlog_lower_limit(day_range))
+    ))
+
+
+def rwkv_review_gain_progress() -> bytes:
+    req = orjson.loads(request.data)
+    return Response(orjson.dumps(rwkv_review_gain.progress(req.get("job_id"))))
+
+
+def cancel_rwkv_review_gain() -> bytes:
+    req = orjson.loads(request.data)
+    rwkv_review_gain.cancel(req.get("job_id"))
+    return Response(orjson.dumps({}))
+
+
+post_handlers["startRwkvReviewGain"] = start_rwkv_review_gain
+post_handlers["rwkvReviewGainProgress"] = rwkv_review_gain_progress
+post_handlers["cancelRwkvReviewGain"] = cancel_rwkv_review_gain
 
 
 def write_config():

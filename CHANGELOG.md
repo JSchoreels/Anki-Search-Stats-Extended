@@ -4,7 +4,7 @@
 
 ### User facing changes
 
-- Add a separate Net Memorised per 100 Reviews graph with independent FSRS / RWKV / Both selection. Count every answer or repetition once, show negative days when collection-wide forgetting exceeds gains, and use a configurable 7-day rolling ratio by default while retaining the raw daily line. Fit the averaged view to its colored lines so extreme low-review days no longer flatten the graph; disable averaging to inspect raw values at full scale.
+- Show the estimated immediate recall gain from the cards you actually answered in Memorised Gain per 100 Reviews. Collection-wide forgetting no longer makes the result negative. Choose FSRS, RWKV, or both, and use a configurable 7-day rolling ratio; the RWKV per-answer replay can take time on large histories.
 
 - Smooth every Memorised view with a configurable 7-day moving average by default. Colored FSRS/RWKV averages remain comparable while faint grey lines retain the daily estimates; disable smoothing to restore the original daily lines.
 
@@ -52,7 +52,7 @@
 
 ### Technical details
 
-- Compute net Memorised efficiency as 100 times summed daily estimate changes divided by summed review counts, preserving no-review and unavailable-model gaps. Add signed line-chart domains with a zero reference, exclude display-only raw underlays from averaged y-axis domains while retaining their tooltip values, and keep the new graph's source choice independent while sharing the existing RWKV history job.
+- Compute immediate recall gain as 100 times the sum of per-answer post-minus-pre recall probabilities divided by the number of answers the model can score. Replay FSRS in the existing history pass and RWKV in a separate cancellable in-memory pass. Exclude unknown prior states, preserve no-answer gaps, and retain signed axes, raw underlay tooltips, zoom and the independent source selector.
 
 - Reuse the shared trailing calendar-day average before Memorised zoom cropping, retain raw-series tooltips and FSRS/RWKV line distinctions, and keep smoothing local to the current Statistics view without changing replay or cache data.
 

@@ -192,6 +192,50 @@ test("review counts include every answer and exclude manual reset markers", asyn
     expect(stats.reviewCountsByDay[dayFromMs(reset.id)]).toBe(2)
 })
 
+test("review recall gain compares each answer with the same card immediately before it", async () => {
+    const card = new RevlogBuilder()
+    const first = card.review(10, 3) as Revlog
+    const second = card.review(10, 3) as Revlog
+    const repetition = { ...second, id: second.id + 1_000 } as Revlog
+    const filtered = { ...second, id: second.id + 2_000, factor: 0, type: 3 } as Revlog
+    const stats = await getMemorisedDaysForTest(
+        [first, second, repetition, filtered],
+        [{ ...card.card(), did: 1 } as any],
+        configs,
+        mappings
+    )
+    const model = getFsrsForParams(weights)
+    const initial = model.nextState(null, 0, first.ease)
+    const firstDay = dayFromMs(first.id)
+    const secondDay = dayFromMs(second.id)
+
+    expect(stats.reviewRecallGainByDay[firstDay]).toBeCloseTo(1)
+    expect(stats.reviewRecallGainCountsByDay[firstDay]).toBe(1)
+    expect(stats.reviewRecallGainByDay[secondDay]).toBeCloseTo(
+        1 - model.retrievability(initial, secondDay - firstDay)
+    )
+    // The same-day repetition has zero modeled FSRS-6 gain; cram has no replay state.
+    expect(stats.reviewRecallGainCountsByDay[secondDay]).toBe(2)
+    expect(stats.reviewCountsByDay[secondDay]).toBe(3)
+    expect(stats.reviewRecallGainByDay[firstDay + 1]).toBeUndefined()
+})
+
+test("review recall gain skips the first retained answer when its prior state is unknown", async () => {
+    const card = new RevlogBuilder()
+    const first = { ...card.review(10, 3), type: 1, factor: 2500 } as Revlog
+    const second = card.review(10, 3) as Revlog
+    const stats = await getMemorisedDaysForTest(
+        [first, second],
+        [{ ...card.card(), did: 1 } as any],
+        configs,
+        mappings
+    )
+
+    expect(stats.reviewRecallGainCountsByDay[dayFromMs(first.id)]).toBeUndefined()
+    expect(stats.reviewRecallGainCountsByDay[dayFromMs(second.id)]).toBe(1)
+    expect(stats.reviewRecallGainByDay[dayFromMs(second.id)]).toBeGreaterThan(0)
+})
+
 // https://github.com/open-spaced-repetition/fsrs-rs/blob/a7aaa40498bae992e0be0a1e9a1380e4992aee60/src/inference.rs#L433-L465
 test("Stability", async () => {
     const card = new RevlogBuilder()

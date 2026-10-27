@@ -240,6 +240,38 @@ export async function cancelRwkvMemorisedHistory() {
     await endpoint("cancelRwkvMemorisedHistory", "{}", false)
 }
 
+export type RwkvReviewGainProgress = {
+    jobId?: number
+    phase: string
+    current?: number
+    total?: number
+    firstDay?: number | null
+    gainByDay?: number[]
+    countByDay?: number[]
+    done: boolean
+    error?: string | null
+}
+
+export async function startRwkvReviewGain(cids: number[], dayRange: number) {
+    return (await endpoint(
+        "startRwkvReviewGain",
+        JSON.stringify({ cids, day_range: dayRange }),
+        false
+    )) as RwkvReviewGainProgress
+}
+
+export async function getRwkvReviewGainProgress(jobId: number) {
+    return (await endpoint(
+        "rwkvReviewGainProgress",
+        JSON.stringify({ job_id: jobId }),
+        false
+    )) as RwkvReviewGainProgress
+}
+
+export async function cancelRwkvReviewGain(jobId: number) {
+    await endpoint("cancelRwkvReviewGain", JSON.stringify({ job_id: jobId }), false)
+}
+
 export type FsrsCalibrationProgress = {
     phase: "queued" | "running" | "ready" | "failed"
     label?: string

@@ -9,6 +9,7 @@
 
     export let mode: MemorisedMode
     export let supportsRwkv = true
+    export let showHistoryProgress = true
 
     $: rwkvProgressPercent =
         $rwkvMemorisedStats?.total && $rwkvMemorisedStats.total > 0
@@ -36,9 +37,9 @@
 {#if !supportsRwkv && mode !== "fsrs"}
     <Warning always>{i18n("memorised-rwkv-stability-unavailable")}</Warning>
 {/if}
-{#if mode !== "fsrs" && $rwkvMemorisedStats?.error}
+{#if showHistoryProgress && mode !== "fsrs" && $rwkvMemorisedStats?.error}
     <Warning always>{$rwkvMemorisedStats.error}</Warning>
-{:else if mode !== "fsrs" && $rwkvMemorisedStats && !$rwkvMemorisedStats.done}
+{:else if showHistoryProgress && mode !== "fsrs" && $rwkvMemorisedStats && !$rwkvMemorisedStats.done}
     <div class="rwkv-progress">
         <div>
             {$rwkvMemorisedStats.phase === "checkpointing"

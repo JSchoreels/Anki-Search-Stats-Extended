@@ -202,6 +202,8 @@ test.each(["comparison", "memorised", "automatic", "empty cache"])(
                 return response({ data: mode === "empty cache" ? [] : [[100, 0.9]] })
             if (url.endsWith("rwkvReviewRetrievability")) return response({ data: [[100, 0.8]] })
             if (url.endsWith("startRwkvMemorisedHistory")) return response({ done: true })
+            if (url.endsWith("startRwkvReviewGain"))
+                return response({ jobId: 1, phase: "complete", done: true })
             return response({})
         }) as typeof fetch
         jest.doMock("../src/ts/statsWorkerClient", () => ({
@@ -245,7 +247,12 @@ test.each(["comparison", "memorised", "automatic", "empty cache"])(
             }
             expect(tasks.filter((task) => task === "memorised")).toHaveLength(1)
             expect(get(stores.showMemorisedStats)).toBe(true)
-            expect(requests.some((url) => url.endsWith("startRwkvMemorisedHistory"))).toBe(true)
+            expect(requests.some((url) => url.endsWith("startRwkvMemorisedHistory"))).toBe(
+                mode !== "memorised"
+            )
+            expect(requests.some((url) => url.endsWith("startRwkvReviewGain"))).toBe(
+                mode === "memorised"
+            )
             stores.cids.set(null)
         } finally {
             global.fetch = originalFetch
@@ -253,3 +260,52 @@ test.each(["comparison", "memorised", "automatic", "empty cache"])(
         }
     }
 )
+
+test("changing the search cancels the old RWKV gain start before starting the new one", async () => {
+    const originalFetch = global.fetch,
+        originalConfig = global.SSEconfig
+    global.SSEconfig = { categories: { misc: false, lapse: false } } as never
+    const events: string[] = []
+    let finishFirst: (value: ReturnType<typeof response>) => void = () => {}
+    global.fetch = jest.fn(async (url: string, options?: RequestInit) => {
+        if (url.endsWith("startRwkvReviewGain")) {
+            const card = JSON.parse(options?.body as string).cids[0]
+            events.push(`start ${card}`)
+            if (card === 10)
+                return new Promise<ReturnType<typeof response>>((resolve) => {
+                    finishFirst = resolve
+                })
+            return response({ jobId: 2, phase: "complete", done: true })
+        }
+        if (url.endsWith("cancelRwkvReviewGain")) {
+            events.push(`cancel ${JSON.parse(options?.body as string).job_id}`)
+            return response({})
+        }
+        if (url.endsWith("cardData"))
+            return response({ columns: ["id", "did", "odid"], data: [] })
+        return response({ presets: [], cards: {}, retrievability: {} })
+    }) as typeof fetch
+    jest.doMock("../src/ts/statsWorkerClient", () => ({
+        loadStatsHistory: jest.fn(),
+        runStatsTask: jest.fn(),
+    }))
+    try {
+        const stores = await import("../src/ts/stores")
+        stores.cids.set([10])
+        stores.memorisedPerReviewMode.set("both")
+        stores.showMemorisedStats.set(true)
+        await flush()
+        expect(events).toEqual(["start 10"])
+        stores.cids.set([20])
+        await flush()
+        expect(events).toEqual(["start 10"])
+        finishFirst(response({ jobId: 1, phase: "computing", done: false }))
+        await flush()
+        expect(events).toEqual(["start 10", "cancel 1", "start 20"])
+        expect(get(stores.rwkvReviewGainStats)?.jobId).toBe(2)
+        stores.cids.set(null)
+    } finally {
+        global.fetch = originalFetch
+        global.SSEconfig = originalConfig
+    }
+})

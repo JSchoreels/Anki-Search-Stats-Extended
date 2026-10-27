@@ -72,7 +72,7 @@ Like the new anki stats screen? Want more? This is the addon for you.
 - Load Trend
 - Learn Reviews per Card
 - Memorised
-- Net Memorised per 100 Reviews
+- Memorised Gain per 100 Reviews
 - FSRS Calibration
 - Stability Time Machine
 - Difficulty Time Machine

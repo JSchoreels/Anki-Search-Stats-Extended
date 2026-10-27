@@ -3,10 +3,16 @@
     import { i18n } from "./i18n"
     import LineGraph from "./LineGraph.svelte"
     import type { LineChartSeries } from "./LineGraph"
-    import { netMemorisedPerHundredReviews } from "./memorisedPerReview"
+    import { recallGainPerHundredReviews } from "./memorisedPerReview"
     import MemorisedSourceControls from "./MemorisedSourceControls.svelte"
-    import { memorisedPerReviewMode, memorised_stats, rwkvMemorisedStats } from "./stores"
+    import {
+        cancelRwkvReviewGainComputation,
+        memorisedPerReviewMode,
+        memorised_stats,
+        rwkvReviewGainStats,
+    } from "./stores"
     import { TREND_PERSISTENCE_KEYS } from "./trendPersistenceKeys"
+    import Warning from "./Warning.svelte"
 
     let smoothing = true
     let averageDays = 7
@@ -29,23 +35,22 @@
     }
 
     $: {
-        const reviews = $memorised_stats?.reviewCountsByDay ?? []
-        const fsrsRaw = netMemorisedPerHundredReviews(
-            $memorised_stats?.retrievabilityDays ?? [],
-            reviews
+        const fsrsRaw = recallGainPerHundredReviews(
+            $memorised_stats?.reviewRecallGainByDay ?? [],
+            $memorised_stats?.reviewRecallGainCountsByDay ?? []
         )
-        const rwkvRaw = netMemorisedPerHundredReviews(
-            $rwkvMemorisedStats?.retrievabilityDays ?? [],
-            reviews
+        const rwkvRaw = recallGainPerHundredReviews(
+            $rwkvReviewGainStats?.gainDays ?? [],
+            $rwkvReviewGainStats?.countDays ?? []
         )
-        const fsrsAverage = netMemorisedPerHundredReviews(
-            $memorised_stats?.retrievabilityDays ?? [],
-            reviews,
+        const fsrsAverage = recallGainPerHundredReviews(
+            $memorised_stats?.reviewRecallGainByDay ?? [],
+            $memorised_stats?.reviewRecallGainCountsByDay ?? [],
             averageDays
         )
-        const rwkvAverage = netMemorisedPerHundredReviews(
-            $rwkvMemorisedStats?.retrievabilityDays ?? [],
-            reviews,
+        const rwkvAverage = recallGainPerHundredReviews(
+            $rwkvReviewGainStats?.gainDays ?? [],
+            $rwkvReviewGainStats?.countDays ?? [],
             averageDays
         )
         const sources =
@@ -109,11 +114,43 @@
         hasDisplayData = displaySeries.some((series) => series.data.some(Number.isFinite))
         loadingSelectedSource =
             $memorisedPerReviewMode !== "fsrs" &&
-            (!$rwkvMemorisedStats || (!$rwkvMemorisedStats.done && !$rwkvMemorisedStats.error))
+            (!$rwkvReviewGainStats || (!$rwkvReviewGainStats.done && !$rwkvReviewGainStats.error))
     }
+    $: rwkvProgressPercent = $rwkvReviewGainStats?.total
+        ? Math.min(100, Math.round((100 * $rwkvReviewGainStats.current) / $rwkvReviewGainStats.total))
+        : 0
 </script>
 
-<MemorisedSourceControls bind:mode={$memorisedPerReviewMode} />
+<MemorisedSourceControls bind:mode={$memorisedPerReviewMode} showHistoryProgress={false} />
+{#if $memorisedPerReviewMode !== "fsrs" && $rwkvReviewGainStats?.error}
+    <Warning always>{$rwkvReviewGainStats.error}</Warning>
+{:else if $memorisedPerReviewMode !== "fsrs" && $rwkvReviewGainStats?.phase === "cancelled"}
+    <Warning always>{i18n("memorised-review-rwkv-cancelled")}</Warning>
+{:else if $memorisedPerReviewMode !== "fsrs" && $rwkvReviewGainStats && !$rwkvReviewGainStats.done}
+    <div class="rwkv-progress">
+        <div>
+            {$rwkvReviewGainStats.phase === "waiting"
+                ? i18n("memorised-review-rwkv-waiting")
+                : $rwkvReviewGainStats.phase === "preparing"
+                  ? i18n("memorised-review-rwkv-preparing", {
+                        current: $rwkvReviewGainStats.current,
+                        total: $rwkvReviewGainStats.total,
+                        percent: rwkvProgressPercent,
+                    })
+                : i18n("memorised-review-rwkv-progress", {
+                      current: $rwkvReviewGainStats.current,
+                      total: $rwkvReviewGainStats.total,
+                      percent: rwkvProgressPercent,
+                  })}
+        </div>
+        <progress
+            max={$rwkvReviewGainStats.total || 1}
+            value={$rwkvReviewGainStats.current}
+            aria-label={i18n("memorised-review-rwkv-progress-label")}
+        ></progress>
+        <button type="button" on:click={() => cancelRwkvReviewGainComputation()}>{i18n("cancel")}</button>
+    </div>
+{/if}
 <div class="average-controls">
     <label>
         <input type="checkbox" bind:checked={smoothing} />
@@ -174,5 +211,21 @@
 
     .average-help {
         font-size: 0.85em;
+    }
+
+    .rwkv-progress {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 0.35rem 0.75rem;
+        align-items: center;
+        margin: 0.5rem 0;
+    }
+
+    .rwkv-progress div {
+        grid-column: 1 / -1;
+    }
+
+    .rwkv-progress progress {
+        width: 100%;
     }
 </style>

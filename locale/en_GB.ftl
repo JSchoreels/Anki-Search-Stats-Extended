@@ -357,12 +357,17 @@ memorised-average-days = Moving average window in days
 memorised-average-series = {$label} ({$days}-day average)
 memorised-daily-series = {$label} (daily)
 memorised-average-help = Colored lines show the trailing moving average; grey lines show the daily estimates (FSRS solid, RWKV dashed). Each available day has equal weight.
-memorised-per-review = Net Memorised per 100 Reviews
-memorised-per-review-axis = Net memorised cards per 100 reviews
+memorised-per-review = Memorised Gain per 100 Reviews
+memorised-per-review-axis = Estimated immediate recall gain per 100 answers
 memorised-per-review-help =
-    Shows the net change in estimated memorised cards for every 100 answers in the selected review history. Each answer or repetition counts once; manual reset markers do not. Positive values mean remembered knowledge grew, while negative values mean collection-wide forgetting exceeded the gains. This is a collection-level efficiency measure, not a causal estimate for only the cards reviewed that day.
-memorised-per-review-average-help = The colored line divides the window's total net memorised change by its total reviews; it does not average daily ratios. The vertical scale follows the colored averages. Grey lines show the raw daily values (FSRS solid, RWKV dashed) without stretching that scale; disable Moving average to inspect them at full scale. Days without reviews remain gaps, while their memory decay still contributes to later rolling windows.
-memorised-per-review-no-data = No reviewed days with consecutive Memorised estimates are available for this source yet.
+    Estimates how much the answers increased recall for the cards actually reviewed, scaled to 100 modeled answers. Each answer compares the model's recall probability immediately before and after it; forgetting on other cards does not reduce the score. A first learning answer assumes zero recall before study. Answers whose prior state is unavailable or that the model does not replay are excluded. The result is a model estimate, not a measurement of long-term learning; FSRS sets recall to essentially 100% immediately after an answer, including Again. Negative RWKV values can reflect a model update and do not prove the answer harmed memory.
+memorised-per-review-average-help = The colored line divides the window's total estimated recall gain by its number of modeled answers; it does not average daily ratios. The vertical scale follows the colored averages. Grey lines show the daily ratios (FSRS solid, RWKV dashed); disable Moving average to inspect them at full scale. Days without modeled answers remain gaps.
+memorised-per-review-no-data = No answers with a modeled recall change are available for this source yet.
+memorised-review-rwkv-progress = Computing RWKV review gains: {$current} / {$total} answers — {$percent}%
+memorised-review-rwkv-preparing = Preparing RWKV before-answer estimates: {$current} / {$total} answers — {$percent}%
+memorised-review-rwkv-progress-label = RWKV review gain replay progress
+memorised-review-rwkv-waiting = Waiting for other RWKV calculations to finish…
+memorised-review-rwkv-cancelled = RWKV review gain replay cancelled. Select FSRS and then RWKV to retry.
 memorised-rwkv-progress = Computing RWKV history: {$current} / {$total} predictions — {$percent}%
 memorised-rwkv-progress-label = RWKV Memorised history progress
 memorised-rwkv-saving-checkpoint = Saving resumable RWKV checkpoint…

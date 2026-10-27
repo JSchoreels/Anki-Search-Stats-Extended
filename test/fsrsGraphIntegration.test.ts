@@ -74,6 +74,16 @@ test("Memorised and rating replay preserve the fast trace after a same-day revie
     expect(memorised.time_by_retrievability_mean[Math.floor(expected * 100)]).toBe(5)
     expect(stats.grade_by_retrievability[Math.floor(expected * 100)]).toEqual([0, 0, 20, 0])
     expect(memorised.day_means[dayFromMs(start)]).toBeCloseTo(core.next_interval(second, 0.9), 9)
+    const sameDayBefore = core.curve(10 / 1440, initial).retrievability
+    expect(memorised.reviewRecallGainByDay[dayFromMs(start)]).toBeCloseTo(
+        20 * (core.curve(0, initial).retrievability + core.curve(0, second).retrievability - sameDayBefore),
+        6
+    )
+    expect(memorised.reviewRecallGainCountsByDay[dayFromMs(start)]).toBe(40)
+    expect(memorised.reviewRecallGainByDay[dayFromMs(reviews[2].id)]).toBeCloseTo(
+        20 * (core.curve(0, core.next_state(second, 1, 3)).retrievability - expected),
+        6
+    )
 })
 
 test("a manual reset rebuilds both traces from the next rated review", async () => {

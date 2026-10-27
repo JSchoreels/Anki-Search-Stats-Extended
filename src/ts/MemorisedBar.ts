@@ -343,6 +343,8 @@ export async function getMemorisedDays(
     let noteRetrievabilityDays: number[] = []
     let stable_retrievability_days: number[] = []
     let reviewCountsByDay: number[] = []
+    let reviewRecallGainByDay: number[] = []
+    let reviewRecallGainCountsByDay: number[] = []
 
     let cardCounts = cards.reduce(
         (p, c) => {
@@ -602,6 +604,7 @@ export async function getMemorisedDays(
         const new_card = !fsrsCards[revlog.cid]
         let memoryState: FsrsMemoryState | null = null
         let elapsed = 0
+        let recallBefore: number | undefined = startingState ? undefined : 0
         if (card.last_review && card.stability > 0) {
             memoryState = card
             elapsed = elapsedFsrsDays(fsrs, card.last_review, now, rollover_ms)
@@ -614,6 +617,7 @@ export async function getMemorisedDays(
             }
 
             const p = fsrs.retrievability(card, elapsed)
+            recallBefore = p
             if (revlog.time > 0 && card.stability > 0) {
                 const seconds = revlog.time / 1000
                 const retrievabilityBucket = Math.max(0, Math.min(99, Math.floor(p * 100)))
@@ -695,6 +699,15 @@ export async function getMemorisedDays(
             today_so_far += 1
         }
         const newState = startingState ?? fsrs.nextState(memoryState, elapsed, grade)
+        if (recallBefore !== undefined && Number.isFinite(recallBefore)) {
+            const recallAfter = fsrs.retrievability(newState, 0)
+            if (Number.isFinite(recallAfter)) {
+                reviewRecallGainByDay[revlogDay] =
+                    (reviewRecallGainByDay[revlogDay] ?? 0) + recallAfter - recallBefore
+                reviewRecallGainCountsByDay[revlogDay] =
+                    (reviewRecallGainCountsByDay[revlogDay] ?? 0) + 1
+            }
+        }
         card = { ...newState, last_review: now, last_review_day: revlogDay }
         last_memory_state[revlog.cid] = newState
         last_stability[revlog.cid] = card.stability // To prevent "forget" affecting the forgetting curve
@@ -855,6 +868,8 @@ export async function getMemorisedDays(
     return {
         retrievabilityDays,
         reviewCountsByDay,
+        reviewRecallGainByDay,
+        reviewRecallGainCountsByDay,
         totalCards,
         noteRetrievabilityDays,
         stable_retrievability_days,

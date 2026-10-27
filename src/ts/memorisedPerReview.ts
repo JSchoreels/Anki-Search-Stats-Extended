@@ -1,13 +1,6 @@
-/**
- * Net change in estimated memorised cards per 100 reviews.
- *
- * The rolling form divides the summed daily changes by the summed review count;
- * it deliberately does not average daily ratios. Days without reviews contribute
- * their collection-wide memory change to a later rolling window, but remain gaps
- * themselves because there is no daily denominator.
- */
-export function netMemorisedPerHundredReviews(
-    memorised: number[],
+/** Sum per-answer recall changes and scale them to 100 modeled answers. */
+export function recallGainPerHundredReviews(
+    gains: number[],
     reviewCounts: number[],
     windowDays = 1
 ): number[] {
@@ -15,37 +8,23 @@ export function netMemorisedPerHundredReviews(
         throw new Error("Moving-average days must be a positive integer")
     }
 
-    const length = memorised.length
-    const result = Array<number>(length).fill(Number.NaN)
-    const dailyChanges = Array<number>(length).fill(Number.NaN)
-    const eligibleReviews = Array<number>(length).fill(0)
-    let changeTotal = 0
+    const result = Array<number>(gains.length).fill(Number.NaN)
+    let gainTotal = 0
     let reviewTotal = 0
+    const valid = (day: number) =>
+        Number.isFinite(gains[day]) && Number.isFinite(reviewCounts[day]) && reviewCounts[day] > 0
 
-    for (let day = 1; day < length; day++) {
-        const current = memorised[day]
-        const previous = memorised[day - 1]
-        const validChange = Number.isFinite(current) && Number.isFinite(previous)
-        const reviews =
-            Number.isFinite(reviewCounts[day]) && reviewCounts[day] > 0 ? reviewCounts[day] : 0
-
-        if (validChange) {
-            dailyChanges[day] = current - previous
-            eligibleReviews[day] = reviews
-            changeTotal += dailyChanges[day]
-            reviewTotal += reviews
+    for (let day = 0; day < gains.length; day++) {
+        if (valid(day)) {
+            gainTotal += gains[day]
+            reviewTotal += reviewCounts[day]
         }
-
         const expiredDay = day - windowDays
-        if (expiredDay >= 1 && Number.isFinite(dailyChanges[expiredDay])) {
-            changeTotal -= dailyChanges[expiredDay]
-            reviewTotal -= eligibleReviews[expiredDay]
+        if (expiredDay >= 0 && valid(expiredDay)) {
+            gainTotal -= gains[expiredDay]
+            reviewTotal -= reviewCounts[expiredDay]
         }
-
-        if (validChange && reviews > 0 && reviewTotal > 0) {
-            result[day] = (100 * changeTotal) / reviewTotal
-        }
+        if (valid(day) && reviewTotal > 0) result[day] = (100 * gainTotal) / reviewTotal
     }
-
     return result
 }

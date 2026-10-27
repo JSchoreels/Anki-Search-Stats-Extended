@@ -26,14 +26,17 @@ import type { GraphsRequest, GraphsResponse } from "./proto/anki/stats_pb"
 import { today, type calculateRevlogStats } from "./revlogGraphs"
 import {
     cancelRwkvMemorisedHistory,
+    cancelRwkvReviewGain,
     catchErrors,
     ensureFsrsCalibration,
     getCardData,
     getFsrsPresetData,
     getReviewRetrievabilityPages,
     getRwkvMemorisedHistoryProgress,
+    getRwkvReviewGainProgress,
     saveConfigValue,
     startRwkvMemorisedHistory,
+    startRwkvReviewGain,
     type CardData,
     type FsrsCalibrationProgress,
 } from "./search"
@@ -419,11 +422,7 @@ function anchoredRwkvDays(values: number[] | undefined, firstDay: number | null 
     return result
 }
 
-const rwkvMemorisedRequested = derived(
-    [memorisedMode, memorisedPerReviewMode],
-    ([$memorisedMode, $memorisedPerReviewMode]) =>
-        $memorisedMode !== "fsrs" || $memorisedPerReviewMode !== "fsrs"
-)
+const rwkvMemorisedRequested = derived(memorisedMode, ($mode) => $mode !== "fsrs")
 
 derived(
     [rwkvMemorisedRequested, cids, showMemorisedStats],
@@ -468,6 +467,113 @@ derived(
         }
     }
 ).subscribe(rwkvMemorisedStats.set)
+
+export type RwkvReviewGainStats = {
+    jobId: number | null
+    phase: string
+    current: number
+    total: number
+    gainDays: number[]
+    countDays: number[]
+    done: boolean
+    error: string | null
+}
+
+export const rwkvReviewGainStats = writable<RwkvReviewGainStats | null>(null)
+let rwkvReviewGainGeneration = 0
+let rwkvReviewGainRequests = Promise.resolve()
+
+// Keep starts and cancellations in order when the search or selected model changes quickly.
+function queueRwkvReviewGainRequest<T>(request: () => Promise<T>): Promise<T> {
+    const result = rwkvReviewGainRequests.then(request)
+    rwkvReviewGainRequests = result.then(
+        () => {},
+        () => {}
+    )
+    return result
+}
+
+derived(
+    [memorisedPerReviewMode, cids, showMemorisedStats, searchLimit],
+    ([$mode, $cids, $requested, $limit], set: (value: RwkvReviewGainStats | null) => void) => {
+        const generation = ++rwkvReviewGainGeneration
+        set(null)
+        if ($mode === "fsrs" || !$cids || !$requested) return
+        let jobId: number | null = null
+        let finished = false
+        void (async () => {
+            try {
+                let progress = await queueRwkvReviewGainRequest(async () => {
+                    if (generation !== rwkvReviewGainGeneration) return null
+                    const started = await startRwkvReviewGain($cids, $limit)
+                    if (generation !== rwkvReviewGainGeneration) {
+                        if (started.jobId !== undefined && !started.done)
+                            await cancelRwkvReviewGain(started.jobId)
+                        return null
+                    }
+                    return started
+                })
+                if (!progress) return
+                jobId = progress.jobId ?? null
+                if (generation !== rwkvReviewGainGeneration) {
+                    if (jobId !== null && !progress.done)
+                        await queueRwkvReviewGainRequest(() => cancelRwkvReviewGain(jobId!))
+                    return
+                }
+                while (generation === rwkvReviewGainGeneration) {
+                    set({
+                        jobId,
+                        phase: progress.phase,
+                        current: progress.current ?? 0,
+                        total: progress.total ?? 0,
+                        gainDays: anchoredRwkvDays(progress.gainByDay, progress.firstDay),
+                        countDays: anchoredRwkvDays(progress.countByDay, progress.firstDay),
+                        done: progress.done,
+                        error: progress.error ?? null,
+                    })
+                    if (progress.done) {
+                        finished = true
+                        return
+                    }
+                    if (jobId === null) throw new Error("RWKV review replay did not return a job ID")
+                    await new Promise((resolve) => setTimeout(resolve, 500))
+                    if (generation !== rwkvReviewGainGeneration) return
+                    progress = await getRwkvReviewGainProgress(jobId)
+                }
+            } catch (error) {
+                if (jobId !== null && !finished) {
+                    void queueRwkvReviewGainRequest(() => cancelRwkvReviewGain(jobId!)).catch(
+                        () => {}
+                    )
+                }
+                if (generation === rwkvReviewGainGeneration) {
+                    set({
+                        jobId,
+                        phase: "failed",
+                        current: 0,
+                        total: 0,
+                        gainDays: [],
+                        countDays: [],
+                        done: true,
+                        error: error instanceof Error ? error.message : String(error),
+                    })
+                }
+            }
+        })()
+        return () => {
+            if (generation === rwkvReviewGainGeneration) rwkvReviewGainGeneration++
+            if (jobId !== null && !finished)
+                void queueRwkvReviewGainRequest(() => cancelRwkvReviewGain(jobId!)).catch(() => {})
+        }
+    }
+).subscribe(rwkvReviewGainStats.set)
+
+export async function cancelRwkvReviewGainComputation() {
+    const stats = get(rwkvReviewGainStats)
+    if (stats?.jobId !== null && stats?.jobId !== undefined && !stats.done) {
+        await queueRwkvReviewGainRequest(() => cancelRwkvReviewGain(stats.jobId!))
+    }
+}
 
 export async function cancelRwkvMemorisedComputation() {
     rwkvMemorisedGeneration += 1
