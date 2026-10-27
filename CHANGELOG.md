@@ -4,6 +4,8 @@
 
 ### User facing changes
 
+- Warn when the RWKV review-gain graph must use the slower replay on an older Anki build, and suggest that a newer compatible version may calculate it faster.
+
 - Show the estimated immediate recall gain from the cards you actually answered in Memorised Gain per 100 Reviews. Collection-wide forgetting no longer makes the result negative. Choose FSRS, RWKV, or both, and use a configurable 7-day rolling ratio; the RWKV per-answer replay can take time on large histories.
 
 - Smooth every Memorised view with a configurable 7-day moving average by default. Colored FSRS/RWKV averages remain comparable while faint grey lines retain the daily estimates; disable smoothing to restore the original daily lines.

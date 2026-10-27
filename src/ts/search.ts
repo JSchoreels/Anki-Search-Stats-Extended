@@ -248,6 +248,7 @@ export type RwkvReviewGainProgress = {
     firstDay?: number | null
     gainByDay?: number[]
     countByDay?: number[]
+    slowReplay?: boolean | null
     done: boolean
     error?: string | null
 }

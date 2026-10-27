@@ -6,7 +6,7 @@ import importlib.util
 import json
 from pathlib import Path
 import sys
-from types import SimpleNamespace
+from types import ModuleType, SimpleNamespace
 
 spec = importlib.util.spec_from_file_location(
     "rwkv_review_gain", Path(__file__).parents[1] / "rwkv_review_gain.py"
@@ -121,6 +121,45 @@ module._replay_review_gains(edge_job, edge_history, edge_runtime, 0, lambda job:
 edge_batch = module.ReviewGainJob((), frozenset({4, 5}), 0, 9)
 module._replay_review_gains_batched(edge_batch, edge_history, BatchRuntime, lambda chunk: chunk, 0, lambda job: None)
 
+
+def run_with_bridge(batched):
+    anki = ModuleType("anki")
+    inference = SimpleNamespace()
+    if batched:
+        inference.warm_up_reviews_post_packed = lambda: None
+    anki._rsbridge = SimpleNamespace(RwkvInference=inference)
+    sys.modules["anki"] = anki
+    sys.modules["aqt"] = ModuleType("aqt")
+    benchmark = ModuleType("aqt.rwkv_srs_benchmark")
+    benchmark._RustRwkvRuntime = lambda **kwargs: BatchRuntime() if batched else Runtime()
+    benchmark._packed_warm_up_reviews = lambda chunk: chunk
+    sys.modules["aqt.rwkv_srs_benchmark"] = benchmark
+
+    job = module.ReviewGainJob(("history",), frozenset({1, 3}), 0, 10)
+    slow_during_load = []
+
+    def load_history(reviewer):
+        slow_during_load.append(job.progress()["slowReplay"])
+        return history
+
+    scheduler = SimpleNamespace(
+        rwkv_memorised_history_progress=lambda: {"phase": "idle"},
+        _rwkv_heavy_replay_active=lambda: False,
+        _historical_rwkv_review_inputs=load_history,
+        _current_embedded_rwkv_model_path=lambda: "weights",
+        _RWKV_DEFAULT_TARGET_RETENTION=0.9,
+        _rwkv_state_precision=lambda: "f32",
+        _rwkv_model=lambda: "test",
+        RwkvReviewState=SimpleNamespace(LEARN_START=0),
+        rwkv_memorised_history_identity=lambda mw: "history",
+    )
+    module._run(job, None, scheduler)
+    return {"progress": job.progress(), "slow_during_load": slow_during_load}
+
+
+slow_bridge = run_with_bridge(False)
+fast_bridge = run_with_bridge(True)
+
 print(json.dumps({
     "progress": job.progress(),
     "updates": runtime.updates,
@@ -134,4 +173,6 @@ print(json.dumps({
     "edge": edge_job.progress(),
     "edge_batch": edge_batch.progress(),
     "edge_updates": edge_runtime.updates,
+    "slow_bridge": slow_bridge,
+    "fast_bridge": fast_bridge,
 }))

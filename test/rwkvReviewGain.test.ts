@@ -48,3 +48,14 @@ test("non-answer entries do not count as prior answers, while undated answers ad
         expect(gain).toBeCloseTo(result.edge.gainByDay[day], 6)
     )
 })
+
+test.each([
+    ["slow_bridge", true],
+    ["fast_bridge", false],
+])("reports replay capability before loading history for %s", (key, slowReplay) => {
+    const run = result[key]
+    expect(run.slow_during_load).toEqual([slowReplay])
+    expect(run.progress.slowReplay).toBe(slowReplay)
+    expect(run.progress.phase).toBe("complete")
+    expect(run.progress.countByDay).toEqual(result.progress.countByDay)
+})

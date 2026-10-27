@@ -26,6 +26,7 @@ class ReviewGainJob:
     first_day: int | None = None
     gain_by_day: list[float] = field(default_factory=list)
     count_by_day: list[int] = field(default_factory=list)
+    slow_replay: bool | None = None
     done: bool = False
     error: str | None = None
 
@@ -39,6 +40,7 @@ class ReviewGainJob:
                 "firstDay": self.first_day,
                 "gainByDay": list(self.gain_by_day),
                 "countByDay": list(self.count_by_day),
+                "slowReplay": self.slow_replay,
                 "done": self.done,
                 "error": self.error,
             }
@@ -280,6 +282,12 @@ def _run(job, mw, scheduler):
         from anki import _rsbridge
         from aqt.rwkv_srs_benchmark import _RustRwkvRuntime, _packed_warm_up_reviews
 
+        slow_replay = not callable(
+            getattr(_rsbridge.RwkvInference, "warm_up_reviews_post_packed", None)
+        )
+        with job.lock:
+            job.slow_replay = slow_replay
+
         if job.previous is not None:
             while not job.previous.finished.wait(0.25):
                 if job.cancel.is_set():
@@ -307,7 +315,7 @@ def _run(job, mw, scheduler):
             _wait_for_other_replays(current_job, scheduler)
 
         learn_start = int(scheduler.RwkvReviewState.LEARN_START)
-        if callable(getattr(_rsbridge.RwkvInference, "warm_up_reviews_post_packed", None)):
+        if not slow_replay:
             _replay_review_gains_batched(
                 job, history, make_runtime, _packed_warm_up_reviews, learn_start, wait
             )

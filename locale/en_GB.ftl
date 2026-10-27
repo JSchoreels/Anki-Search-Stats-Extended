@@ -367,6 +367,7 @@ memorised-review-rwkv-progress = Computing RWKV review gains: {$current} / {$tot
 memorised-review-rwkv-preparing = Preparing RWKV before-answer estimates: {$current} / {$total} answers — {$percent}%
 memorised-review-rwkv-progress-label = RWKV review gain replay progress
 memorised-review-rwkv-waiting = Waiting for other RWKV calculations to finish…
+memorised-review-rwkv-slow-replay = This version of Anki uses a slower method to calculate RWKV review gains, so it may take a long time. A newer compatible Anki version may calculate this graph faster.
 memorised-review-rwkv-cancelled = RWKV review gain replay cancelled. Select FSRS and then RWKV to retry.
 memorised-rwkv-progress = Computing RWKV history: {$current} / {$total} predictions — {$percent}%
 memorised-rwkv-progress-label = RWKV Memorised history progress

@@ -475,6 +475,7 @@ export type RwkvReviewGainStats = {
     total: number
     gainDays: number[]
     countDays: number[]
+    slowReplay: boolean
     done: boolean
     error: string | null
 }
@@ -528,6 +529,7 @@ derived(
                         total: progress.total ?? 0,
                         gainDays: anchoredRwkvDays(progress.gainByDay, progress.firstDay),
                         countDays: anchoredRwkvDays(progress.countByDay, progress.firstDay),
+                        slowReplay: progress.slowReplay === true,
                         done: progress.done,
                         error: progress.error ?? null,
                     })
@@ -554,6 +556,7 @@ derived(
                         total: 0,
                         gainDays: [],
                         countDays: [],
+                        slowReplay: false,
                         done: true,
                         error: error instanceof Error ? error.message : String(error),
                     })

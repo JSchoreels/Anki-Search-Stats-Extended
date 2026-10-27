@@ -122,6 +122,9 @@
 </script>
 
 <MemorisedSourceControls bind:mode={$memorisedPerReviewMode} showHistoryProgress={false} />
+{#if $memorisedPerReviewMode !== "fsrs" && $rwkvReviewGainStats?.slowReplay}
+    <Warning always>{i18n("memorised-review-rwkv-slow-replay")}</Warning>
+{/if}
 {#if $memorisedPerReviewMode !== "fsrs" && $rwkvReviewGainStats?.error}
     <Warning always>{$rwkvReviewGainStats.error}</Warning>
 {:else if $memorisedPerReviewMode !== "fsrs" && $rwkvReviewGainStats?.phase === "cancelled"}

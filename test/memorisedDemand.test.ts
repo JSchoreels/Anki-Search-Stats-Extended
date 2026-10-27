@@ -275,7 +275,7 @@ test("changing the search cancels the old RWKV gain start before starting the ne
                 return new Promise<ReturnType<typeof response>>((resolve) => {
                     finishFirst = resolve
                 })
-            return response({ jobId: 2, phase: "complete", done: true })
+            return response({ jobId: 2, phase: "complete", slowReplay: true, done: true })
         }
         if (url.endsWith("cancelRwkvReviewGain")) {
             events.push(`cancel ${JSON.parse(options?.body as string).job_id}`)
@@ -303,6 +303,7 @@ test("changing the search cancels the old RWKV gain start before starting the ne
         await flush()
         expect(events).toEqual(["start 10", "cancel 1", "start 20"])
         expect(get(stores.rwkvReviewGainStats)?.jobId).toBe(2)
+        expect(get(stores.rwkvReviewGainStats)?.slowReplay).toBe(true)
         stores.cids.set(null)
     } finally {
         global.fetch = originalFetch

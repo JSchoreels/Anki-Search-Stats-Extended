@@ -58,8 +58,10 @@ FSRS reuses its existing historical replay. RWKV runs a separate cancellable
 chronological replay, querying an isolated model before and after each modeled
 answer. When the Anki runtime supports batched post-answer predictions, it uses
 two bounded passes and holds only one recurrent model state at a time; older
-builds use a slower per-answer replay. Both paths advance the recurrent state
-using all retained history and score only the selected cards and date range.
+builds use a slower per-answer replay. When the slower replay is used, the graph
+warns that a newer compatible Anki version may calculate it faster. Both paths
+advance the recurrent state using all retained history and score only the
+selected cards and date range.
 The replay waits while the main RWKV Memorised history or another heavy RWKV
 replay is active. Completed results are retained in memory for the same selection
 and history during the Anki session; they are not saved to a collection or cache
