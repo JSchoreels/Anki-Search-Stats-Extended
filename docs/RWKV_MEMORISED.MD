@@ -31,12 +31,16 @@ series. Averaging uses the complete series before zoom crops the displayed date
 range. The controls are local to the current Statistics view and do not alter
 the estimates, caches, or replay requests.
 
-The separate **Memorised Gain per 100 Reviews** graph estimates the immediate
-change in recall for each answered card. For each answer it compares the model's
-predicted recall immediately after that answer with its prediction just before
-it. These per-answer changes are summed and scaled to 100 modeled answers.
-Forgetting on unreviewed cards does not contribute. FSRS, RWKV, and Both are
-selected independently from the main Memorised graph.
+The separate **Review Recall and Gain** graph compares each model's
+predicted recall for the answered cards with and without each actual answer.
+Choose **Immediately**, **10 minutes**, **1 hour**, or **24 hours** after the
+answer. Both branches are queried at that same future time, with no intervening
+answers in either branch. The result is a model projection, not an observed or
+causal effect. A recall view plots the answer-weighted average probability for
+each branch (solid for with the review, dashed for without); the gain view plots
+their difference scaled to 100 modeled answers. Forgetting on other cards does
+not contribute. FSRS, RWKV, and Both are selected independently from the main
+Memorised graph.
 
 Its default seven-day line is a rolling ratio:
 
@@ -44,27 +48,32 @@ Its default seven-day line is a rolling ratio:
 
 This is intentionally not an average of daily ratios. Days without modeled
 answers remain gaps; they do not add collection-wide memory decay to later
-windows. The faint grey line retains the raw daily ratio. The graph estimates
-an immediate model change, not measured or long-term learning. FSRS sets recall
-to essentially 100% immediately after an answer, including Again; same-day
-FSRS-6 repeats therefore normally have zero immediate gain. A negative RWKV
-change can reflect how the answer updates the model and does not establish
-that answering harmed memory. First learning answers use a zero pre-study baseline. A first retained
-answer with incomplete history and answers omitted by the model's replay are
-excluded from both the numerator and denominator. The models can therefore have
-different answer coverage.
+windows. The faint grey line retains the raw daily ratio in gain view. FSRS sets
+recall to essentially 100% immediately after an answer, including Again;
+same-day FSRS-6 repeats therefore normally have zero immediate gain. The
+projection uses the existing FSRS model's elapsed-time convention: FSRS-7 uses
+fractional days, while FSRS-6 counts scheduler-day boundaries. RWKV-Instant
+recall can rise or fall after the answer; no monotonicity is imposed. A negative
+gain can reflect how an answer updates the model and does not establish that
+answering harmed memory. First learning answers use zero recall in the skipped
+branch. A first retained answer with incomplete history, an unavailable elapsed
+time for a future RWKV query, and invalid predictions are excluded from both
+branches and the denominator. The models can therefore have different coverage.
 
 FSRS reuses its existing historical replay. RWKV runs a separate cancellable
-chronological replay, querying an isolated model before and after each modeled
-answer. When the Anki runtime supports batched post-answer predictions, it uses
-two bounded passes and holds only one recurrent model state at a time; older
-builds use a slower per-answer replay. When the slower replay is used, the graph
+chronological replay, querying an isolated pre-answer or post-answer model state
+at the chosen future elapsed time. Query inputs also advance the scheduler day
+on rollover, without advancing recurrent state. When the Anki runtime supports
+batched post-answer predictions for the immediate horizon or custom batched
+future queries for later horizons, it uses two bounded passes and holds only one
+recurrent model state at a time; older builds use a slower per-answer replay.
+When the slower replay is used, the graph
 warns that a newer compatible Anki version may calculate it faster. Both paths
 advance the recurrent state using all retained history and score only the
 selected cards and date range.
 The replay waits while the main RWKV Memorised history or another heavy RWKV
 replay is active. Completed results are retained in memory for the same selection
-and history during the Anki session; they are not saved to a collection or cache
+history and horizon during the Anki session; they are not saved to a collection or cache
 database. This replay can be lengthy for a large history. While averaging is
 enabled, the vertical scale follows the colored rolling ratios so an extreme raw
 day with few answers cannot flatten the useful lines. Grey daily values remain

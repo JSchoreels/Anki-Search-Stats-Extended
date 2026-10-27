@@ -38,6 +38,7 @@
     export let showIsolatedPoints = false
     export let yPercentile: number | undefined = undefined
     export let includeNegative = false
+    export let legendWidth = 130
     export let trend_data: DrawnTrend[] = []
     export let current_trend: TrendLine = undefined
     export let removeTrend: (id: number) => void = () => {}
@@ -113,6 +114,7 @@
             showIsolatedPoints,
             yPercentile,
             includeNegative,
+            legendWidth,
         })
     }
 </script>

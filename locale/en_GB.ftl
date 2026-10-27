@@ -357,11 +357,23 @@ memorised-average-days = Moving average window in days
 memorised-average-series = {$label} ({$days}-day average)
 memorised-daily-series = {$label} (daily)
 memorised-average-help = Colored lines show the trailing moving average; grey lines show the daily estimates (FSRS solid, RWKV dashed). Each available day has equal weight.
-memorised-per-review = Memorised Gain per 100 Reviews
-memorised-per-review-axis = Estimated immediate recall gain per 100 answers
+memorised-per-review = Review Recall and Gain
+memorised-per-review-axis = Estimated recall gain per 100 answers
+memorised-review-horizon = Time after the answer
+memorised-review-now = Immediately
+memorised-review-10-minutes = 10 minutes
+memorised-review-1-hour = 1 hour
+memorised-review-24-hours = 24 hours
+memorised-review-view = Show
+memorised-review-recall-view = Predicted recall
+memorised-review-gain-view = Gain per 100 reviews
+memorised-review-recall-axis = Predicted recall (%)
+memorised-review-with = With review
+memorised-review-without = Without review
 memorised-per-review-help =
-    Estimates how much the answers increased recall for the cards actually reviewed, scaled to 100 modeled answers. Each answer compares the model's recall probability immediately before and after it; forgetting on other cards does not reduce the score. A first learning answer assumes zero recall before study. Answers whose prior state is unavailable or that the model does not replay are excluded. The result is a model estimate, not a measurement of long-term learning; FSRS sets recall to essentially 100% immediately after an answer, including Again. Negative RWKV values can reflect a model update and do not prove the answer harmed memory.
+    For each modeled answer, compares predicted recall at the selected time after the actual answer with predicted recall at that same time if the answer had been skipped. Both projections assume no intervening answers. Gain is the difference, scaled to 100 modeled answers; other cards' forgetting does not reduce it. A first learning answer assumes zero recall without study. Answers with unavailable prior state or invalid predictions are excluded, and the models may cover different answers. These are model estimates, not measurements of a review's causal effect. FSRS predicts essentially 100% immediately after an answer; RWKV may change non-monotonically over time. A negative gain does not prove an answer harmed memory.
 memorised-per-review-average-help = The colored line divides the window's total estimated recall gain by its number of modeled answers; it does not average daily ratios. The vertical scale follows the colored averages. Grey lines show the daily ratios (FSRS solid, RWKV dashed); disable Moving average to inspect them at full scale. Days without modeled answers remain gaps.
+memorised-review-recall-average-help = Each line is the answer-weighted average predicted recall over the selected window. Solid lines show the review; dashed lines show the same cards without that answer. Days without modeled answers remain gaps.
 memorised-per-review-no-data = No answers with a modeled recall change are available for this source yet.
 memorised-review-rwkv-progress = Computing RWKV review gains: {$current} / {$total} answers — {$percent}%
 memorised-review-rwkv-preparing = Preparing RWKV before-answer estimates: {$current} / {$total} answers — {$percent}%

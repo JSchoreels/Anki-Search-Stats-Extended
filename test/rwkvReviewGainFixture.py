@@ -66,6 +66,27 @@ class BatchRuntime:
         return [(i, review.after) for i, review in enumerate(reviews) if review.ease is not None]
 
 
+def future_prediction(review, query, after):
+    # Deliberately non-monotonic: post-review recall rises over the first hour.
+    if after:
+        return min(1, review.after + (0.05 if query.current_elapsed_seconds >= 600 else 0))
+    return review.before - 0.1
+
+
+class FutureRuntime(Runtime):
+    def predict_retrievability_many_from_warm_up(self, queries):
+        query = queries[0]
+        after = query.current_elapsed_seconds <= 86400
+        return [future_prediction(query, query, after)]
+
+
+class FutureBatchRuntime(BatchRuntime):
+    def warm_up_reviews_query_packed(self, reviews, queries, after):
+        return [(i, future_prediction(review, query, after))
+                for i, (review, query) in enumerate(zip(reviews, queries))
+                if review.ease is not None]
+
+
 def review(card, day, kind, before, after):
     return Review(SimpleNamespace(card_id=card), day, kind, before, after)
 
@@ -121,26 +142,57 @@ module._replay_review_gains(edge_job, edge_history, edge_runtime, 0, lambda job:
 edge_batch = module.ReviewGainJob((), frozenset({4, 5}), 0, 9)
 module._replay_review_gains_batched(edge_batch, edge_history, BatchRuntime, lambda chunk: chunk, 0, lambda job: None)
 
+future_runs = {}
+for horizon in (600, 3600, 86400):
+    slow = module.ReviewGainJob((), frozenset({1, 3}), 0, 11, horizon_seconds=horizon, next_day_at=86400)
+    fast = module.ReviewGainJob((), frozenset({1, 3}), 0, 12, horizon_seconds=horizon, next_day_at=86400)
+    module._replay_review_gains(slow, history, FutureRuntime(), 0, lambda job: None)
+    module._replay_review_gains_batched(fast, history, FutureBatchRuntime, lambda chunk: chunk, 0, lambda job: None)
+    future_runs[str(horizon)] = {"slow": slow.progress(), "fast": fast.progress()}
 
-def run_with_bridge(batched):
+crossing = module.ReviewGainJob((), frozenset({1}), 0, 13, horizon_seconds=600, next_day_at=86400)
+before_query = module._future_query(crossing, reviews[2], 86370 * 1000, after=False)
+after_query = module._future_query(crossing, reviews[2], 86370 * 1000, after=True)
+no_crossing = module._future_query(crossing, reviews[2], 80000 * 1000, after=True)
+
+missing_review = replace(review(1, 4, 2, 0.65, 0.9), current_elapsed_seconds=-1)
+missing_history = SimpleNamespace(reviews=[reviews[0], missing_review], review_ids=[100, 101])
+missing_slow = module.ReviewGainJob((), frozenset({1}), 0, 14, horizon_seconds=600, next_day_at=86400)
+missing_fast = module.ReviewGainJob((), frozenset({1}), 0, 15, horizon_seconds=600, next_day_at=86400)
+module._replay_review_gains(missing_slow, missing_history, FutureRuntime(), 0, lambda job: None)
+module._replay_review_gains_batched(missing_fast, missing_history, FutureBatchRuntime, lambda chunk: chunk, 0, lambda job: None)
+
+
+def run_with_bridge(batched, horizon=0, future_batch=False):
     anki = ModuleType("anki")
     inference = SimpleNamespace()
     if batched:
         inference.warm_up_reviews_post_packed = lambda: None
+    if future_batch:
+        inference.warm_up_reviews_query_packed = lambda: None
     anki._rsbridge = SimpleNamespace(RwkvInference=inference)
     sys.modules["anki"] = anki
     sys.modules["aqt"] = ModuleType("aqt")
     benchmark = ModuleType("aqt.rwkv_srs_benchmark")
-    benchmark._RustRwkvRuntime = lambda **kwargs: BatchRuntime() if batched else Runtime()
+    benchmark._RustRwkvRuntime = lambda **kwargs: (
+        FutureBatchRuntime() if future_batch else FutureRuntime() if horizon else
+        BatchRuntime() if batched else Runtime()
+    )
     benchmark._packed_warm_up_reviews = lambda chunk: chunk
     sys.modules["aqt.rwkv_srs_benchmark"] = benchmark
 
-    job = module.ReviewGainJob(("history",), frozenset({1, 3}), 0, 10)
+    job = module.ReviewGainJob(("history",), frozenset({1, 3}), 0, 10, horizon_seconds=horizon)
     slow_during_load = []
+    steps = []
 
     def load_history(reviewer):
+        steps.append("history")
         slow_during_load.append(job.progress()["slowReplay"])
         return history
+
+    def timing(reviewer):
+        steps.append("timing")
+        return SimpleNamespace(next_day_at=86400)
 
     scheduler = SimpleNamespace(
         rwkv_memorised_history_progress=lambda: {"phase": "idle"},
@@ -152,13 +204,39 @@ def run_with_bridge(batched):
         _rwkv_model=lambda: "test",
         RwkvReviewState=SimpleNamespace(LEARN_START=0),
         rwkv_memorised_history_identity=lambda mw: "history",
+        _timing_today=timing,
     )
     module._run(job, None, scheduler)
-    return {"progress": job.progress(), "slow_during_load": slow_during_load}
+    return {"progress": job.progress(), "slow_during_load": slow_during_load, "steps": steps}
 
 
 slow_bridge = run_with_bridge(False)
 fast_bridge = run_with_bridge(True)
+old_future_bridge = run_with_bridge(True, 600)
+new_future_bridge = run_with_bridge(True, 600, True)
+
+class DelayedFinish:
+    def __init__(self):
+        self.wait_calls = 0
+
+    def wait(self, timeout):
+        self.wait_calls += 1
+        return self.wait_calls >= 2
+
+predecessor = module.ReviewGainJob((), frozenset(), 0, 20)
+predecessor.finished = DelayedFinish()
+middle = module.ReviewGainJob((), frozenset(), 0, 21, predecessor)
+middle.cancel.set()
+module._run(middle, None, SimpleNamespace())
+cancellation_chain = {"predecessor_wait_calls": predecessor.finished.wait_calls,
+                      "middle_finished": middle.finished.is_set(), "phase": middle.phase}
+
+try:
+    module.start(None, None, [], 0, 17)
+except ValueError as error:
+    invalid_horizon = str(error)
+else:
+    raise AssertionError("unsupported horizon accepted")
 
 print(json.dumps({
     "progress": job.progress(),
@@ -175,4 +253,14 @@ print(json.dumps({
     "edge_updates": edge_runtime.updates,
     "slow_bridge": slow_bridge,
     "fast_bridge": fast_bridge,
+    "old_future_bridge": old_future_bridge,
+    "new_future_bridge": new_future_bridge,
+    "cancellation_chain": cancellation_chain,
+    "invalid_horizon": invalid_horizon,
+    "future_runs": future_runs,
+    "crossing": {"before": [before_query.day_offset, before_query.current_elapsed_days, before_query.current_elapsed_seconds],
+                 "after": [after_query.day_offset, after_query.current_elapsed_days, after_query.current_elapsed_seconds],
+                 "no_crossing": [no_crossing.day_offset, no_crossing.current_elapsed_days, no_crossing.current_elapsed_seconds]},
+    "missing_slow": missing_slow.progress(),
+    "missing_fast": missing_fast.progress(),
 }))

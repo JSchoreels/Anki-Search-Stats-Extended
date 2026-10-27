@@ -21,6 +21,19 @@ test("renderLineChart overlays progressive named series", () => {
     expect(svg.textContent).toContain("RWKV")
 })
 
+test("the legend shows the same dashed style as a comparison line", () => {
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg")
+    renderLineChart(svg, [], "Recall", {
+        series: [
+            { label: "With review", data: [80, 90], color: "steelblue" },
+            { label: "Without review", data: [60, 70], color: "steelblue", strokeDasharray: "5 3" },
+        ],
+    })
+    const lines = svg.querySelectorAll(".line-legend line")
+    expect(lines[0].getAttribute("stroke-dasharray")).toBeNull()
+    expect(lines[1].getAttribute("stroke-dasharray")).toBe("5 3")
+})
+
 test("renderLineChart draws faint daily underlays behind averaged series", () => {
     const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg")
 

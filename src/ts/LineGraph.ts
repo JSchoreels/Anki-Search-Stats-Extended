@@ -117,6 +117,7 @@ export function renderLineChart(
         showIsolatedPoints = false,
         yPercentile = undefined,
         includeNegative = false,
+        legendWidth = 130,
     }: {
         onTrendsChange?: (trends: DrawnTrend[]) => void
         onPreviewTrendChange?: (trend: TrendLine) => void
@@ -133,6 +134,7 @@ export function renderLineChart(
         showIsolatedPoints?: boolean
         yPercentile?: number
         includeNegative?: boolean
+        legendWidth?: number
     } = {}
 ) {
     if (!svg) {
@@ -288,7 +290,8 @@ export function renderLineChart(
     if (legendSeries.length > 1) {
         const legend = axis
             .append("g")
-            .attr("transform", `translate(${Math.max(0, width - 130)}, 8)`)
+            .attr("class", "line-legend")
+            .attr("transform", `translate(${Math.max(0, width - legendWidth)}, 8)`)
             .style("font-size", "11px")
         const items = legend
             .selectAll("g")
@@ -303,6 +306,7 @@ export function renderLineChart(
             .attr("y2", 0)
             .attr("stroke", (item) => item.color)
             .attr("stroke-width", 2)
+            .attr("stroke-dasharray", (item) => item.strokeDasharray ?? null)
         items
             .append("text")
             .attr("x", 22)

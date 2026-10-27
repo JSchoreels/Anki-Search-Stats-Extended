@@ -9,6 +9,7 @@
         cancelRwkvReviewGainComputation,
         memorisedPerReviewMode,
         memorised_stats,
+        reviewGainHorizon,
         rwkvReviewGainStats,
     } from "./stores"
     import { TREND_PERSISTENCE_KEYS } from "./trendPersistenceKeys"
@@ -17,6 +18,7 @@
     let smoothing = true
     let averageDays = 7
     let draftAverageDays: number | undefined = averageDays
+    let view: "recall" | "gain" = "recall"
     let displayData: number[] = []
     let displaySeries: LineChartSeries[] = []
     let hasDisplayData = false
@@ -35,37 +37,24 @@
     }
 
     $: {
-        const fsrsRaw = recallGainPerHundredReviews(
-            $memorised_stats?.reviewRecallGainByDay ?? [],
-            $memorised_stats?.reviewRecallGainCountsByDay ?? []
-        )
-        const rwkvRaw = recallGainPerHundredReviews(
-            $rwkvReviewGainStats?.gainDays ?? [],
-            $rwkvReviewGainStats?.countDays ?? []
-        )
-        const fsrsAverage = recallGainPerHundredReviews(
-            $memorised_stats?.reviewRecallGainByDay ?? [],
-            $memorised_stats?.reviewRecallGainCountsByDay ?? [],
-            averageDays
-        )
-        const rwkvAverage = recallGainPerHundredReviews(
-            $rwkvReviewGainStats?.gainDays ?? [],
-            $rwkvReviewGainStats?.countDays ?? [],
-            averageDays
-        )
+        const fsrs = $memorised_stats?.reviewRecallByHorizon[$reviewGainHorizon]
+        const rwkv = $rwkvReviewGainStats
         const sources =
             $memorisedPerReviewMode === "both"
                 ? [
                       {
                           label: i18n("memorised-source-fsrs"),
-                          raw: fsrsRaw,
-                          average: fsrsAverage,
+                          totals: fsrs,
                           color: FSRS_COMPARISON_COLOUR,
                       },
                       {
                           label: i18n("memorised-source-rwkv"),
-                          raw: rwkvRaw,
-                          average: rwkvAverage,
+                          totals: rwkv && {
+                              gain: rwkv.gainDays,
+                              count: rwkv.countDays,
+                              withReview: rwkv.withDays,
+                              withoutReview: rwkv.withoutDays,
+                          },
                           color: RWKV_COMPARISON_COLOUR,
                           dailyDash: "3 3",
                       },
@@ -74,8 +63,12 @@
                   ? [
                         {
                             label: i18n("memorised-source-rwkv"),
-                            raw: rwkvRaw,
-                            average: rwkvAverage,
+                            totals: rwkv && {
+                                gain: rwkv.gainDays,
+                                count: rwkv.countDays,
+                                withReview: rwkv.withDays,
+                                withoutReview: rwkv.withoutDays,
+                            },
                             color: RWKV_COMPARISON_COLOUR,
                             dailyDash: "3 3",
                         },
@@ -83,45 +76,94 @@
                   : [
                         {
                             label: i18n("memorised-source-fsrs"),
-                            raw: fsrsRaw,
-                            average: fsrsAverage,
+                            totals: fsrs,
                             color: FSRS_COMPARISON_COLOUR,
                         },
                     ]
 
-        displaySeries = smoothing
-            ? [
-                  ...sources.map(({ label, average, color }) => ({
-                      label: i18n("memorised-average-series", { label, days: averageDays }),
-                      data: average,
-                      color,
-                      strokeWidth: 2.4,
-                  })),
-                  ...sources.map(({ label, raw, dailyDash }) => ({
-                      label: i18n("memorised-daily-series", { label }),
-                      data: raw,
-                      color: "#888",
-                      opacity: 0.35,
-                      strokeWidth: 1.5,
-                      strokeDasharray: dailyDash,
-                      renderOrder: -1,
-                      legend: false,
-                      includeInYAxis: false,
-                  })),
-              ]
-            : sources.map(({ label, raw, color }) => ({ label, data: raw, color }))
-        displayData = displaySeries[0]?.data ?? []
+        displaySeries = sources.flatMap(({ label, totals, color, dailyDash }) => {
+            const count = totals?.count ?? []
+            if (view === "recall") {
+                return [
+                    {
+                        key: "withReview" as const,
+                        text: i18n("memorised-review-with"),
+                        dash: undefined,
+                    },
+                    {
+                        key: "withoutReview" as const,
+                        text: i18n("memorised-review-without"),
+                        dash: "5 3",
+                    },
+                ].map(({ key, text, dash }) => ({
+                    label: `${label} — ${text}`,
+                    data: recallGainPerHundredReviews(
+                        totals?.[key] ?? [],
+                        count,
+                        smoothing ? averageDays : 1
+                    ),
+                    color,
+                    strokeWidth: 2.4,
+                    strokeDasharray: dash,
+                }))
+            }
+            const raw = recallGainPerHundredReviews(totals?.gain ?? [], count)
+            const average = recallGainPerHundredReviews(totals?.gain ?? [], count, averageDays)
+            return smoothing
+                ? [
+                      {
+                          label: i18n("memorised-average-series", { label, days: averageDays }),
+                          data: average,
+                          color,
+                          strokeWidth: 2.4,
+                      },
+                      {
+                          label: i18n("memorised-daily-series", { label }),
+                          data: raw,
+                          color: "#888",
+                          opacity: 0.35,
+                          strokeWidth: 1.5,
+                          strokeDasharray: dailyDash,
+                          renderOrder: -1,
+                          legend: false,
+                          includeInYAxis: false,
+                      },
+                  ]
+                : [{ label, data: raw, color }]
+        })
+        displayData = displaySeries.find((series) => series.data.some(Number.isFinite))?.data ?? []
         hasDisplayData = displaySeries.some((series) => series.data.some(Number.isFinite))
         loadingSelectedSource =
             $memorisedPerReviewMode !== "fsrs" &&
             (!$rwkvReviewGainStats || (!$rwkvReviewGainStats.done && !$rwkvReviewGainStats.error))
     }
     $: rwkvProgressPercent = $rwkvReviewGainStats?.total
-        ? Math.min(100, Math.round((100 * $rwkvReviewGainStats.current) / $rwkvReviewGainStats.total))
+        ? Math.min(
+              100,
+              Math.round((100 * $rwkvReviewGainStats.current) / $rwkvReviewGainStats.total)
+          )
         : 0
 </script>
 
 <MemorisedSourceControls bind:mode={$memorisedPerReviewMode} showHistoryProgress={false} />
+<div class="review-controls">
+    <label>
+        {i18n("memorised-review-horizon")}
+        <select bind:value={$reviewGainHorizon}>
+            <option value={0}>{i18n("memorised-review-now")}</option>
+            <option value={600}>{i18n("memorised-review-10-minutes")}</option>
+            <option value={3600}>{i18n("memorised-review-1-hour")}</option>
+            <option value={86400}>{i18n("memorised-review-24-hours")}</option>
+        </select>
+    </label>
+    <label>
+        {i18n("memorised-review-view")}
+        <select bind:value={view}>
+            <option value="recall">{i18n("memorised-review-recall-view")}</option>
+            <option value="gain">{i18n("memorised-review-gain-view")}</option>
+        </select>
+    </label>
+</div>
 {#if $memorisedPerReviewMode !== "fsrs" && $rwkvReviewGainStats?.slowReplay}
     <Warning always>{i18n("memorised-review-rwkv-slow-replay")}</Warning>
 {/if}
@@ -140,18 +182,20 @@
                         total: $rwkvReviewGainStats.total,
                         percent: rwkvProgressPercent,
                     })
-                : i18n("memorised-review-rwkv-progress", {
-                      current: $rwkvReviewGainStats.current,
-                      total: $rwkvReviewGainStats.total,
-                      percent: rwkvProgressPercent,
-                  })}
+                  : i18n("memorised-review-rwkv-progress", {
+                        current: $rwkvReviewGainStats.current,
+                        total: $rwkvReviewGainStats.total,
+                        percent: rwkvProgressPercent,
+                    })}
         </div>
         <progress
             max={$rwkvReviewGainStats.total || 1}
             value={$rwkvReviewGainStats.current}
             aria-label={i18n("memorised-review-rwkv-progress-label")}
         ></progress>
-        <button type="button" on:click={() => cancelRwkvReviewGainComputation()}>{i18n("cancel")}</button>
+        <button type="button" on:click={() => cancelRwkvReviewGainComputation()}>
+            {i18n("cancel")}
+        </button>
     </div>
 {/if}
 <div class="average-controls">
@@ -179,18 +223,29 @@
     <LineGraph
         data={displayData}
         series={displaySeries}
-        label={i18n("memorised-per-review-axis")}
+        label={i18n(
+            view === "recall" ? "memorised-review-recall-axis" : "memorised-per-review-axis"
+        )}
         formatY={formatValue}
         showIsolatedPoints
         includeNegative
-        trendPersistenceKey={TREND_PERSISTENCE_KEYS.memorised.perReview}
+        legendWidth={180}
+        trendPersistenceKey={view === "gain" && $reviewGainHorizon === 0
+            ? TREND_PERSISTENCE_KEYS.memorised.perReview
+            : `${TREND_PERSISTENCE_KEYS.memorised.perReview}:${view}:${$reviewGainHorizon}`}
     />
 {:else}
     <p role="status">
         {i18n(loadingSelectedSource ? "loading" : "memorised-per-review-no-data")}
     </p>
 {/if}
-{#if smoothing}<p class="average-help">{i18n("memorised-per-review-average-help")}</p>{/if}
+{#if smoothing}<p class="average-help">
+        {i18n(
+            view === "gain"
+                ? "memorised-per-review-average-help"
+                : "memorised-review-recall-average-help"
+        )}
+    </p>{/if}
 
 <style>
     .average-controls {
@@ -200,6 +255,20 @@
         gap: 0.5em 1em;
         margin-bottom: 0.6em;
         font-size: 0.85em;
+    }
+
+    .review-controls {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5em 1em;
+        margin: 0.5em 0;
+        font-size: 0.85em;
+    }
+
+    .review-controls label {
+        display: flex;
+        align-items: center;
+        gap: 0.4em;
     }
 
     .average-controls label {

@@ -1616,8 +1616,9 @@ def start_rwkv_review_gain() -> bytes:
         }))
     cids = _positive_ints(req.get("cids", []))
     day_range = int(req.get("day_range", 0))
+    horizon_seconds = req.get("horizon_seconds", 0)
     return Response(orjson.dumps(
-        rwkv_review_gain.start(mw, scheduler, cids, _revlog_lower_limit(day_range))
+        rwkv_review_gain.start(mw, scheduler, cids, _revlog_lower_limit(day_range), horizon_seconds)
     ))
 
 

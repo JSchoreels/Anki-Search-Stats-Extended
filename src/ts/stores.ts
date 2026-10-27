@@ -90,6 +90,7 @@ export let calibrationMode = writable<CalibrationMode>("fsrs")
 export type MemorisedMode = "fsrs" | "rwkv" | "both"
 export let memorisedMode = writable<MemorisedMode>("fsrs")
 export let memorisedPerReviewMode = writable<MemorisedMode>("fsrs")
+export const reviewGainHorizon = writable<0 | 600 | 3600 | 86400>(0)
 export let categoryOrder = writable([
     ...(SSEconfig.categoryOrder ?? []).filter((c) => DEFAULT_ORDER.includes(c)),
     ...DEFAULT_ORDER.filter((c) => !(SSEconfig.categoryOrder ?? []).includes(c)),
@@ -474,6 +475,8 @@ export type RwkvReviewGainStats = {
     current: number
     total: number
     gainDays: number[]
+    withDays: number[]
+    withoutDays: number[]
     countDays: number[]
     slowReplay: boolean
     done: boolean
@@ -495,8 +498,11 @@ function queueRwkvReviewGainRequest<T>(request: () => Promise<T>): Promise<T> {
 }
 
 derived(
-    [memorisedPerReviewMode, cids, showMemorisedStats, searchLimit],
-    ([$mode, $cids, $requested, $limit], set: (value: RwkvReviewGainStats | null) => void) => {
+    [memorisedPerReviewMode, cids, showMemorisedStats, searchLimit, reviewGainHorizon],
+    (
+        [$mode, $cids, $requested, $limit, $horizon],
+        set: (value: RwkvReviewGainStats | null) => void
+    ) => {
         const generation = ++rwkvReviewGainGeneration
         set(null)
         if ($mode === "fsrs" || !$cids || !$requested) return
@@ -506,7 +512,7 @@ derived(
             try {
                 let progress = await queueRwkvReviewGainRequest(async () => {
                     if (generation !== rwkvReviewGainGeneration) return null
-                    const started = await startRwkvReviewGain($cids, $limit)
+                    const started = await startRwkvReviewGain($cids, $limit, $horizon)
                     if (generation !== rwkvReviewGainGeneration) {
                         if (started.jobId !== undefined && !started.done)
                             await cancelRwkvReviewGain(started.jobId)
@@ -528,6 +534,8 @@ derived(
                         current: progress.current ?? 0,
                         total: progress.total ?? 0,
                         gainDays: anchoredRwkvDays(progress.gainByDay, progress.firstDay),
+                        withDays: anchoredRwkvDays(progress.withByDay, progress.firstDay),
+                        withoutDays: anchoredRwkvDays(progress.withoutByDay, progress.firstDay),
                         countDays: anchoredRwkvDays(progress.countByDay, progress.firstDay),
                         slowReplay: progress.slowReplay === true,
                         done: progress.done,
@@ -537,7 +545,8 @@ derived(
                         finished = true
                         return
                     }
-                    if (jobId === null) throw new Error("RWKV review replay did not return a job ID")
+                    if (jobId === null)
+                        throw new Error("RWKV review replay did not return a job ID")
                     await new Promise((resolve) => setTimeout(resolve, 500))
                     if (generation !== rwkvReviewGainGeneration) return
                     progress = await getRwkvReviewGainProgress(jobId)
@@ -555,6 +564,8 @@ derived(
                         current: 0,
                         total: 0,
                         gainDays: [],
+                        withDays: [],
+                        withoutDays: [],
                         countDays: [],
                         slowReplay: false,
                         done: true,

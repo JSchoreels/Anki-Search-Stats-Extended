@@ -1,4 +1,18 @@
-/** Sum per-answer recall changes and scale them to 100 modeled answers. */
+export const REVIEW_HORIZONS = [0, 600, 3600, 86400] as const
+export type ReviewHorizon = (typeof REVIEW_HORIZONS)[number]
+
+export type ReviewRecallTotals = {
+    withReview: number[]
+    withoutReview: number[]
+    gain: number[]
+    count: number[]
+}
+
+export function emptyReviewRecallTotals(): ReviewRecallTotals {
+    return { withReview: [], withoutReview: [], gain: [], count: [] }
+}
+
+/** Sum per-answer probabilities or recall changes, scaled to 100 modeled answers. */
 export function recallGainPerHundredReviews(
     gains: number[],
     reviewCounts: number[],

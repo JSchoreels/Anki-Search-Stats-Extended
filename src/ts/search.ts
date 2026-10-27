@@ -247,16 +247,18 @@ export type RwkvReviewGainProgress = {
     total?: number
     firstDay?: number | null
     gainByDay?: number[]
+    withByDay?: number[]
+    withoutByDay?: number[]
     countByDay?: number[]
     slowReplay?: boolean | null
     done: boolean
     error?: string | null
 }
 
-export async function startRwkvReviewGain(cids: number[], dayRange: number) {
+export async function startRwkvReviewGain(cids: number[], dayRange: number, horizonSeconds = 0) {
     return (await endpoint(
         "startRwkvReviewGain",
-        JSON.stringify({ cids, day_range: dayRange }),
+        JSON.stringify({ cids, day_range: dayRange, horizon_seconds: horizonSeconds }),
         false
     )) as RwkvReviewGainProgress
 }

@@ -281,8 +281,7 @@ test("changing the search cancels the old RWKV gain start before starting the ne
             events.push(`cancel ${JSON.parse(options?.body as string).job_id}`)
             return response({})
         }
-        if (url.endsWith("cardData"))
-            return response({ columns: ["id", "did", "odid"], data: [] })
+        if (url.endsWith("cardData")) return response({ columns: ["id", "did", "odid"], data: [] })
         return response({ presets: [], cards: {}, retrievability: {} })
     }) as typeof fetch
     jest.doMock("../src/ts/statsWorkerClient", () => ({
@@ -304,6 +303,53 @@ test("changing the search cancels the old RWKV gain start before starting the ne
         expect(events).toEqual(["start 10", "cancel 1", "start 20"])
         expect(get(stores.rwkvReviewGainStats)?.jobId).toBe(2)
         expect(get(stores.rwkvReviewGainStats)?.slowReplay).toBe(true)
+        stores.cids.set(null)
+    } finally {
+        global.fetch = originalFetch
+        global.SSEconfig = originalConfig
+    }
+})
+
+test("changing the recall horizon cancels an outdated RWKV replay before starting another", async () => {
+    const originalFetch = global.fetch,
+        originalConfig = global.SSEconfig
+    global.SSEconfig = { categories: { misc: false, lapse: false } } as never
+    const events: string[] = []
+    let finishFirst: (value: ReturnType<typeof response>) => void = () => {}
+    global.fetch = jest.fn(async (url: string, options?: RequestInit) => {
+        if (url.endsWith("startRwkvReviewGain")) {
+            const horizon = JSON.parse(options?.body as string).horizon_seconds
+            events.push(`start ${horizon}`)
+            if (horizon === 0)
+                return new Promise<ReturnType<typeof response>>((resolve) => {
+                    finishFirst = resolve
+                })
+            return response({ jobId: 2, phase: "complete", done: true, withByDay: [0.8] })
+        }
+        if (url.endsWith("cancelRwkvReviewGain")) {
+            events.push(`cancel ${JSON.parse(options?.body as string).job_id}`)
+            return response({})
+        }
+        if (url.endsWith("cardData")) return response({ columns: ["id", "did", "odid"], data: [] })
+        return response({ presets: [], cards: {}, retrievability: {} })
+    }) as typeof fetch
+    jest.doMock("../src/ts/statsWorkerClient", () => ({
+        loadStatsHistory: jest.fn(),
+        runStatsTask: jest.fn(),
+    }))
+    try {
+        const stores = await import("../src/ts/stores")
+        stores.cids.set([10])
+        stores.memorisedPerReviewMode.set("both")
+        stores.showMemorisedStats.set(true)
+        await flush()
+        stores.reviewGainHorizon.set(600)
+        await flush()
+        expect(events).toEqual(["start 0"])
+        finishFirst(response({ jobId: 1, phase: "computing", done: false }))
+        await flush()
+        expect(events).toEqual(["start 0", "cancel 1", "start 600"])
+        expect(get(stores.rwkvReviewGainStats)?.jobId).toBe(2)
         stores.cids.set(null)
     } finally {
         global.fetch = originalFetch

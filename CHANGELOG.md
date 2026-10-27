@@ -4,6 +4,8 @@
 
 ### User facing changes
 
+- Compare predicted recall with and without each review immediately, after 10 minutes, after 1 hour, or after 24 hours. The review graph can show both recall lines or their gain per 100 answers for FSRS, RWKV, or both; the projections retain RWKV's non-monotonic short-term behavior.
+
 - Warn when the RWKV review-gain graph must use the slower replay on an older Anki build, and suggest that a newer compatible version may calculate it faster.
 
 - Show the estimated immediate recall gain from the cards you actually answered in Memorised Gain per 100 Reviews. Collection-wide forgetting no longer makes the result negative. Choose FSRS, RWKV, or both, and use a configurable 7-day rolling ratio; the RWKV per-answer replay can take time on large histories.

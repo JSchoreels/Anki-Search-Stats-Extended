@@ -1,7 +1,7 @@
 import { ankiDaySnapshotMs } from "../src/ts/ankiDay"
 import { alignPredictions, calibrationSamplesFrom } from "../src/ts/calibrationSamples"
 import type { DeckConfig, ResolvedFsrsPreset } from "../src/ts/config"
-import { getFsrsForParams, type FsrsModel } from "../src/ts/fsrsModel"
+import { elapsedFsrsDays, getFsrsForParams, type FsrsModel } from "../src/ts/fsrsModel"
 import { selectResolvedFsrsPresetParams, selectTsFsrsParams } from "../src/ts/fsrsParams"
 import {
     buildCalibrationBins,
@@ -9,7 +9,8 @@ import {
     intervalAtRetrievability,
     type S90BatchResolver,
 } from "../src/ts/MemorisedBar"
-import { day_ms, dayFromMs, today } from "../src/ts/revlogGraphs"
+import { REVIEW_HORIZONS } from "../src/ts/memorisedPerReview"
+import { day_ms, dayFromMs, rollover_ms, today } from "../src/ts/revlogGraphs"
 import { Revlog } from "../src/ts/search"
 import { calibrationInputs } from "./calibrationInputs"
 import { RevlogBuilder } from "./revlogBuilder"
@@ -235,6 +236,48 @@ test("review recall gain skips the first retained answer when its prior state is
     expect(stats.reviewRecallGainCountsByDay[dayFromMs(second.id)]).toBe(1)
     expect(stats.reviewRecallGainByDay[dayFromMs(second.id)]).toBeGreaterThan(0)
 })
+
+test.each([
+    [1, weights],
+    [3, weights7],
+] as const)(
+    "FSRS preset %i compares both branches at each selected horizon",
+    async (deck, params) => {
+        const card = new RevlogBuilder()
+        const first = card.review(10, 3) as Revlog
+        const second = card.review(10, 3) as Revlog
+        const stats = await getMemorisedDaysForTest(
+            [first, second],
+            [{ ...card.card(), did: deck } as any],
+            configs,
+            mappings
+        )
+        const model = getFsrsForParams([...params])
+        const firstTime = new Date(first.id)
+        const secondTime = new Date(second.id)
+        const initial = model.nextState(null, 0, first.ease)
+        const elapsed = elapsedFsrsDays(model, firstTime, secondTime, rollover_ms)
+        const updated = model.nextState(initial, elapsed, second.ease)
+        const day = dayFromMs(second.id)
+        for (const horizon of REVIEW_HORIZONS) {
+            const future = new Date(second.id + horizon * 1000)
+            const without = model.retrievability(
+                initial,
+                elapsedFsrsDays(model, firstTime, future, rollover_ms)
+            )
+            const withReview = model.retrievability(
+                updated,
+                elapsedFsrsDays(model, secondTime, future, rollover_ms)
+            )
+            const totals = stats.reviewRecallByHorizon[horizon]
+            expect(totals.withReview[day]).toBeCloseTo(withReview)
+            expect(totals.withoutReview[day]).toBeCloseTo(without)
+            expect(totals.gain[day]).toBeCloseTo(withReview - without)
+            expect(totals.count[day]).toBe(1)
+            expect(totals.withoutReview[dayFromMs(first.id)]).toBe(0)
+        }
+    }
+)
 
 // https://github.com/open-spaced-repetition/fsrs-rs/blob/a7aaa40498bae992e0be0a1e9a1380e4992aee60/src/inference.rs#L433-L465
 test("Stability", async () => {

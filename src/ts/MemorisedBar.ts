@@ -23,6 +23,7 @@ import {
     getFsrs,
     intervalAtRetrievability,
 } from "./fsrsModel"
+import { emptyReviewRecallTotals, REVIEW_HORIZONS } from "./memorisedPerReview"
 import { asRevlogHistory, type RevlogInput } from "./packedRevlogs"
 import { type Buckets, dayFromMs, emptyBuckets, IDify, rollover_ms } from "./revlogGraphs"
 import { bucketTimeStats, TimeBucketBuilder } from "./timeBucketStats"
@@ -343,8 +344,9 @@ export async function getMemorisedDays(
     let noteRetrievabilityDays: number[] = []
     let stable_retrievability_days: number[] = []
     let reviewCountsByDay: number[] = []
-    let reviewRecallGainByDay: number[] = []
-    let reviewRecallGainCountsByDay: number[] = []
+    const reviewRecallByHorizon = Object.fromEntries(
+        REVIEW_HORIZONS.map((horizon) => [horizon, emptyReviewRecallTotals()])
+    ) as Record<(typeof REVIEW_HORIZONS)[number], ReturnType<typeof emptyReviewRecallTotals>>
 
     let cardCounts = cards.reduce(
         (p, c) => {
@@ -700,12 +702,51 @@ export async function getMemorisedDays(
         }
         const newState = startingState ?? fsrs.nextState(memoryState, elapsed, grade)
         if (recallBefore !== undefined && Number.isFinite(recallBefore)) {
-            const recallAfter = fsrs.retrievability(newState, 0)
-            if (Number.isFinite(recallAfter)) {
-                reviewRecallGainByDay[revlogDay] =
-                    (reviewRecallGainByDay[revlogDay] ?? 0) + recallAfter - recallBefore
-                reviewRecallGainCountsByDay[revlogDay] =
-                    (reviewRecallGainCountsByDay[revlogDay] ?? 0) + 1
+            let previousDayDelta = -1
+            let cachedWithReview = Number.NaN
+            let cachedWithoutReview = Number.NaN
+            for (const horizon of REVIEW_HORIZONS) {
+                let withReview: number
+                let withoutReview: number
+                if (fsrs.version === "seven") {
+                    const elapsedAfter = horizon / 86400
+                    withReview = fsrs.retrievability(newState, elapsedAfter)
+                    withoutReview = memoryState
+                        ? horizon === 0
+                            ? recallBefore
+                            : fsrs.retrievability(memoryState, elapsed + elapsedAfter)
+                        : 0
+                } else {
+                    const dayDelta =
+                        horizon === 0 ? 0 : dayFromMs(revlog.id + horizon * 1000) - revlogDay
+                    if (dayDelta !== previousDayDelta) {
+                        cachedWithReview = fsrs.retrievability(newState, dayDelta)
+                        cachedWithoutReview = memoryState
+                            ? dayDelta === 0
+                                ? recallBefore
+                                : fsrs.retrievability(memoryState, elapsed + dayDelta)
+                            : 0
+                        previousDayDelta = dayDelta
+                    }
+                    withReview = cachedWithReview
+                    withoutReview = cachedWithoutReview
+                }
+                if (
+                    Number.isFinite(withReview) &&
+                    withReview >= 0 &&
+                    withReview <= 1 &&
+                    Number.isFinite(withoutReview) &&
+                    withoutReview >= 0 &&
+                    withoutReview <= 1
+                ) {
+                    const totals = reviewRecallByHorizon[horizon]
+                    totals.withReview[revlogDay] = (totals.withReview[revlogDay] ?? 0) + withReview
+                    totals.withoutReview[revlogDay] =
+                        (totals.withoutReview[revlogDay] ?? 0) + withoutReview
+                    totals.gain[revlogDay] =
+                        (totals.gain[revlogDay] ?? 0) + withReview - withoutReview
+                    totals.count[revlogDay] = (totals.count[revlogDay] ?? 0) + 1
+                }
             }
         }
         card = { ...newState, last_review: now, last_review_day: revlogDay }
@@ -868,8 +909,9 @@ export async function getMemorisedDays(
     return {
         retrievabilityDays,
         reviewCountsByDay,
-        reviewRecallGainByDay,
-        reviewRecallGainCountsByDay,
+        reviewRecallByHorizon,
+        reviewRecallGainByDay: reviewRecallByHorizon[0].gain,
+        reviewRecallGainCountsByDay: reviewRecallByHorizon[0].count,
         totalCards,
         noteRetrievabilityDays,
         stable_retrievability_days,
