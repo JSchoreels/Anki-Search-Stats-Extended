@@ -1,7 +1,8 @@
 import * as d3 from "d3"
 import {
     dailyPredictionAverage,
-    type DailyPredictionMetric,
+    dailyPredictionValue,
+    type DailyPredictionDisplayMetric,
     type DailyPredictionPoint,
 } from "./dailyPredictionData"
 import { boundedZoom, selectedZoomRange, type ZoomRange } from "./dragZoom"
@@ -20,15 +21,21 @@ import { tooltipX } from "./tooltip"
 
 const dateLabel = (day: number) => d3.utcFormat("%Y-%m-%d")(new Date(day * day_ms))
 
-export function dailyPredictionTooltip(point: DailyPredictionPoint, metric: DailyPredictionMetric) {
-    const value = point[metric]
+function formatMetricValue(value: number | null, metric: DailyPredictionDisplayMetric) {
+    if (value === null) return i18n("daily-prediction-gap-unavailable")
+    const decimals = metric === "rawGap" ? 1 : 3
+    return (Math.abs(value) < 0.5 * 10 ** -decimals ? 0 : value).toFixed(decimals)
+}
+
+export function dailyPredictionTooltip(
+    point: DailyPredictionPoint,
+    metric: DailyPredictionDisplayMetric
+) {
+    const value = dailyPredictionValue(point, metric)
     return [
         dateLabel(point.day),
         i18n(`daily-prediction-${metric}-value`, {
-            value:
-                value === null
-                    ? i18n("daily-prediction-gap-unavailable")
-                    : (Math.abs(value) < 0.0005 ? 0 : value).toFixed(3),
+            value: formatMetricValue(value, metric),
         }),
         i18n("daily-prediction-actual", { value: (point.actualRecall * 100).toFixed(1) }),
         i18n("daily-prediction-predicted", { value: (point.predictedRecall * 100).toFixed(1) }),
@@ -44,7 +51,7 @@ export type DailyPredictionSeries = {
 export function renderDailyPredictionGraph(
     svg: SVGElement,
     series: DailyPredictionSeries[],
-    metric: DailyPredictionMetric,
+    metric: DailyPredictionDisplayMetric,
     averageDays: number | null = null,
     zoomRange?: ZoomRange,
     onZoom?: (range: ZoomRange) => void
@@ -86,12 +93,12 @@ export function renderDailyPredictionGraph(
     )
     const magnitude =
         Math.max(
-            d3.max(data, (point) => Math.abs(point[metric] ?? 0)) || 0,
+            d3.max(data, (point) => Math.abs(dailyPredictionValue(point, metric) ?? 0)) || 0,
             d3.max(visibleAverages, (value) => Math.abs(value ?? 0)) || 0
         ) || 1
     const y = d3
         .scaleLinear()
-        .domain(metric === "standardizedGap" ? [-magnitude, magnitude] : [0, magnitude])
+        .domain(metric === "logLoss" ? [0, magnitude] : [-magnitude, magnitude])
         .nice()
         .range([height, 0])
     const xTicks = x
@@ -153,18 +160,20 @@ export function renderDailyPredictionGraph(
                 points.push({ day: point.day - 1, value: null, average: null })
             }
             const average = item.average?.[index] ?? null
-            points.push({ day: point.day, value: point[metric], average })
+            points.push({ day: point.day, value: dailyPredictionValue(point, metric), average })
             const text = hoverByDay.get(point.day) ?? [dateLabel(point.day)]
             text.push(modelLabel, ...dailyPredictionTooltip(point, metric).slice(1))
             if (item.average)
                 text.push(
-                    i18n("daily-prediction-average-value", {
-                        days: averageDays!,
-                        value:
-                            average === null
-                                ? i18n("daily-prediction-gap-unavailable")
-                                : (Math.abs(average) < 0.0005 ? 0 : average).toFixed(3),
-                    })
+                    i18n(
+                        metric === "rawGap"
+                            ? "daily-prediction-rawGap-average-value"
+                            : "daily-prediction-average-value",
+                        {
+                            days: averageDays!,
+                            value: formatMetricValue(average, metric),
+                        }
+                    )
                 )
             hoverByDay.set(point.day, text)
         })

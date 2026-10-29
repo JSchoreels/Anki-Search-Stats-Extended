@@ -4,6 +4,8 @@
 
 ### User facing changes
 
+- Switch Daily Recall Gap between the standardized score and the raw difference in percentage points. The moving average follows the selected view.
+
 - Compare predicted recall with and without each review immediately, after 10 minutes, after 1 hour, or after 24 hours. The review graph can show both recall lines or their gain per 100 answers for FSRS, RWKV, or both; the projections retain RWKV's non-monotonic short-term behavior.
 
 - Warn when the RWKV review-gain graph must use the slower replay on an older Anki build, and suggest that a newer compatible version may calculate it faster.
@@ -55,6 +57,8 @@
 - Identify unloaded data in troubleshooting exports instead of reporting misleading zero counts. Cancelling export writes no file.
 
 ### Technical details
+
+- Derive daily raw recall differences from the existing actual and predicted rates, including when standardized variance is zero; average the selected values across available days.
 
 - Compute immediate recall gain as 100 times the sum of per-answer post-minus-pre recall probabilities divided by the number of answers the model can score. Replay FSRS in the existing history pass and RWKV in a separate cancellable in-memory pass. Exclude unknown prior states, preserve no-answer gaps, and retain signed axes, raw underlay tooltips, zoom and the independent source selector.
 

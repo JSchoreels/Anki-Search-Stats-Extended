@@ -1,4 +1,8 @@
-import { buildDailyPredictionData, dailyPredictionAverage } from "../src/ts/dailyPredictionData"
+import {
+    buildDailyPredictionData,
+    dailyPredictionAverage,
+    dailyPredictionValue,
+} from "../src/ts/dailyPredictionData"
 import { dayToMs } from "../src/ts/revlogGraphs"
 import { calibrationInputs } from "./calibrationInputs"
 
@@ -26,6 +30,7 @@ test("daily scores use each review's probability and average recall on the ident
         predictedRecall: 0.7,
     })
     expect(point.standardizedGap).toBeCloseTo(-0.4 / Math.sqrt(0.09 + 0.25))
+    expect(dailyPredictionValue(point, "rawGap")).toBeCloseTo(-20)
     expect(point.logLoss).toBeCloseTo((-Math.log2(0.9) - Math.log2(0.5)) / 2)
 })
 
@@ -40,6 +45,8 @@ test("the same retention gap is more unexpected across more reviews while averag
 
     expect(small.standardizedGap).toBeCloseTo(-1.490712)
     expect(large.standardizedGap).toBeCloseTo(-4.714045)
+    expect(dailyPredictionValue(small, "rawGap")).toBeCloseTo(-10)
+    expect(dailyPredictionValue(large, "rawGap")).toBeCloseTo(-10)
     expect(small.logLoss).toBeCloseTo(large.logLoss)
 })
 
@@ -101,7 +108,23 @@ test("deterministic probabilities retain exact recall and finite loss but have n
         predictedRecall: 0.5,
     })
     expect(wrong).toMatchObject({ standardizedGap: null, actualRecall: 0.5, predictedRecall: 0.5 })
+    expect(dailyPredictionValue(correct, "rawGap")).toBe(0)
+    expect(dailyPredictionValue(wrong, "rawGap")).toBe(0)
     expect(wrong.logLoss).toBeCloseTo(-Math.log2(1e-15))
+})
+
+test("raw differences remain available when the predicted variance is zero", () => {
+    const remembered = review(firstDay, 0, 1)
+    const forgotten = review(firstDay + 1, 0, 0)
+    const data = buildDailyPredictionData(
+        ...calibrationInputs([remembered, forgotten], {
+            [remembered.revlogId]: 0,
+            [forgotten.revlogId]: 1,
+        })
+    )
+    expect(data.map((point) => point.standardizedGap)).toEqual([null, null])
+    expect(data.map((point) => dailyPredictionValue(point, "rawGap"))).toEqual([100, -100])
+    expect(dailyPredictionAverage(data, "rawGap", 2)).toEqual([100, 0])
 })
 
 test("reviews on either side of Anki's 4am rollover belong to different days", () => {
@@ -110,8 +133,8 @@ test("reviews on either side of Anki's 4am rollover belong to different days", (
         global.SSEother = { ...previous, rollover: 4 }
         jest.isolateModules(() => {
             const { buildDailyPredictionData } = require("../src/ts/dailyPredictionData")
-            // Match the add-on's current-offset convention even when this test runs in winter.
-            const boundary = Date.UTC(2026, 8, 27, 4) + new Date().getTimezoneOffset() * 60000
+            // Construct the rollover in local time using the fixture date's timezone offset.
+            const boundary = new Date(2026, 8, 27, 4).getTime()
             const before = boundary - 60000
             const after = boundary + 60000
             const data = buildDailyPredictionData(
@@ -153,6 +176,8 @@ test("moving averages weight available days equally and use calendar-day windows
     expect(dailyPredictionAverage(data, "logLoss", 2)).toEqual([1, 1.5, 1])
     expect(dailyPredictionAverage(data, "logLoss", 7)).toEqual([1, 1.5, 4 / 3])
     expect(dailyPredictionAverage(data, "logLoss", 1)).toEqual([1, 2, 1])
+    expect(dailyPredictionAverage(data, "rawGap", 2)).toEqual([50, -12.5, 50])
+    expect(dailyPredictionAverage(data, "rawGap", 7)).toEqual([50, -12.5, 25 / 3])
     expect(dailyPredictionAverage([], "logLoss", 7)).toEqual([])
     expect(() => dailyPredictionAverage(data, "logLoss", 0)).toThrow(
         "Invalid moving average window"
@@ -170,4 +195,5 @@ test("undefined standardized gaps are excluded from the average and remain gaps"
         )
     )
     expect(dailyPredictionAverage(data, "standardizedGap", 7)).toEqual([1, null, 1, 1])
+    expect(dailyPredictionAverage(data, "rawGap", 7)).toEqual([50, 25, 100 / 3, 50])
 })

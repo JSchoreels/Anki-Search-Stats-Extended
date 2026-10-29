@@ -3,8 +3,8 @@
 Two graphs follow **FSRS vs RWKV Card Retrievability** (which immediately follows
 current Disagreement), in this order:
 
-1. **Daily Recall Gap**: signed standardized difference between actual and
-   expected recalls.
+1. **Daily Recall Gap**: a choice of the signed standardized difference between
+   actual and expected recalls or the raw difference in percentage points.
 2. **Daily Surprise**: mean binary log loss in bits per eligible review.
 
 Both respect the statistics search and review date range. Each panel has its own
@@ -36,7 +36,7 @@ the role-aware source additionally excludes training/final-fit rows. Prediction
 provenance follows [the calibration data path](FSRS_CALIBRATION_GRAPH.MD).
 
 Reviews are grouped with the existing `dayFromMs(revlogId)` helper, including
-Anki's rollover hour and the add-on's current timezone-offset convention.
+Anki's rollover hour and each review date's local timezone offset.
 Calendar labels preserve these day indices. Days without eligible predictions
 have no value and break the plotted line, rather than being filled with zero.
 Tooltips show the date and, for each selected model with data on that day,
@@ -49,6 +49,13 @@ panels show loading until the comparison result arrives. Daily scores use each m
 reviews absent from the other model's predictions.
 
 ## Daily recall gap
+
+The panel initially displays the standardized gap. Enable **Show raw difference
+(percentage points)** to switch to `100 * (actual R - predicted R)`. The raw
+view remains available when predicted variance is zero. The selector is local to
+the panel and does not change either model's data.
+
+The standardized gap is:
 
 `Z = sum(y - p) / sqrt(sum(p * (1 - p)))`
 
@@ -83,7 +90,9 @@ the mean predicted R and variance calculation.
 Moving averages start enabled with an editable **7-day** window in each panel.
 Disable **Moving average** to restore the colored daily lines. When enabled,
 the colored lines show the trailing mean of available daily scores over the
-selected calendar-day window, and daily lines and points become faint grey.
+selected calendar-day window, and daily lines and points become faint grey. In
+Daily Recall Gap, the average uses whichever gap view is selected, including raw
+differences in percentage points.
 FSRS's grey line is solid; RWKV's is dashed. The legend identifies the colored
 model averages. A one-day window equals the raw scores.
 
@@ -97,11 +106,11 @@ and do not persist settings or request new predictions.
 
 ## Verification and runtime
 
-`test/dailyPredictionData.test.ts` covers both formulas, review-count scaling,
+`test/dailyPredictionData.test.ts` covers the scores, review-count scaling,
 confidence, sparse/invalid data, boundary probabilities, and Anki day rollover.
 `test/dailyPredictionGraph.test.ts` covers rendering, signed values, gaps, unavailable
-scores, both model series, grey daily values, smoothing, redraws, and mouse/keyboard
-tooltip behavior. Calibration parity and loading tests verify each model's
+scores, both gap views, both model series, grey daily values, smoothing, redraws,
+and mouse/keyboard tooltip behavior. Calibration parity and loading tests verify each model's
 independent eligible sample and the FSRS held-out boundary. Maturation regression
 tests cover the reused averaging helper.
 

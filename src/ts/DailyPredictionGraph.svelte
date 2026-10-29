@@ -14,6 +14,7 @@
     let svg: SVGElement | undefined
     let zoomRange: ZoomRange | undefined
     let mode: "fsrs" | "rwkv" | "both" = "both"
+    let showRawGap = false
     let smoothing = true
     let days = 7
     let draftDays: number | undefined = days
@@ -27,11 +28,12 @@
         { model: "rwkv", data: rwkv },
     ].filter((item) => mode === "both" || item.model === mode) as DailyPredictionSeries[]
     $: hasData = series.some((item) => item.data.length)
+    $: displayMetric = metric === "standardizedGap" && showRawGap ? "rawGap" : metric
     $: zoomOptions = svg
         ? renderDailyPredictionGraph(
               svg,
               series,
-              metric,
+              displayMetric,
               smoothing ? days : null,
               zoomRange,
               (range) => {
@@ -58,6 +60,14 @@
         </label>
     {/each}
 </div>
+{#if metric === "standardizedGap"}
+    <div class="daily-controls">
+        <label>
+            <input type="checkbox" bind:checked={showRawGap} />
+            {i18n("daily-prediction-show-raw-gap")}
+        </label>
+    </div>
+{/if}
 <div class="daily-controls">
     <label>
         <input type="checkbox" bind:checked={smoothing} />

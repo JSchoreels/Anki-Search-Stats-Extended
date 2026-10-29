@@ -539,23 +539,27 @@ actual = Actual
 daily-prediction-standardizedGap = Daily Recall Gap
 daily-prediction-logLoss = Daily Surprise
 daily-prediction-standardizedGap-axis = Standardized gap
+daily-prediction-rawGap-axis = Recall difference (percentage points)
 daily-prediction-logLoss-axis = Bits per review
 daily-prediction-standardizedGap-value = Standardized gap: {$value}
+daily-prediction-rawGap-value = Recall difference: {$value} pp
 daily-prediction-logLoss-value = Average surprise: {$value} bits per review
 daily-prediction-actual = Actual R: {$value}%
 daily-prediction-predicted = Predicted R: {$value}%
 daily-prediction-count = Eligible reviews: {$count}
 daily-prediction-gap-unavailable = unavailable (zero predicted variance)
 daily-prediction-no-data = No eligible {$model} review predictions are available for this search and date range.
+daily-prediction-show-raw-gap = Show raw difference (percentage points)
 daily-prediction-moving-average = Moving average
 daily-prediction-average-days = Moving average window in days
 daily-prediction-average-value = {$days}-day average: {$value}
+daily-prediction-rawGap-average-value = {$days}-day average: {$value} pp
 daily-prediction-average-series = {$label} ({$days}-day average)
 daily-prediction-average-help = Colored lines show the trailing moving average; grey lines and dots show the daily values (FSRS solid, RWKV dashed). Each available day has equal weight. Missing days and unavailable scores are excluded and remain gaps.
 daily-prediction-standardizedGap-help =
-    Actual recalls minus expected recalls, divided by the expected standard deviation: sum(actual - predicted) / sqrt(sum(predicted × (1 - predicted))).
-    Positive values mean you remembered more than the model expected; negative values mean less. Further from zero means a more unexpected day, accounting for review count and prediction confidence.
-    This assumes independent outcomes, so use it as a diagnostic score rather than an exact significance test. The gap is unavailable when predicted variance is zero.
+    Show raw difference to plot actual R minus predicted R in percentage points. Otherwise the standardized gap is actual recalls minus expected recalls, divided by the expected standard deviation: sum(actual - predicted) / sqrt(sum(predicted × (1 - predicted))).
+    Positive values mean you remembered more than the model expected; negative values mean less. In the standardized view, further from zero means a more unexpected day, accounting for review count and prediction confidence.
+    The standardized gap assumes independent outcomes, so use it as a diagnostic score rather than an exact significance test. It is unavailable when predicted variance is zero; the raw difference remains available.
 daily-prediction-logLoss-help =
     Average log loss in bits per review: -log2(predicted R) when remembered, or -log2(1 - predicted R) when forgotten.
     Higher means more surprise, especially for confident mistakes. Surprising successes and failures both contribute instead of cancelling out.

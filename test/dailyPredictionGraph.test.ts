@@ -35,6 +35,36 @@ test("rounding near-zero gaps does not display negative zero", () => {
     expect(dailyPredictionTooltip(point(20000, -1e-12), "standardizedGap")[1]).toBe(
         "daily-prediction-standardizedGap-value: 0.000"
     )
+    expect(dailyPredictionTooltip({ ...point(20000), actualRecall: 0.89999 }, "rawGap")[1]).toBe(
+        "daily-prediction-rawGap-value: 0.0"
+    )
+})
+
+test("raw differences show signed percentage points and smooth the selected view", () => {
+    const svg = svgElement()
+    const data = [
+        { ...point(20000), actualRecall: 0.6, predictedRecall: 0.4 },
+        { ...point(20001, null), actualRecall: 0.5, predictedRecall: 0.7 },
+        { ...point(20002), actualRecall: 0.65, predictedRecall: 0.7 },
+    ]
+    render(svg, [{ model: "fsrs", data }], "rawGap", 2)
+
+    const zeroY = Number(svg.querySelector(".daily-prediction-zero")!.getAttribute("y1"))
+    const points = [...svg.querySelectorAll(".daily-prediction-point")]
+    expect(points).toHaveLength(3)
+    expect(Number(points[0].getAttribute("cy"))).toBeLessThan(zeroY)
+    expect(Number(points[1].getAttribute("cy"))).toBeGreaterThan(zeroY)
+    expect(svg.textContent).toContain("daily-prediction-rawGap-axis")
+    const secondDay = svg.querySelectorAll(".daily-prediction-hover")[1]
+    expect(secondDay.getAttribute("aria-label")).toContain("daily-prediction-rawGap-value: -20.0")
+    expect(secondDay.getAttribute("aria-label")).toContain(
+        "daily-prediction-rawGap-average-value: 2, 0.0"
+    )
+
+    render(svg, [{ model: "fsrs", data }], "rawGap", 2, { start: 20002, end: 20002 })
+    expect(svg.querySelector(".daily-prediction-hover")!.getAttribute("aria-label")).toContain(
+        "daily-prediction-rawGap-average-value: 2, -12.5"
+    )
 })
 
 test("recall gaps render on both sides of zero and do not join across missing days", () => {

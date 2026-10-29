@@ -12,16 +12,24 @@ export type DailyPredictionPoint = {
 }
 
 export type DailyPredictionMetric = "standardizedGap" | "logLoss"
+export type DailyPredictionDisplayMetric = DailyPredictionMetric | "rawGap"
+
+export function dailyPredictionValue(
+    point: DailyPredictionPoint,
+    metric: DailyPredictionDisplayMetric
+): number | null {
+    return metric === "rawGap" ? (point.actualRecall - point.predictedRecall) * 100 : point[metric]
+}
 
 export function dailyPredictionAverage(
     data: DailyPredictionPoint[],
-    metric: DailyPredictionMetric,
+    metric: DailyPredictionDisplayMetric,
     days: number
 ): (number | null)[] {
     if (!data.length) return []
     const firstDay = data[0].day
     const values = new Array<number | null>(data[data.length - 1].day - firstDay + 1).fill(null)
-    for (const point of data) values[point.day - firstDay] = point[metric]
+    for (const point of data) values[point.day - firstDay] = dailyPredictionValue(point, metric)
     const averaged = dailyMovingAverage(values, days)
     return data.map((point) => averaged[point.day - firstDay])
 }
