@@ -19,6 +19,15 @@ test("rolling gain divides totals rather than averaging daily ratios", () => {
     expect(recallGainPerHundredReviews([1, 1], [10, 30], 2)[1]).toBe(5)
 })
 
+test("study-day windows keep answer-weighted totals across missing calendar days", () => {
+    const result = recallGainPerHundredReviews([1, 0, 0, 2, 0.5], [10, 0, 0, 20, 10], 2, "study")
+    expect(result[0]).toBe(10)
+    expect(result[1]).toBeNaN()
+    expect(result[2]).toBeNaN()
+    expect(result[3]).toBe(10)
+    expect(result[4]).toBeCloseTo(100 * (2.5 / 30))
+})
+
 test("missing estimates contribute neither gains nor answers", () => {
     const result = recallGainPerHundredReviews([1, Number.NaN, 2], [10, 40, 20], 3)
     expect(result[1]).toBeNaN()

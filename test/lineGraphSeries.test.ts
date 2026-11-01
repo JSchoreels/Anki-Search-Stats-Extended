@@ -34,6 +34,28 @@ test("the legend shows the same dashed style as a comparison line", () => {
     expect(lines[1].getAttribute("stroke-dasharray")).toBe("5 3")
 })
 
+test("optional gap connectors preserve different solid and dashed series styles", () => {
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg")
+    renderLineChart(svg, [], "Recall", {
+        series: [
+            { label: "With", data: [80, NaN, 90], color: "steelblue", connectGaps: true },
+            {
+                label: "Without",
+                data: [60, NaN, 70],
+                color: "steelblue",
+                strokeDasharray: "5 3",
+                connectGaps: true,
+            },
+            { label: "Daily", data: [1, NaN, 2], color: "#888" },
+        ],
+    })
+    const connectors = svg.querySelectorAll(".line-gap-connector")
+    expect(connectors).toHaveLength(2)
+    expect(connectors[0].getAttribute("stroke-dasharray")).toBe("1 4")
+    expect(connectors[1].getAttribute("stroke-dasharray")).toBe("5 3 1 3")
+    expect(svg.querySelectorAll(".hover-bar")).toHaveLength(3)
+})
+
 test("renderLineChart draws faint daily underlays behind averaged series", () => {
     const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg")
 

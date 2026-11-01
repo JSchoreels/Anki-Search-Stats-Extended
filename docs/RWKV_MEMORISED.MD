@@ -42,13 +42,24 @@ their difference scaled to 100 modeled answers. Forgetting on other cards does
 not contribute. FSRS, RWKV, and Both are selected independently from the main
 Memorised graph.
 
-Its default seven-day line is a rolling ratio:
+Its compact moving-average control defaults to a seven-calendar-day window and
+also offers the last N study days with modeled answers or the last N modeled
+reviews (initially 1,000). Calendar and study-day windows combine the daily
+answer totals; review windows use individual answers, including a partial day
+when needed. Each model uses its own eligible answers and may therefore cover a
+different time span. The initial partial window uses the available answers.
+
+The gain line is a rolling ratio:
 
 `100 × sum(per-answer recall changes) / count(modeled answers)`
 
 This is intentionally not an average of daily ratios. Days without modeled
-answers remain gaps; they do not add collection-wide memory decay to later
-windows. The faint grey line retains the raw daily ratio in gain view. FSRS sets
+answers do not add collection-wide memory decay to later windows. **Connect
+missing days** starts enabled and draws faint interpolated connectors between
+available averaged values; it can be disabled. The connectors preserve distinct
+patterns for the solid with-review and dashed without-review lines. They do not
+invent answers or daily values. The faint grey line retains the raw daily ratio
+in gain view. FSRS sets
 recall to essentially 100% immediately after an answer, including Again;
 same-day FSRS-6 repeats therefore normally have zero immediate gain. The
 projection uses the existing FSRS model's elapsed-time convention: FSRS-7 uses
@@ -79,6 +90,17 @@ enabled, the vertical scale follows the colored rolling ratios so an extreme raw
 day with few answers cannot flatten the useful lines. Grey daily values remain
 available in tooltips; disabling
 averaging restores their full-range scale.
+
+An FSRS review-count window runs a dedicated in-memory replay of the loaded
+history when the window size or horizon changes; this can take time and uses
+the shared statistics worker queue. Other window types reuse the daily totals.
+For RWKV, the completed replay retains two 64-bit values per eligible answer
+in memory, allowing an exact review window without replaying the model. The
+`rwkvReviewGainWindow` endpoint returns only the resulting daily rolling values,
+not the per-answer arrays. Review-count results appear after the RWKV replay
+finishes; calendar and study-day results continue to appear progressively. A
+cancelled or failed replay discards its per-answer arrays, and a completed job
+retains them until replaced or Anki exits.
 
 ## Computation boundary
 

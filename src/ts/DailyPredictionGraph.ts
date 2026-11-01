@@ -1,9 +1,11 @@
 import * as d3 from "d3"
+import type { AveragingMode } from "./dailyMovingAverage"
 import {
     dailyPredictionAverage,
     dailyPredictionValue,
     type DailyPredictionDisplayMetric,
     type DailyPredictionPoint,
+    type DailyPredictionWindowValue,
 } from "./dailyPredictionData"
 import { boundedZoom, selectedZoomRange, type ZoomRange } from "./dragZoom"
 import {
@@ -49,13 +51,20 @@ export type DailyPredictionSeries = {
     data: DailyPredictionPoint[]
 }
 
+type DailyPredictionAverageOptions = {
+    mode?: AveragingMode
+    reviewValues?: Record<DailyPredictionSeries["model"], DailyPredictionWindowValue[]>
+    connectGaps?: boolean
+}
+
 export function renderDailyPredictionGraph(
     svg: SVGElement,
     series: DailyPredictionSeries[],
     metric: DailyPredictionDisplayMetric,
     averageDays: number | null = null,
     zoomRange?: ZoomRange,
-    onZoom?: (range: ZoomRange) => void
+    onZoom?: (range: ZoomRange) => void,
+    { mode = "calendar", reviewValues, connectGaps = false }: DailyPredictionAverageOptions = {}
 ) {
     clearChart(svg)
     tooltipShown.set(false)
@@ -66,16 +75,34 @@ export function renderDailyPredictionGraph(
         end: d3.max(allData, (point) => point.day)!,
     })
     const data = allData.filter((point) => point.day >= domain.start && point.day <= domain.end)
+    const windowLabel =
+        averageDays === null
+            ? ""
+            : i18n(
+                  mode === "reviews"
+                      ? "averaging-review-window"
+                      : mode === "study"
+                        ? "averaging-study-window"
+                        : "averaging-calendar-window",
+                  { count: averageDays }
+              )
     const prepared = series
         .filter((item) => item.data.length)
-        .map((item) => ({
-            ...item,
-            color: item.model === "fsrs" ? FSRS_COMPARISON_COLOUR : RWKV_COMPARISON_COLOUR,
-            average:
-                averageDays === null
-                    ? null
-                    : dailyPredictionAverage(item.data, metric, averageDays),
-        }))
+        .map((item) => {
+            const byDay = new Map(
+                reviewValues?.[item.model]?.map((point) => [point.day, point.value])
+            )
+            return {
+                ...item,
+                color: item.model === "fsrs" ? FSRS_COMPARISON_COLOUR : RWKV_COMPARISON_COLOUR,
+                average:
+                    averageDays === null
+                        ? null
+                        : mode === "reviews"
+                          ? item.data.map((point) => byDay.get(point.day) ?? null)
+                          : dailyPredictionAverage(item.data, metric, averageDays, mode),
+            }
+        })
 
     const { width, height } = comparisonGraphBounds()
     const firstDay = domain.start
@@ -183,18 +210,22 @@ export function renderDailyPredictionGraph(
             points.push({ day: point.day, value: dailyPredictionValue(point, metric), average })
             const text = hoverByDay.get(point.day) ?? [dateLabel(point.day)]
             text.push(modelLabel, ...dailyPredictionTooltip(point, metric).slice(1))
-            if (item.average)
+            if (item.average) {
+                const value = formatMetricValue(average, metric)
                 text.push(
-                    i18n(
-                        metric === "rawGap"
-                            ? "daily-prediction-rawGap-average-value"
-                            : "daily-prediction-average-value",
-                        {
-                            days: averageDays!,
-                            value: formatMetricValue(average, metric),
-                        }
-                    )
+                    mode === "calendar"
+                        ? i18n(
+                              metric === "rawGap"
+                                  ? "daily-prediction-rawGap-average-value"
+                                  : "daily-prediction-average-value",
+                              { days: averageDays!, value }
+                          )
+                        : i18n(metric === "rawGap" ? "averaging-raw-value" : "averaging-value", {
+                              window: windowLabel,
+                              value,
+                          })
                 )
+            }
             hoverByDay.set(point.day, text)
         })
         group
@@ -218,6 +249,25 @@ export function renderDailyPredictionGraph(
             .attr("opacity", item.average ? 0.35 : 1)
         if (item.average) {
             const averaged = points.map((point) => ({ day: point.day, value: point.average }))
+            if (connectGaps) {
+                const available = averaged.filter((point) => point.value !== null)
+                const bridges = available.flatMap((point, index) =>
+                    index && point.day > available[index - 1].day + 1
+                        ? [[available[index - 1], point]]
+                        : []
+                )
+                group
+                    .selectAll("path.daily-prediction-average-gap")
+                    .data(bridges)
+                    .join("path")
+                    .attr("class", "daily-prediction-average-gap")
+                    .attr("fill", "none")
+                    .attr("stroke", item.color)
+                    .attr("stroke-width", 2.4)
+                    .attr("stroke-dasharray", "2 4")
+                    .attr("opacity", 0.65)
+                    .attr("d", (bridge) => line(bridge))
+            }
             group
                 .append("path")
                 .attr("class", "daily-prediction-average")
@@ -259,10 +309,15 @@ export function renderDailyPredictionGraph(
             .text(
                 averageDays === null
                     ? i18n(`calibration-source-${item.model}`)
-                    : i18n("daily-prediction-average-series", {
-                          label: i18n(`calibration-source-${item.model}`),
-                          days: averageDays,
-                      })
+                    : mode === "calendar"
+                      ? i18n("daily-prediction-average-series", {
+                            label: i18n(`calibration-source-${item.model}`),
+                            days: averageDays,
+                        })
+                      : i18n("averaging-series", {
+                            label: i18n(`calibration-source-${item.model}`),
+                            window: windowLabel,
+                        })
             )
     })
     const hoverData = [...hoverByDay]

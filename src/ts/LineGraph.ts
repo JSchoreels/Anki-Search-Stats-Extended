@@ -58,6 +58,7 @@ export type LineChartSeries = {
     renderOrder?: number
     legend?: boolean
     includeInYAxis?: boolean
+    connectGaps?: boolean
 }
 
 let nextClipId = 0
@@ -285,6 +286,31 @@ export function renderLineChart(
                 .x((d) => x(d.date))
                 .y((d) => y(d.value))(item.points)
         )
+
+    for (const item of renderedSeriesData) {
+        if (!item.connectGaps) continue
+        const available = item.points.filter((point) => Number.isFinite(point.value))
+        const bridges = available.flatMap((point, index) =>
+            index && point.day > available[index - 1].day + 1 ? [[available[index - 1], point]] : []
+        )
+        plot.append("g")
+            .selectAll("path.line-gap-connector")
+            .data(bridges)
+            .join("path")
+            .attr("class", "line-gap-connector")
+            .attr("fill", "none")
+            .attr("stroke", item.color)
+            .attr("stroke-width", item.strokeWidth ?? 1.5)
+            .attr("stroke-dasharray", item.strokeDasharray ? "5 3 1 3" : "1 4")
+            .attr("opacity", (item.opacity ?? 1) * 0.65)
+            .style("pointer-events", "none")
+            .attr("d", (bridge) =>
+                d3
+                    .line<LineChartPoint>()
+                    .x((point) => x(point.date))
+                    .y((point) => y(point.value))(bridge)
+            )
+    }
 
     const legendSeries = seriesData.filter((item) => item.legend !== false)
     if (legendSeries.length > 1) {

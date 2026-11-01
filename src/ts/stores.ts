@@ -411,14 +411,17 @@ export type RwkvMemorisedStats = {
 export let rwkvMemorisedStats = writable<RwkvMemorisedStats | null>(null)
 let rwkvMemorisedGeneration = 0
 
-function anchoredRwkvDays(values: number[] | undefined, firstDay: number | null | undefined) {
+export function anchoredRwkvDays(
+    values: (number | null)[] | undefined,
+    firstDay: number | null | undefined
+) {
     const result: number[] = []
     if (firstDay === null || firstDay === undefined) {
         return result
     }
     const firstUnixDay = today + (firstDay - SSEother.days_elapsed)
     for (const [index, value] of (values ?? []).entries()) {
-        result[firstUnixDay + index] = value
+        result[firstUnixDay + index] = value ?? NaN
     }
     return result
 }

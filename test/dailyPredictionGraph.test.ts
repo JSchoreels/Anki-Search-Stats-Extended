@@ -173,6 +173,42 @@ test("raw-gap clipping uses separate IDs and leaves other metrics unclipped", ()
     expect(first.querySelector("[data-model]")!.hasAttribute("clip-path")).toBe(false)
 })
 
+test("averaged curves can bridge missing days without inventing daily points or tooltips", () => {
+    const svg = svgElement()
+    const data = [rawGapPoint(20000, 10), rawGapPoint(20003, -10)]
+    const series = [{ model: "fsrs" as const, data }]
+    render(svg, series, "rawGap", 2, undefined, undefined, { mode: "study", connectGaps: true })
+    expect(svg.querySelectorAll(".daily-prediction-average-gap")).toHaveLength(1)
+    expect(
+        svg.querySelector(".daily-prediction-average-gap")!.getAttribute("stroke-dasharray")
+    ).toBe("2 4")
+    expect(svg.querySelectorAll(".daily-prediction-point")).toHaveLength(2)
+    expect(svg.querySelectorAll(".daily-prediction-hover")).toHaveLength(2)
+    render(svg, series, "rawGap", 2, undefined, undefined, { mode: "study", connectGaps: false })
+    expect(svg.querySelectorAll(".daily-prediction-average-gap")).toHaveLength(0)
+})
+
+test("review-based values control the raw-gap scale and tooltip", () => {
+    const svg = svgElement()
+    const data = [rawGapPoint(20000, 80), rawGapPoint(20001, -80)]
+    render(svg, [{ model: "fsrs", data }], "rawGap", 1000, undefined, undefined, {
+        mode: "reviews",
+        reviewValues: {
+            fsrs: [
+                { day: 20000, value: 10 },
+                { day: 20001, value: -20 },
+            ],
+            rwkv: [],
+        },
+    })
+    expect(svg.querySelectorAll(".daily-prediction-hover")[1].getAttribute("aria-label")).toContain(
+        "averaging-raw-value: averaging-review-window: 1000, -20.0"
+    )
+    const height = Number(svg.querySelector("clipPath rect")!.getAttribute("height"))
+    expect(Number(svg.querySelector(".daily-prediction-point")!.getAttribute("cy"))).toBeLessThan(0)
+    expect(Number(svg.querySelector(".daily-prediction-zero")!.getAttribute("y1"))).toBe(height / 2)
+})
+
 test("recall gaps render on both sides of zero and do not join across missing days", () => {
     const svg = svgElement()
     renderDailyPredictionGraph(

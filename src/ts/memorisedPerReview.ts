@@ -16,7 +16,8 @@ export function emptyReviewRecallTotals(): ReviewRecallTotals {
 export function recallGainPerHundredReviews(
     gains: number[],
     reviewCounts: number[],
-    windowDays = 1
+    windowDays = 1,
+    mode: "calendar" | "study" = "calendar"
 ): number[] {
     if (!Number.isSafeInteger(windowDays) || windowDays < 1) {
         throw new Error("Moving-average days must be a positive integer")
@@ -25,6 +26,8 @@ export function recallGainPerHundredReviews(
     const result = Array<number>(gains.length).fill(Number.NaN)
     let gainTotal = 0
     let reviewTotal = 0
+    const studyDays: number[] = []
+    let firstStudyDay = 0
     const valid = (day: number) =>
         Number.isFinite(gains[day]) && Number.isFinite(reviewCounts[day]) && reviewCounts[day] > 0
 
@@ -32,8 +35,14 @@ export function recallGainPerHundredReviews(
         if (valid(day)) {
             gainTotal += gains[day]
             reviewTotal += reviewCounts[day]
+            if (mode === "study") studyDays.push(day)
         }
-        const expiredDay = day - windowDays
+        const expiredDay =
+            mode === "calendar"
+                ? day - windowDays
+                : studyDays.length - firstStudyDay > windowDays
+                  ? studyDays[firstStudyDay++]
+                  : -1
         if (expiredDay >= 0 && valid(expiredDay)) {
             gainTotal -= gains[expiredDay]
             reviewTotal -= reviewCounts[expiredDay]

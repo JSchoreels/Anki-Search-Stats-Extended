@@ -1,6 +1,7 @@
 import {
     buildDailyPredictionData,
     dailyPredictionAverage,
+    dailyPredictionReviewWindow,
     dailyPredictionValue,
 } from "../src/ts/dailyPredictionData"
 import { dayToMs } from "../src/ts/revlogGraphs"
@@ -182,6 +183,91 @@ test("moving averages weight available days equally and use calendar-day windows
     expect(() => dailyPredictionAverage(data, "logLoss", 0)).toThrow(
         "Invalid moving average window"
     )
+})
+
+test("study-day averages use the last available scores even across missing dates", () => {
+    const data = [
+        {
+            day: firstDay,
+            count: 1,
+            actualRecall: 1,
+            predictedRecall: 0.5,
+            standardizedGap: 1,
+            logLoss: 1,
+        },
+        {
+            day: firstDay + 4,
+            count: 1,
+            actualRecall: 0,
+            predictedRecall: 0.5,
+            standardizedGap: -1,
+            logLoss: 2,
+        },
+        {
+            day: firstDay + 6,
+            count: 1,
+            actualRecall: 1,
+            predictedRecall: 0.75,
+            standardizedGap: 0.5,
+            logLoss: 3,
+        },
+    ]
+    expect(dailyPredictionAverage(data, "logLoss", 2, "study")).toEqual([1, 1.5, 2.5])
+    expect(dailyPredictionAverage(data, "logLoss", 2, "calendar")).toEqual([1, 2, 3])
+})
+
+test("review windows use exact individual samples, including a partial day", () => {
+    const samples = [
+        review(firstDay, 0, 1),
+        review(firstDay, 1, 0),
+        review(firstDay + 3, 0, 1),
+        review(firstDay + 3, 1, 1),
+    ]
+    const inputs = calibrationInputs(samples, {
+        [samples[0].revlogId]: 0.5,
+        [samples[1].revlogId]: 0.5,
+        [samples[2].revlogId]: 0.25,
+        [samples[3].revlogId]: 0.5,
+    })
+    const raw = dailyPredictionReviewWindow(...inputs, "rawGap", 3)
+    expect(raw.map((point) => point.day)).toEqual([firstDay, firstDay + 3])
+    expect(raw[0].value).toBeCloseTo(0)
+    expect(raw[1].value).toBeCloseTo(25)
+    const surprise = dailyPredictionReviewWindow(...inputs, "logLoss", 3)
+    expect(surprise[0].value).toBeCloseTo(1)
+    expect(surprise[1].value).toBeCloseTo(4 / 3)
+    const standardized = dailyPredictionReviewWindow(...inputs, "standardizedGap", 3)
+    expect(standardized[0].value).toBeCloseTo(0)
+    expect(standardized[1].value).toBeCloseTo(0.75 / Math.sqrt(0.25 + 0.1875 + 0.25))
+})
+
+test("review windows sort samples and omit unavailable predictions", () => {
+    const early = review(firstDay, 0, 1)
+    const unavailable = review(firstDay + 1, 0, 1)
+    const later = review(firstDay + 2, 0, 0)
+    const inputs = calibrationInputs([later, unavailable, early], {
+        [early.revlogId]: 0.5,
+        [later.revlogId]: 0.25,
+    })
+    expect(dailyPredictionReviewWindow(...inputs, "rawGap", 1)).toEqual([
+        { day: firstDay, value: 50 },
+        { day: firstDay + 2, value: -25 },
+    ])
+    expect(() => dailyPredictionReviewWindow(...inputs, "rawGap", 0)).toThrow(
+        "Invalid review window"
+    )
+})
+
+test("a deterministic-only review window has an undefined standardized gap", () => {
+    const samples = [review(firstDay, 0, 1), review(firstDay + 1, 0, 0)]
+    const inputs = calibrationInputs(samples, {
+        [samples[0].revlogId]: 0.5,
+        [samples[1].revlogId]: 1,
+    })
+    expect(dailyPredictionReviewWindow(...inputs, "standardizedGap", 1)).toEqual([
+        { day: firstDay, value: 1 },
+        { day: firstDay + 1, value: null },
+    ])
 })
 
 test("undefined standardized gaps are excluded from the average and remain gaps", () => {

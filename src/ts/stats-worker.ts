@@ -40,7 +40,8 @@ self.onmessage = async ({ data }) => {
                 data.task === "memorised" ||
                 data.task === "maturation" ||
                 data.task === "activeRetrievability" ||
-                data.task === "calibrationSamples"
+                data.task === "calibrationSamples" ||
+                data.task === "fsrsReviewWindow"
             ) {
                 data.args[0] = new RevlogHistory(data.args[0])
             }

@@ -4,11 +4,21 @@
     import LineGraph from "./LineGraph.svelte"
     import type { LineChartSeries } from "./LineGraph"
     import { recallGainPerHundredReviews } from "./memorisedPerReview"
+    import type { AveragingMode } from "./dailyMovingAverage"
+    import type { ReviewWindowSeries } from "./reviewRecall"
+    import AveragingControls from "./AveragingControls.svelte"
     import MemorisedSourceControls from "./MemorisedSourceControls.svelte"
+    import { onDestroy } from "svelte"
+    import { getRwkvReviewGainWindow } from "./search"
+    import { runStatsTask } from "./statsWorkerClient"
     import {
+        anchoredRwkvDays,
         cancelRwkvReviewGainComputation,
+        card_data,
+        fsrsPresetData,
         memorisedPerReviewMode,
         memorised_stats,
+        revlogs,
         reviewGainHorizon,
         rwkvReviewGainStats,
     } from "./stores"
@@ -17,7 +27,15 @@
 
     let smoothing = true
     let averageDays = 7
-    let draftAverageDays: number | undefined = averageDays
+    let averageReviews = 1000
+    let averagingMode: AveragingMode = "calendar"
+    let connectGaps = true
+    let fsrsWindow: ReviewWindowSeries | undefined
+    let rwkvWindow: ReviewWindowSeries | undefined
+    let fsrsWindowError = ""
+    let rwkvWindowError = ""
+    let fsrsWindowRequest: AbortController | undefined
+    let rwkvWindowGeneration = 0
     let view: "recall" | "gain" = "recall"
     let displayData: number[] = []
     let displaySeries: LineChartSeries[] = []
@@ -27,14 +45,98 @@
     const valueFormat = new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 })
     const formatValue = (value: number) => valueFormat.format(value)
 
-    function applyAverageDays() {
-        if (
-            typeof draftAverageDays === "number" &&
-            Number.isSafeInteger(draftAverageDays) &&
-            draftAverageDays >= 1
-        )
-            averageDays = draftAverageDays
+    $: {
+        const history = $revlogs
+        const cards = $card_data
+        const presets = $fsrsPresetData
+        const stats = $memorised_stats
+        const horizon = $reviewGainHorizon
+        const count = averageReviews
+        const needed =
+            smoothing && averagingMode === "reviews" && $memorisedPerReviewMode !== "rwkv"
+        fsrsWindowRequest?.abort()
+        fsrsWindowRequest = undefined
+        fsrsWindow = undefined
+        fsrsWindowError = ""
+        if (needed && history && cards && presets && stats) {
+            const request = new AbortController()
+            fsrsWindowRequest = request
+            void runStatsTask(
+                "fsrsReviewWindow",
+                [
+                    history,
+                    cards,
+                    SSEother.deck_configs,
+                    SSEother.deck_config_ids,
+                    presets.presetsByCard,
+                    horizon,
+                    count,
+                    stats.snapshotNow,
+                ],
+                request.signal
+            ).then(
+                (result) => {
+                    if (!request.signal.aborted) fsrsWindow = result
+                },
+                (error) => {
+                    if (!request.signal.aborted)
+                        fsrsWindowError = error instanceof Error ? error.message : String(error)
+                }
+            )
+        }
     }
+    $: {
+        const stats = $rwkvReviewGainStats
+        const count = averageReviews
+        const needed =
+            smoothing && averagingMode === "reviews" && $memorisedPerReviewMode !== "fsrs"
+        const generation = ++rwkvWindowGeneration
+        rwkvWindow = undefined
+        rwkvWindowError = ""
+        if (
+            needed &&
+            stats?.done &&
+            !stats.error &&
+            stats.phase === "complete" &&
+            stats.jobId !== null
+        ) {
+            void getRwkvReviewGainWindow(stats.jobId, count).then(
+                (result) => {
+                    if (generation !== rwkvWindowGeneration) return
+                    rwkvWindow = {
+                        withReview: anchoredRwkvDays(result.withByDay, result.firstDay),
+                        withoutReview: anchoredRwkvDays(result.withoutByDay, result.firstDay),
+                        gain: anchoredRwkvDays(result.gainByDay, result.firstDay),
+                    }
+                },
+                (error) => {
+                    if (generation === rwkvWindowGeneration)
+                        rwkvWindowError = error instanceof Error ? error.message : String(error)
+                }
+            )
+        }
+    }
+    $: reviewWindowLoading =
+        smoothing &&
+        averagingMode === "reviews" &&
+        (($memorisedPerReviewMode !== "rwkv" && !fsrsWindow && !fsrsWindowError) ||
+            ($memorisedPerReviewMode !== "fsrs" &&
+                !rwkvWindow &&
+                !rwkvWindowError &&
+                !$rwkvReviewGainStats?.error &&
+                $rwkvReviewGainStats?.phase !== "cancelled"))
+    $: windowLabel = i18n(
+        averagingMode === "reviews"
+            ? "averaging-review-window"
+            : averagingMode === "study"
+              ? "averaging-study-window"
+              : "averaging-calendar-window",
+        { count: averagingMode === "reviews" ? averageReviews : averageDays }
+    )
+    onDestroy(() => {
+        fsrsWindowRequest?.abort()
+        rwkvWindowGeneration++
+    })
 
     $: {
         const fsrs = $memorised_stats?.reviewRecallByHorizon[$reviewGainHorizon]
@@ -45,6 +147,7 @@
                       {
                           label: i18n("memorised-source-fsrs"),
                           totals: fsrs,
+                          window: fsrsWindow,
                           color: FSRS_COMPARISON_COLOUR,
                       },
                       {
@@ -55,6 +158,7 @@
                               withReview: rwkv.withDays,
                               withoutReview: rwkv.withoutDays,
                           },
+                          window: rwkvWindow,
                           color: RWKV_COMPARISON_COLOUR,
                           dailyDash: "3 3",
                       },
@@ -69,6 +173,7 @@
                                 withReview: rwkv.withDays,
                                 withoutReview: rwkv.withoutDays,
                             },
+                            window: rwkvWindow,
                             color: RWKV_COMPARISON_COLOUR,
                             dailyDash: "3 3",
                         },
@@ -77,11 +182,12 @@
                         {
                             label: i18n("memorised-source-fsrs"),
                             totals: fsrs,
+                            window: fsrsWindow,
                             color: FSRS_COMPARISON_COLOUR,
                         },
                     ]
 
-        displaySeries = sources.flatMap(({ label, totals, color, dailyDash }) => {
+        displaySeries = sources.flatMap(({ label, totals, window, color, dailyDash }) => {
             const count = totals?.count ?? []
             if (view === "recall") {
                 return [
@@ -97,25 +203,39 @@
                     },
                 ].map(({ key, text, dash }) => ({
                     label: `${label} — ${text}`,
-                    data: recallGainPerHundredReviews(
-                        totals?.[key] ?? [],
-                        count,
-                        smoothing ? averageDays : 1
-                    ),
+                    data:
+                        smoothing && averagingMode === "reviews"
+                            ? (window?.[key] ?? [])
+                            : recallGainPerHundredReviews(
+                                  totals?.[key] ?? [],
+                                  count,
+                                  smoothing ? averageDays : 1,
+                                  smoothing && averagingMode === "study" ? "study" : "calendar"
+                              ),
                     color,
                     strokeWidth: 2.4,
                     strokeDasharray: dash,
+                    connectGaps: smoothing && connectGaps,
                 }))
             }
             const raw = recallGainPerHundredReviews(totals?.gain ?? [], count)
-            const average = recallGainPerHundredReviews(totals?.gain ?? [], count, averageDays)
+            const average =
+                averagingMode === "reviews"
+                    ? (window?.gain ?? [])
+                    : recallGainPerHundredReviews(
+                          totals?.gain ?? [],
+                          count,
+                          averageDays,
+                          averagingMode
+                      )
             return smoothing
                 ? [
                       {
-                          label: i18n("memorised-average-series", { label, days: averageDays }),
+                          label: i18n("averaging-series", { label, window: windowLabel }),
                           data: average,
                           color,
                           strokeWidth: 2.4,
+                          connectGaps,
                       },
                       {
                           label: i18n("memorised-daily-series", { label }),
@@ -198,27 +318,18 @@
         </button>
     </div>
 {/if}
-<div class="average-controls">
-    <label>
-        <input type="checkbox" bind:checked={smoothing} />
-        {i18n("memorised-moving-average")}
-    </label>
-    <form on:submit|preventDefault={applyAverageDays}>
-        <label>
-            <input
-                aria-label={i18n("memorised-average-days")}
-                type="number"
-                min="1"
-                step="1"
-                required
-                disabled={!smoothing}
-                bind:value={draftAverageDays}
-                on:change={applyAverageDays}
-            />
-            {i18n("maturation-days")}
-        </label>
-    </form>
-</div>
+<AveragingControls
+    bind:enabled={smoothing}
+    bind:mode={averagingMode}
+    bind:days={averageDays}
+    bind:reviews={averageReviews}
+    bind:connectGaps
+/>
+{#if fsrsWindowError || rwkvWindowError}
+    <p role="alert">{i18n("averaging-error", { error: fsrsWindowError || rwkvWindowError })}</p>
+{:else if reviewWindowLoading && hasDisplayData}
+    <p role="status">{i18n("averaging-review-loading")}</p>
+{/if}
 {#if hasDisplayData}
     <LineGraph
         data={displayData}
@@ -236,7 +347,11 @@
     />
 {:else}
     <p role="status">
-        {i18n(loadingSelectedSource ? "loading" : "memorised-per-review-no-data")}
+        {i18n(
+            loadingSelectedSource || reviewWindowLoading
+                ? "loading"
+                : "memorised-per-review-no-data"
+        )}
     </p>
 {/if}
 {#if smoothing}<p class="average-help">
@@ -245,18 +360,11 @@
                 ? "memorised-per-review-average-help"
                 : "memorised-review-recall-average-help"
         )}
-    </p>{/if}
+    </p>
+    {#if connectGaps}<p class="average-help">{i18n("averaging-gap-help")}</p>{/if}
+{/if}
 
 <style>
-    .average-controls {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        gap: 0.5em 1em;
-        margin-bottom: 0.6em;
-        font-size: 0.85em;
-    }
-
     .review-controls {
         display: flex;
         flex-wrap: wrap;
@@ -269,16 +377,6 @@
         display: flex;
         align-items: center;
         gap: 0.4em;
-    }
-
-    .average-controls label {
-        display: flex;
-        align-items: center;
-        gap: 0.4em;
-    }
-
-    .average-controls input[type="number"] {
-        width: 4.5em;
     }
 
     .average-help {

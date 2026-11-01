@@ -4,6 +4,8 @@
 
 ### User facing changes
 
+- Use compact moving-average controls on Daily Recall Gap, Daily Surprise, and Review Recall and Gain. Choose calendar days, the latest study days with eligible results, or the latest N eligible reviews. Optional dotted connectors bridge missing days without inventing daily values.
+
 - Switch Daily Recall Gap between the standardized score and the raw difference in percentage points. The moving average follows the selected view, and the raw-gap axis focuses on typical daily values or the visible moving averages while keeping outliers in the tooltips.
 
 - Compare predicted recall with and without each review immediately, after 10 minutes, after 1 hour, or after 24 hours. The review graph can show both recall lines or their gain per 100 answers for FSRS, RWKV, or both; the projections retain RWKV's non-monotonic short-term behavior.
@@ -57,6 +59,8 @@
 - Identify unloaded data in troubleshooting exports instead of reporting misleading zero counts. Cancelling export writes no file.
 
 ### Technical details
+
+- Compute review-count windows from individual eligible answers, including partial days. The standardized recall gap uses one Z-score for the window; Review Recall and Gain retains answer-weighted totals. Compute FSRS review windows on demand in the statistics worker and return RWKV rolling results from its in-memory replay without transferring per-answer data to the page.
 
 - Derive daily raw recall differences from the existing actual and predicted rates, including when standardized variance is zero; average the selected values across available days. Scale the raw-gap axis symmetrically to the absolute P95 of visible daily values, or 105% of the largest visible moving average, and clip outlying daily values to the plot.
 

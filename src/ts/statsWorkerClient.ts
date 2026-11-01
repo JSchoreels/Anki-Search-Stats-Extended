@@ -11,6 +11,7 @@ type HistoryTask =
     | "calibrationSamples"
     | "maturation"
     | "activeRetrievability"
+    | "fsrsReviewWindow"
 type TaskArgs<K extends keyof Tasks> = K extends HistoryTask
     ? Parameters<Tasks[K]> extends [infer First, ...infer Rest]
         ? [First | StatsHistory, ...Rest]
@@ -71,7 +72,8 @@ function startStatsTask<K extends keyof Tasks>(
                 task === "memorised" ||
                 task === "calibrationSamples" ||
                 task === "maturation" ||
-                task === "activeRetrievability"
+                task === "activeRetrievability" ||
+                task === "fsrsReviewWindow"
             ) {
                 const reviews = copyRevlogValues(asRevlogHistory(args[0] as RevlogInput).values)
                 worker.postMessage(

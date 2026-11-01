@@ -1627,6 +1627,11 @@ def rwkv_review_gain_progress() -> bytes:
     return Response(orjson.dumps(rwkv_review_gain.progress(req.get("job_id"))))
 
 
+def rwkv_review_gain_window() -> bytes:
+    req = orjson.loads(request.data)
+    return Response(orjson.dumps(rwkv_review_gain.review_window(req.get("job_id"), req.get("reviews"))))
+
+
 def cancel_rwkv_review_gain() -> bytes:
     req = orjson.loads(request.data)
     rwkv_review_gain.cancel(req.get("job_id"))
@@ -1635,6 +1640,7 @@ def cancel_rwkv_review_gain() -> bytes:
 
 post_handlers["startRwkvReviewGain"] = start_rwkv_review_gain
 post_handlers["rwkvReviewGainProgress"] = rwkv_review_gain_progress
+post_handlers["rwkvReviewGainWindow"] = rwkv_review_gain_window
 post_handlers["cancelRwkvReviewGain"] = cancel_rwkv_review_gain
 
 

@@ -25,6 +25,7 @@ import {
 } from "./fsrsModel"
 import { emptyReviewRecallTotals, REVIEW_HORIZONS } from "./memorisedPerReview"
 import { asRevlogHistory, type RevlogInput } from "./packedRevlogs"
+import { projectReviewRecall, type ReviewProjection } from "./reviewRecall"
 import { type Buckets, dayFromMs, emptyBuckets, IDify, rollover_ms } from "./revlogGraphs"
 import { bucketTimeStats, TimeBucketBuilder } from "./timeBucketStats"
 export { getFsrs, intervalAtRetrievability } from "./fsrsModel"
@@ -347,6 +348,11 @@ export async function getMemorisedDays(
     const reviewRecallByHorizon = Object.fromEntries(
         REVIEW_HORIZONS.map((horizon) => [horizon, emptyReviewRecallTotals()])
     ) as Record<(typeof REVIEW_HORIZONS)[number], ReturnType<typeof emptyReviewRecallTotals>>
+    const reviewProjection: ReviewProjection = {
+        dayDelta: -1,
+        withReview: Number.NaN,
+        withoutReview: Number.NaN,
+    }
 
     let cardCounts = cards.reduce(
         (p, c) => {
@@ -702,35 +708,20 @@ export async function getMemorisedDays(
         }
         const newState = startingState ?? fsrs.nextState(memoryState, elapsed, grade)
         if (recallBefore !== undefined && Number.isFinite(recallBefore)) {
-            let previousDayDelta = -1
-            let cachedWithReview = Number.NaN
-            let cachedWithoutReview = Number.NaN
+            reviewProjection.dayDelta = -1
             for (const horizon of REVIEW_HORIZONS) {
-                let withReview: number
-                let withoutReview: number
-                if (fsrs.version === "seven") {
-                    const elapsedAfter = horizon / 86400
-                    withReview = fsrs.retrievability(newState, elapsedAfter)
-                    withoutReview = memoryState
-                        ? horizon === 0
-                            ? recallBefore
-                            : fsrs.retrievability(memoryState, elapsed + elapsedAfter)
-                        : 0
-                } else {
-                    const dayDelta =
-                        horizon === 0 ? 0 : dayFromMs(revlog.id + horizon * 1000) - revlogDay
-                    if (dayDelta !== previousDayDelta) {
-                        cachedWithReview = fsrs.retrievability(newState, dayDelta)
-                        cachedWithoutReview = memoryState
-                            ? dayDelta === 0
-                                ? recallBefore
-                                : fsrs.retrievability(memoryState, elapsed + dayDelta)
-                            : 0
-                        previousDayDelta = dayDelta
-                    }
-                    withReview = cachedWithReview
-                    withoutReview = cachedWithoutReview
-                }
+                projectReviewRecall(
+                    reviewProjection,
+                    fsrs,
+                    newState,
+                    memoryState,
+                    elapsed,
+                    recallBefore,
+                    revlog.id,
+                    revlogDay,
+                    horizon
+                )
+                const { withReview, withoutReview } = reviewProjection
                 if (
                     Number.isFinite(withReview) &&
                     withReview >= 0 &&
@@ -907,6 +898,7 @@ export async function getMemorisedDays(
     const collectedCalibration = calibration_samples.finish()
     console.timeEnd("Calculating memorised days")
     return {
+        snapshotNow,
         retrievabilityDays,
         reviewCountsByDay,
         reviewRecallByHorizon,

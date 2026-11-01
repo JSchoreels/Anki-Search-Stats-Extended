@@ -5,7 +5,11 @@ import {
 } from "./calibrationPredictions"
 import type { CalibrationSamples } from "./calibrationSamples"
 import { selectCalibrationSamples } from "./calibrationSampleSelection"
-import { buildDailyPredictionData } from "./dailyPredictionData"
+import {
+    buildDailyPredictionData,
+    dailyPredictionReviewWindow,
+    type DailyPredictionDisplayMetric,
+} from "./dailyPredictionData"
 import { calculateMaturationHistory } from "./maturation"
 import {
     buildCalibrationBinCounts,
@@ -13,6 +17,7 @@ import {
     calibrationConfidenceIntervals,
     getMemorisedDays,
 } from "./MemorisedBar"
+import { calculateFsrsReviewWindow } from "./reviewRecall"
 import { calculateRevlogStats } from "./revlogGraphs"
 import { buildRocData } from "./rocData"
 import { buildUmPlusData } from "./umPlusData"
@@ -37,6 +42,19 @@ function comparison(samples: CalibrationSamples, fsrs: Float64Array, rwkv: Float
     }
 }
 
+function dailyPredictionReviewWindows(
+    samples: CalibrationSamples,
+    fsrs: Float64Array,
+    rwkv: Float64Array,
+    metric: DailyPredictionDisplayMetric,
+    reviews: number
+) {
+    return {
+        fsrs: dailyPredictionReviewWindow(samples, fsrs, metric, reviews),
+        rwkv: dailyPredictionReviewWindow(samples, rwkv, metric, reviews),
+    }
+}
+
 const tasks = {
     revlog: calculateRevlogStats,
     maturation: calculateMaturationHistory,
@@ -47,6 +65,8 @@ const tasks = {
     calibrationPredictions,
     calibrationReplay: buildCalibrationBins,
     comparison,
+    dailyPredictionReviewWindows,
+    fsrsReviewWindow: calculateFsrsReviewWindow,
 }
 
 export type Tasks = typeof tasks

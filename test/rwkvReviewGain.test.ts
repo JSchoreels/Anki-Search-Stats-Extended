@@ -38,6 +38,30 @@ test("batched replay matches per-answer replay, including a batch boundary", () 
     )
 })
 
+test("review-count windows use exact eligible answers, including partial days", () => {
+    const one = result.window_one
+    const two = result.window_two
+    expect(two.firstDay).toBe(2)
+    expect(two.gainByDay[1]).toBeNull()
+    expect(two.withByDay[2]).toBeCloseTo(87.5)
+    expect(two.withoutByDay[2]).toBeCloseTo(77.5)
+    expect(two.gainByDay[2]).toBeCloseTo(10)
+    expect(one.gainByDay[2]).toBeCloseTo(-5)
+    expect(two.gainByDay[4]).toBeCloseTo(17.5)
+    expect(result.progress.withByReview).toBeUndefined()
+    expect(result.invalid_window).toMatch(/Invalid review window/)
+    for (const key of ["withByDay", "withoutByDay", "gainByDay"]) {
+        result.batch_window_two[key].forEach((value: number | null, day: number) => {
+            if (value === null) expect(two[key][day]).toBeNull()
+            else expect(value).toBeCloseTo(two[key][day], 5)
+        })
+        result.large_window_two[key].forEach((value: number | null, day: number) => {
+            if (value === null) expect(result.large_reference_window_two[key][day]).toBeNull()
+            else expect(value).toBeCloseTo(result.large_reference_window_two[key][day], 5)
+        })
+    }
+})
+
 test("non-answer entries do not count as prior answers, while undated answers advance state", () => {
     expect(result.edge_updates).toEqual([4, 5, 5])
     expect(result.edge.countByDay).toEqual([1, 1])

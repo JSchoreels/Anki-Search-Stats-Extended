@@ -39,7 +39,8 @@ provenance follows [the calibration data path](FSRS_CALIBRATION_GRAPH.MD).
 Reviews are grouped with the existing `dayFromMs(revlogId)` helper, including
 Anki's rollover hour and each review date's local timezone offset.
 Calendar labels preserve these day indices. Days without eligible predictions
-have no value and break the plotted line, rather than being filled with zero.
+have no daily value rather than being filled with zero. The optional gap
+connectors described below do not add data for those days.
 Tooltips show the date and, for each selected model with data on that day,
 the graph score, actual R (`sum(y)/n`), predicted R (`sum(p)/n`), and eligible
 review count. When smoothing is enabled, they also show the moving average. Hover and keyboard focus expose the
@@ -95,33 +96,48 @@ the mean predicted R and variance calculation.
 
 ## Moving average
 
-Moving averages start enabled with an editable **7-day** window in each panel.
-Disable **Moving average** to restore the colored daily lines. When enabled,
-the colored lines show the trailing mean of available daily scores over the
-selected calendar-day window, and daily lines and points become faint grey. In
-Daily Recall Gap, the average uses whichever gap view is selected, including raw
-differences in percentage points.
-FSRS's grey line is solid; RWKV's is dashed. The legend identifies the colored
-model averages. A one-day window equals the raw scores.
+Moving averages start enabled with a **7 calendar day** window in each panel.
+The compact control also offers a window measured in **study days** with an
+eligible score, or in **reviews** (initially 1,000). Calendar windows average
+available daily scores in the last N calendar days; study-day windows average
+the last N available daily scores, even when separated by missing dates. Both
+give each included day equal weight, independently of its review count. In
+the standardized view, a day whose predicted variance is zero is unavailable
+and is excluded from a study-day average.
 
-Each available day has equal weight, independently of its review count. Missing
-days and unavailable recall-gap scores are excluded from the mean and remain
-line breaks. At the beginning of the range, only available earlier days in the
-window contribute. The same shared trailing-average helper also supplies the
-existing maturation graph's moving averages; maturation ratios continue to use
-the ratio of counts over the same window. These controls are local to each panel
-and do not persist settings or request new predictions.
+Review-count windows include each model's latest N eligible reviews, including
+the part of a day at the beginning of the window when necessary. Raw recall
+gap is `100 × sum(actual - predicted) / count`, and surprise is the mean of
+the individual review losses. The standardized view instead computes one
+window-level `sum(actual - predicted) / sqrt(sum(p × (1 - p)))`; it is not an
+average of daily Z-scores. A window with zero total variance has no standardized
+value. At the beginning of history, all available reviews are used until the
+window fills. Because the models can have different eligible predictions, their
+review-count windows can cover different dates. These windows are computed in
+the statistics worker from the existing predictions without requesting new ones.
+
+Disable **Moving average** to restore the colored daily lines. When enabled,
+colored lines show the selected window and daily lines and points become faint
+grey; FSRS's grey line is solid and RWKV's is dashed. **Connect missing days**
+starts enabled and draws a faint dotted interpolation between available
+averages; turning it off restores breaks. It never creates daily values or
+tooltips for missing dates. A calendar-window average may change as older days
+expire, so the connector between endpoints is an interpolation, not a
+calculated value for every missing day. The selected window is calculated
+before zoom crops the display. Controls are local to each panel and are not
+persisted. The existing maturation graphs retain their own calendar-day behavior.
 
 ## Verification and runtime
 
 `test/dailyPredictionData.test.ts` covers the scores, review-count scaling,
 confidence, sparse/invalid data, boundary probabilities, and Anki day rollover.
 `test/dailyPredictionGraph.test.ts` covers rendering, signed values, gaps, unavailable
-scores, both gap views, both model series, grey daily values, smoothing, redraws,
-raw-gap axis ranges and clipping, and mouse/keyboard tooltip behavior. Calibration parity and loading tests verify each model's
+scores, both gap views, review-count and study-day windows, both model series,
+grey daily values, gap connectors, smoothing, redraws, raw-gap axis ranges and
+clipping, and mouse/keyboard tooltip behavior. Calibration parity and loading tests verify each model's
 independent eligible sample and the FSRS held-out boundary. Maturation regression
 tests cover the reused averaging helper.
 
 Build with `npm run build`, package with `./package.sh`, and synchronize with
-`./copy_to_anki.sh`. This changes frontend code and the English fallback locale;
-reopening the statistics window loads the updated graphs.
+`./copy_to_anki.sh`. When the Python bridge changes, fully quit and reopen Anki
+before loading the updated graphs.

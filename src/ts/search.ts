@@ -271,6 +271,22 @@ export async function getRwkvReviewGainProgress(jobId: number) {
     )) as RwkvReviewGainProgress
 }
 
+export type RwkvReviewGainWindow = {
+    jobId: number
+    firstDay: number | null
+    withByDay: (number | null)[]
+    withoutByDay: (number | null)[]
+    gainByDay: (number | null)[]
+}
+
+export async function getRwkvReviewGainWindow(jobId: number, reviews: number) {
+    return (await endpoint(
+        "rwkvReviewGainWindow",
+        JSON.stringify({ job_id: jobId, reviews }),
+        false
+    )) as RwkvReviewGainWindow
+}
+
 export async function cancelRwkvReviewGain(jobId: number) {
     await endpoint("cancelRwkvReviewGain", JSON.stringify({ job_id: jobId }), false)
 }

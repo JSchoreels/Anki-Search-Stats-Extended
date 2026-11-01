@@ -372,8 +372,8 @@ memorised-review-with = With review
 memorised-review-without = Without review
 memorised-per-review-help =
     For each modeled answer, compares predicted recall at the selected time after the actual answer with predicted recall at that same time if the answer had been skipped. Both projections assume no intervening answers. Gain is the difference, scaled to 100 modeled answers; other cards' forgetting does not reduce it. A first learning answer assumes zero recall without study. Answers with unavailable prior state or invalid predictions are excluded, and the models may cover different answers. These are model estimates, not measurements of a review's causal effect. FSRS predicts essentially 100% immediately after an answer; RWKV may change non-monotonically over time. A negative gain does not prove an answer harmed memory.
-memorised-per-review-average-help = The colored line divides the window's total estimated recall gain by its number of modeled answers; it does not average daily ratios. The vertical scale follows the colored averages. Grey lines show the daily ratios (FSRS solid, RWKV dashed); disable Moving average to inspect them at full scale. Days without modeled answers remain gaps.
-memorised-review-recall-average-help = Each line is the answer-weighted average predicted recall over the selected window. Solid lines show the review; dashed lines show the same cards without that answer. Days without modeled answers remain gaps.
+memorised-per-review-average-help = The colored line divides the window's total estimated recall gain by its number of modeled answers; it does not average daily ratios. The vertical scale follows the colored averages. Grey lines show daily ratios (FSRS solid, RWKV dashed); disable Moving average to inspect them at full scale.
+memorised-review-recall-average-help = Each line is the answer-weighted average predicted recall over the selected window. Solid lines show the review; dashed lines show the same cards without that answer.
 memorised-per-review-no-data = No answers with a modeled recall change are available for this source yet.
 memorised-review-rwkv-progress = Computing RWKV review gains: {$current} / {$total} answers — {$percent}%
 memorised-review-rwkv-preparing = Preparing RWKV before-answer estimates: {$current} / {$total} answers — {$percent}%
@@ -555,7 +555,23 @@ daily-prediction-average-days = Moving average window in days
 daily-prediction-average-value = {$days}-day average: {$value}
 daily-prediction-rawGap-average-value = {$days}-day average: {$value} pp
 daily-prediction-average-series = {$label} ({$days}-day average)
-daily-prediction-average-help = Colored lines show the trailing moving average; grey lines and dots show the daily values (FSRS solid, RWKV dashed). Each available day has equal weight. Missing days and unavailable scores are excluded and remain gaps.
+daily-prediction-average-help = Colored lines show the selected window; grey lines and dots show daily values (FSRS solid, RWKV dashed). Calendar-day and study-day windows weight available days equally; review windows include each eligible review once.
+averaging-moving-average = Moving average
+averaging-window-size = Moving average window size
+averaging-window-type = Moving average window type
+averaging-calendar-days = calendar days
+averaging-study-days = study days
+averaging-reviews = reviews
+averaging-connect-gaps = Connect missing days
+averaging-calendar-window = {$count}-day average
+averaging-study-window = {$count}-study-day average
+averaging-review-window = Last {$count} reviews
+averaging-series = {$label} ({$window})
+averaging-value = {$window}: {$value}
+averaging-raw-value = {$window}: {$value} pp
+averaging-gap-help = Faint dotted connectors indicate missing days; no daily values are added for those days.
+averaging-error = Could not calculate the selected average: {$error}
+averaging-review-loading = Calculating the review window…
 daily-prediction-standardizedGap-help =
     Show raw difference to plot actual R minus predicted R in percentage points. Otherwise the standardized gap is actual recalls minus expected recalls, divided by the expected standard deviation: sum(actual - predicted) / sqrt(sum(predicted × (1 - predicted))).
     Positive values mean you remembered more than the model expected; negative values mean less. In the standardized view, further from zero means a more unexpected day, accounting for review count and prediction confidence.

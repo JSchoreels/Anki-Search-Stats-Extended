@@ -30,6 +30,8 @@ class ReviewGainJob:
     with_by_day: list[float] = field(default_factory=list)
     without_by_day: list[float] = field(default_factory=list)
     count_by_day: list[int] = field(default_factory=list)
+    with_by_review: array = field(default_factory=lambda: array("d"))
+    without_by_review: array = field(default_factory=lambda: array("d"))
     slow_replay: bool | None = None
     done: bool = False
     error: str | None = None
@@ -204,6 +206,8 @@ def _replay_review_gains(job, history, runtime, learn_start, wait_for_other_repl
         with_values[day] = with_values.get(day, 0.0) + after_values[0]
         without_values[day] = without_values.get(day, 0.0) + before_value
         counts[day] = counts.get(day, 0) + 1
+        job.with_by_review.append(after_values[0])
+        job.without_by_review.append(before_value)
 
     flush()
     publish(previous_day)
@@ -332,6 +336,8 @@ def _replay_review_gains_batched(job, history, make_runtime, pack_reviews, learn
                 with_values[day] = with_values.get(day, 0.0) + after
                 without_values[day] = without_values.get(day, 0.0) + before
                 counts[day] = counts.get(day, 0) + 1
+                job.with_by_review.append(after)
+                job.without_by_review.append(before)
         with job.lock:
             job.current = offset + len(chunk)
             job.phase = "computing"
@@ -415,6 +421,8 @@ def _run(job, mw, scheduler):
                 job.with_by_day = []
                 job.without_by_day = []
                 job.count_by_day = []
+                job.with_by_review = array("d")
+                job.without_by_review = array("d")
             elif job.error is None:
                 job.phase = "complete"
             else:
@@ -422,6 +430,8 @@ def _run(job, mw, scheduler):
                 job.with_by_day = []
                 job.without_by_day = []
                 job.count_by_day = []
+                job.with_by_review = array("d")
+                job.without_by_review = array("d")
             job.done = True
         job.finished.set()
 
@@ -450,6 +460,54 @@ def progress(job_id):
         if _job is None or _job.job_id != job_id:
             return {"phase": "cancelled", "done": True, "jobId": job_id}
         return _job.progress()
+
+
+def _review_window(job, reviews):
+    """Calculate exact trailing review counts without sending per-review data to the page."""
+    if isinstance(reviews, bool) or not isinstance(reviews, int) or reviews < 1:
+        raise ValueError("Invalid review window")
+    if (len(job.with_by_review) != len(job.without_by_review) or
+            len(job.with_by_review) != sum(job.count_by_day)):
+        raise ValueError("RWKV review window data is incomplete")
+    with_days, without_days, gain_days = [], [], []
+    with_total = 0.0
+    without_total = 0.0
+    index = 0
+    for count in job.count_by_day:
+        for _ in range(count):
+            with_total += job.with_by_review[index]
+            without_total += job.without_by_review[index]
+            if index >= reviews:
+                with_total -= job.with_by_review[index - reviews]
+                without_total -= job.without_by_review[index - reviews]
+            index += 1
+        if count:
+            denominator = min(index, reviews)
+            with_days.append(100 * with_total / denominator)
+            without_days.append(100 * without_total / denominator)
+            gain_days.append(100 * (with_total - without_total) / denominator)
+        else:
+            with_days.append(None)
+            without_days.append(None)
+            gain_days.append(None)
+    return {
+        "jobId": job.job_id,
+        "firstDay": job.first_day,
+        "withByDay": with_days,
+        "withoutByDay": without_days,
+        "gainByDay": gain_days,
+    }
+
+
+def review_window(job_id, reviews):
+    with _job_lock:
+        job = _job
+        if job is None or job.job_id != job_id:
+            raise ValueError("RWKV review replay is no longer available")
+        with job.lock:
+            if not job.done or job.error or job.cancel.is_set():
+                raise ValueError("RWKV review replay is not complete")
+    return _review_window(job, reviews)
 
 
 def cancel(job_id):

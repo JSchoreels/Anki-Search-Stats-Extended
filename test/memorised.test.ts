@@ -10,6 +10,7 @@ import {
     type S90BatchResolver,
 } from "../src/ts/MemorisedBar"
 import { REVIEW_HORIZONS } from "../src/ts/memorisedPerReview"
+import { calculateFsrsReviewWindow } from "../src/ts/reviewRecall"
 import { day_ms, dayFromMs, rollover_ms, today } from "../src/ts/revlogGraphs"
 import { Revlog } from "../src/ts/search"
 import { calibrationInputs } from "./calibrationInputs"
@@ -235,6 +236,31 @@ test("review recall gain skips the first retained answer when its prior state is
     expect(stats.reviewRecallGainCountsByDay[dayFromMs(first.id)]).toBeUndefined()
     expect(stats.reviewRecallGainCountsByDay[dayFromMs(second.id)]).toBe(1)
     expect(stats.reviewRecallGainByDay[dayFromMs(second.id)]).toBeGreaterThan(0)
+    const window = calculateFsrsReviewWindow(
+        [first, second],
+        [{ ...card.card(), did: 1 } as any],
+        configs as Record<number, DeckConfig>,
+        mappings,
+        {},
+        0,
+        1,
+        stats.snapshotNow
+    )
+    expect(window.gain[dayFromMs(first.id)]).toBeNaN()
+    expect(window.gain[dayFromMs(second.id)]).toBeCloseTo(
+        100 * stats.reviewRecallGainByDay[dayFromMs(second.id)]
+    )
+    const beforeSecond = calculateFsrsReviewWindow(
+        [first, second],
+        [{ ...card.card(), did: 1 } as any],
+        configs as Record<number, DeckConfig>,
+        mappings,
+        {},
+        0,
+        1,
+        second.id - 1
+    )
+    expect(beforeSecond.gain[dayFromMs(second.id)]).toBeUndefined()
 })
 
 test.each([
@@ -275,6 +301,72 @@ test.each([
             expect(totals.gain[day]).toBeCloseTo(withReview - without)
             expect(totals.count[day]).toBe(1)
             expect(totals.withoutReview[dayFromMs(first.id)]).toBe(0)
+        }
+    }
+)
+
+test.each([
+    [1, weights],
+    [3, weights7],
+] as const)(
+    "FSRS %i review windows count individual answers within a day",
+    async (deck, params) => {
+        const card = new RevlogBuilder()
+        const first = card.review(10, 3) as Revlog
+        const second = card.review(10, 3) as Revlog
+        const repetition = { ...second, id: second.id + 1000 } as Revlog
+        const filtered = { ...second, id: second.id + 2000, factor: 0, type: 3 } as Revlog
+        const entries = [first, second, repetition, filtered]
+        const cards = [{ ...card.card(), did: deck } as any]
+        const stats = await getMemorisedDaysForTest(entries, cards, configs, mappings)
+        const day = dayFromMs(second.id)
+        const model = getFsrsForParams([...params])
+        const initial = model.nextState(null, 0, first.ease)
+        const elapsed = elapsedFsrsDays(model, new Date(first.id), new Date(second.id), rollover_ms)
+        const secondState = model.nextState(initial, elapsed, second.ease)
+        const repeatElapsed = elapsedFsrsDays(
+            model,
+            new Date(second.id),
+            new Date(repetition.id),
+            rollover_ms
+        )
+        const repeatState = model.nextState(secondState, repeatElapsed, repetition.ease)
+        for (const horizon of REVIEW_HORIZONS) {
+            const two = calculateFsrsReviewWindow(
+                entries,
+                cards,
+                configs as Record<number, DeckConfig>,
+                mappings,
+                {},
+                horizon,
+                2
+            )
+            const one = calculateFsrsReviewWindow(
+                entries,
+                cards,
+                configs as Record<number, DeckConfig>,
+                mappings,
+                {},
+                horizon,
+                1
+            )
+            const total = stats.reviewRecallByHorizon[horizon]
+            expect(two.withReview[day]).toBeCloseTo((100 * total.withReview[day]) / 2)
+            expect(two.withoutReview[day]).toBeCloseTo((100 * total.withoutReview[day]) / 2)
+            expect(two.gain[day]).toBeCloseTo((100 * total.gain[day]) / 2)
+            const future = new Date(repetition.id + horizon * 1000)
+            const withReview = model.retrievability(
+                repeatState,
+                elapsedFsrsDays(model, new Date(repetition.id), future, rollover_ms)
+            )
+            const without = model.retrievability(
+                secondState,
+                elapsedFsrsDays(model, new Date(second.id), future, rollover_ms)
+            )
+            expect(one.withReview[day]).toBeCloseTo(100 * withReview)
+            expect(one.withoutReview[day]).toBeCloseTo(100 * without)
+            expect(one.gain[day]).toBeCloseTo(100 * (withReview - without))
+            expect(one.gain[dayFromMs(first.id) + 1]).toBeNaN()
         }
     }
 )

@@ -86,7 +86,7 @@ test("current worker failures are reported, cancelled request failures are silen
     }
 })
 
-test.each(["revlog", "memorised", "calibrationSamples"] as const)(
+test.each(["revlog", "memorised", "calibrationSamples", "fsrsReviewWindow"] as const)(
     "%s transfers numeric history while preserving the page's reviews",
     async (task) => {
         const worker = { terminate: jest.fn(), postMessage: jest.fn(), onmessage: null as any }

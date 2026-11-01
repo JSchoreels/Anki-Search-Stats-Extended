@@ -238,6 +238,13 @@ except ValueError as error:
 else:
     raise AssertionError("unsupported horizon accepted")
 
+try:
+    module._review_window(job, 0)
+except ValueError as error:
+    invalid_window = str(error)
+else:
+    raise AssertionError("invalid review window accepted")
+
 print(json.dumps({
     "progress": job.progress(),
     "updates": runtime.updates,
@@ -246,6 +253,11 @@ print(json.dumps({
     "cancelled_updates": cancelled_runtime.updates,
     "invalid": invalid_job.progress(),
     "batch": batch_job.progress(),
+    "window_one": module._review_window(job, 1),
+    "window_two": module._review_window(job, 2),
+    "batch_window_two": module._review_window(batch_job, 2),
+    "large_window_two": module._review_window(large_job, 2),
+    "large_reference_window_two": module._review_window(large_reference, 2),
     "large_batch": large_job.progress(),
     "large_reference": large_reference.progress(),
     "edge": edge_job.progress(),
@@ -257,6 +269,7 @@ print(json.dumps({
     "new_future_bridge": new_future_bridge,
     "cancellation_chain": cancellation_chain,
     "invalid_horizon": invalid_horizon,
+    "invalid_window": invalid_window,
     "future_runs": future_runs,
     "crossing": {"before": [before_query.day_offset, before_query.current_elapsed_days, before_query.current_elapsed_seconds],
                  "after": [after_query.day_offset, after_query.current_elapsed_days, after_query.current_elapsed_seconds],
