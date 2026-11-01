@@ -4,6 +4,8 @@
 
 ### User facing changes
 
+- Reduce noisy RWKV statistics logs by abbreviating long generated card-ID searches and omitting repeated per-batch debug messages.
+
 - View Stability Over Time and Review Speed Trend as line charts with compact moving-average controls, date zoom, and trend selection. Stability retains its mean/median choice and young/mature shares in the tooltip; Review Speed can average over calendar or study days.
 
 - Use compact moving-average controls on Daily Recall Gap, Daily Surprise, and Review Recall and Gain. Choose calendar days, the latest study days with eligible results, or the latest N eligible reviews. Optional dotted connectors bridge missing days without inventing daily values.

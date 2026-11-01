@@ -406,6 +406,11 @@ It adds no persisted cache or direct database operations. The RWKV
 adapter requires the scheduler's state-token and search-score helpers; builds
 without those capabilities show an unavailable message. Pending warm-up is
 polled, errors offer Retry, and results from an obsolete search are discarded.
+During these add-on requests, scheduler logs abbreviate generated card-ID
+searches longer than 256 characters to their card count and omit repetitive
+per-batch success messages at DEBUG level. Summary timings, warnings and errors
+remain available. The filter is scoped to the requesting context; scheduler
+logs from other operations or threads are not suppressed.
 
 Package with `npm run build` followed by `./package.sh`; `./copy_to_anki.sh`
 installs that archive into `addons21/1339555413`, preserving Anki-owned metadata,

@@ -2,9 +2,43 @@
 
 import logging
 import math
+from contextvars import ContextVar
 from types import SimpleNamespace
 
 logger = logging.getLogger(__name__)
+_stats_search_log_scope = ContextVar("sse_rwkv_stats_search", default=None)
+_batch_score_messages = (
+    "RWKV review inputs scored from resident state:",
+    "RWKV review inputs scored from cache:",
+    "RWKV review inputs scored:",
+)
+
+
+class _StatsSchedulerLogFilter(logging.Filter):
+    """Keep this add-on's generated search and per-batch debug output compact."""
+
+    def filter(self, record):
+        scope = _stats_search_log_scope.get()
+        if scope is None:
+            return True
+        if (
+            record.levelno == logging.DEBUG
+            and isinstance(record.msg, str)
+            and record.msg.startswith(_batch_score_messages)
+        ):
+            return False
+        search, count = scope
+        if len(search) > 256 and isinstance(record.args, tuple):
+            summary = f"<selected {count} card IDs>"
+            record.args = tuple(
+                summary if isinstance(arg, str) and arg == search else arg
+                for arg in record.args
+            )
+        return True
+
+
+# The filter is inert outside the request's context, including on other threads.
+logging.getLogger("aqt.rwkv_scheduler").addFilter(_StatsSchedulerLogFilter())
 
 
 def current_predictions(mw, cids):
@@ -31,6 +65,7 @@ def current_predictions(mw, cids):
 
     reviewer = getattr(mw, "reviewer", None) or SimpleNamespace(mw=mw)
     search = "cid:" + ",".join(map(str, cids))
+    log_scope = _stats_search_log_scope.set((search, len(cids)))
     try:
         status = scheduler.prepare_stats_retrievability_scores(reviewer, search).value
         if status != "ready":
@@ -68,6 +103,8 @@ def current_predictions(mw, cids):
     except Exception:
         logger.exception("Current FSRS/RWKV disagreement snapshot failed")
         return {**empty, "status": "failed"}
+    finally:
+        _stats_search_log_scope.reset(log_scope)
 
 
 def valid_probability(value):
