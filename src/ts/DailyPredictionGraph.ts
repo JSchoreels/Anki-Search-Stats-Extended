@@ -20,6 +20,7 @@ import { tooltip, tooltipShown } from "./stores"
 import { tooltipX } from "./tooltip"
 
 const dateLabel = (day: number) => d3.utcFormat("%Y-%m-%d")(new Date(day * day_ms))
+let nextClipId = 0
 
 function formatMetricValue(value: number | null, metric: DailyPredictionDisplayMetric) {
     if (value === null) return i18n("daily-prediction-gap-unavailable")
@@ -92,15 +93,19 @@ export function renderDailyPredictionGraph(
             ) ?? []
     )
     const magnitude =
-        Math.max(
-            d3.max(data, (point) => Math.abs(dailyPredictionValue(point, metric) ?? 0)) || 0,
-            d3.max(visibleAverages, (value) => Math.abs(value ?? 0)) || 0
-        ) || 1
+        (metric === "rawGap"
+            ? averageDays === null
+                ? d3.quantile(data, 0.95, (point) => Math.abs(dailyPredictionValue(point, metric)!))
+                : (d3.max(visibleAverages, (value) => Math.abs(value ?? 0)) ?? 0) * 1.05
+            : Math.max(
+                  d3.max(data, (point) => Math.abs(dailyPredictionValue(point, metric) ?? 0)) || 0,
+                  d3.max(visibleAverages, (value) => Math.abs(value ?? 0)) || 0
+              )) || 1
     const y = d3
         .scaleLinear()
         .domain(metric === "logLoss" ? [0, magnitude] : [-magnitude, magnitude])
-        .nice()
         .range([height, 0])
+    if (metric !== "rawGap") y.nice()
     const xTicks = x
         .ticks(Math.min(5, lastDay - firstDay + 1))
         .filter((date) => date.getUTCHours() === 0)
@@ -144,9 +149,24 @@ export function renderDailyPredictionGraph(
         .attr("stroke", COMPARISON_REFERENCE_COLOUR)
         .attr("stroke-dasharray", "5 4")
 
+    let clipId: string | undefined
+    if (metric === "rawGap") {
+        clipId = `sse-daily-prediction-clip-${nextClipId++}`
+        d3.select(svg)
+            .append("defs")
+            .append("clipPath")
+            .attr("id", clipId)
+            .append("rect")
+            .attr("width", width)
+            .attr("height", height)
+    }
+
     const hoverByDay = new Map<number, string[]>()
     for (const item of prepared) {
-        const group = chart.append("g").attr("data-model", item.model)
+        const group = chart
+            .append("g")
+            .attr("data-model", item.model)
+            .attr("clip-path", clipId ? `url(#${clipId})` : null)
         const modelLabel = i18n(`calibration-source-${item.model}`)
         const line = d3
             .line<{ day: number; value: number | null }>()

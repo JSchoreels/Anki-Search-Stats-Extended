@@ -24,6 +24,11 @@ const point = (day: number, standardizedGap: number | null = 0): DailyPrediction
     standardizedGap,
     logLoss: 0.786,
 })
+const rawGapPoint = (day: number, gap: number): DailyPredictionPoint => ({
+    ...point(day),
+    actualRecall: (100 + gap) / 200,
+    predictedRecall: (100 - gap) / 200,
+})
 const renderDailyPredictionGraph = (
     svg: SVGElement,
     data: DailyPredictionPoint[],
@@ -65,6 +70,107 @@ test("raw differences show signed percentage points and smooth the selected view
     expect(svg.querySelector(".daily-prediction-hover")!.getAttribute("aria-label")).toContain(
         "daily-prediction-rawGap-average-value: 2, -12.5"
     )
+})
+
+test("raw gaps use the visible absolute P95 across models and keep clipped values in tooltips", () => {
+    const svg = svgElement()
+    const fsrs = Array.from({ length: 10 }, (_, index) => rawGapPoint(20000 + index, 10))
+    const rwkv = Array.from({ length: 10 }, (_, index) =>
+        rawGapPoint(20000 + index, index === 9 ? 90 : -10)
+    )
+    const series = [
+        { model: "fsrs" as const, data: fsrs },
+        { model: "rwkv" as const, data: rwkv },
+    ]
+    render(svg, series, "rawGap")
+
+    const clip = svg.querySelector("clipPath")!
+    const height = Number(clip.querySelector("rect")!.getAttribute("height"))
+    const zeroY = Number(svg.querySelector(".daily-prediction-zero")!.getAttribute("y1"))
+    const fsrsPoint = svg.querySelector('[data-model="fsrs"] .daily-prediction-point')!
+    const rwkvPoints = svg.querySelectorAll('[data-model="rwkv"] .daily-prediction-point')
+    // Nineteen absolute gaps are 10 and one is 90, so linear-interpolated P95 is 14.
+    expect(zeroY).toBe(height / 2)
+    expect(Number(fsrsPoint.getAttribute("cy"))).toBeCloseTo((height / 2) * (1 - 10 / 14))
+    expect(Number(rwkvPoints[0].getAttribute("cy"))).toBeCloseTo((height / 2) * (1 + 10 / 14))
+    expect(Number(rwkvPoints[9].getAttribute("cy"))).toBeLessThan(0)
+    for (const group of svg.querySelectorAll("[data-model]"))
+        expect(group.getAttribute("clip-path")).toBe(`url(#${clip.id})`)
+    expect(svg.querySelectorAll(".daily-prediction-hover")[9].getAttribute("aria-label")).toContain(
+        "daily-prediction-rawGap-value: 90.0"
+    )
+
+    render(svg, series, "rawGap", null, { start: 20000, end: 20008 })
+    expect(Number(svg.querySelector('[data-model="fsrs"] circle')!.getAttribute("cy"))).toBeCloseTo(
+        0
+    )
+    expect(Number(svg.querySelector('[data-model="rwkv"] circle')!.getAttribute("cy"))).toBeCloseTo(
+        height
+    )
+    expect(svg.querySelectorAll(".daily-prediction-hover")).toHaveLength(9)
+})
+
+test("raw-gap smoothing scales to the visible moving averages with five percent headroom", () => {
+    const svg = svgElement()
+    const fsrs = [rawGapPoint(20000, 80), rawGapPoint(20001, -80), rawGapPoint(20002, 0)]
+    const rwkv = [rawGapPoint(20000, 20), rawGapPoint(20001, 20), rawGapPoint(20002, 20)]
+    render(
+        svg,
+        [
+            { model: "fsrs", data: fsrs },
+            { model: "rwkv", data: rwkv },
+        ],
+        "rawGap",
+        2,
+        { start: 20001, end: 20002 }
+    )
+
+    const height = Number(svg.querySelector("clipPath rect")!.getAttribute("height"))
+    const zeroY = Number(svg.querySelector(".daily-prediction-zero")!.getAttribute("y1"))
+    const fsrsPoints = svg.querySelectorAll('[data-model="fsrs"] .daily-prediction-point')
+    const rwkvPoint = svg.querySelector('[data-model="rwkv"] .daily-prediction-point')!
+    // The visible FSRS averages are 0 and -40; the RWKV averages are 20.
+    expect(zeroY).toBe(height / 2)
+    expect(Number(rwkvPoint.getAttribute("cy"))).toBeCloseTo((height / 2) * (1 - 20 / 42))
+    expect(Number(fsrsPoints[0].getAttribute("cy"))).toBeGreaterThan(height)
+    const days = svg.querySelectorAll(".daily-prediction-hover")
+    expect(days[0].getAttribute("aria-label")).toContain("daily-prediction-rawGap-value: -80.0")
+    expect(days[0].getAttribute("aria-label")).toContain(
+        "daily-prediction-rawGap-average-value: 2, 0.0"
+    )
+    expect(days[1].getAttribute("aria-label")).toContain(
+        "daily-prediction-rawGap-average-value: 2, -40.0"
+    )
+})
+
+test.each([null, 2])(
+    "raw-gap zero values and empty zoom ranges stay finite with averaging %s",
+    (days) => {
+        const svg = svgElement()
+        const series = [
+            { model: "fsrs" as const, data: [rawGapPoint(20000, 0), rawGapPoint(20002, 0)] },
+        ]
+        render(svg, series, "rawGap", days)
+        expect(svg.innerHTML).not.toMatch(/NaN|Infinity/)
+        expect(svg.querySelector(".daily-prediction-point")!.getAttribute("cy")).toBe(
+            svg.querySelector(".daily-prediction-zero")!.getAttribute("y1")
+        )
+        render(svg, series, "rawGap", days, { start: 20001, end: 20001 })
+        expect(svg.querySelectorAll(".daily-prediction-hover")).toHaveLength(0)
+        expect(svg.innerHTML).not.toMatch(/NaN|Infinity/)
+    }
+)
+
+test("raw-gap clipping uses separate IDs and leaves other metrics unclipped", () => {
+    const first = svgElement()
+    const second = svgElement()
+    const series = [{ model: "fsrs" as const, data: [rawGapPoint(20000, 10)] }]
+    render(first, series, "rawGap")
+    render(second, series, "rawGap")
+    expect(first.querySelector("clipPath")!.id).not.toBe(second.querySelector("clipPath")!.id)
+    render(first, series, "standardizedGap")
+    expect(first.querySelector("clipPath")).toBeNull()
+    expect(first.querySelector("[data-model]")!.hasAttribute("clip-path")).toBe(false)
 })
 
 test("recall gaps render on both sides of zero and do not join across missing days", () => {

@@ -4,7 +4,7 @@
 
 ### User facing changes
 
-- Switch Daily Recall Gap between the standardized score and the raw difference in percentage points. The moving average follows the selected view.
+- Switch Daily Recall Gap between the standardized score and the raw difference in percentage points. The moving average follows the selected view, and the raw-gap axis focuses on typical daily values or the visible moving averages while keeping outliers in the tooltips.
 
 - Compare predicted recall with and without each review immediately, after 10 minutes, after 1 hour, or after 24 hours. The review graph can show both recall lines or their gain per 100 answers for FSRS, RWKV, or both; the projections retain RWKV's non-monotonic short-term behavior.
 
@@ -58,7 +58,7 @@
 
 ### Technical details
 
-- Derive daily raw recall differences from the existing actual and predicted rates, including when standardized variance is zero; average the selected values across available days.
+- Derive daily raw recall differences from the existing actual and predicted rates, including when standardized variance is zero; average the selected values across available days. Scale the raw-gap axis symmetrically to the absolute P95 of visible daily values, or 105% of the largest visible moving average, and clip outlying daily values to the plot.
 
 - Compute immediate recall gain as 100 times the sum of per-answer post-minus-pre recall probabilities divided by the number of answers the model can score. Replay FSRS in the existing history pass and RWKV in a separate cancellable in-memory pass. Exclude unknown prior states, preserve no-answer gaps, and retain signed axes, raw underlay tooltips, zoom and the independent source selector.
 

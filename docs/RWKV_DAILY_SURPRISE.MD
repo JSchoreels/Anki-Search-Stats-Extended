@@ -12,8 +12,9 @@ Both respect the statistics search and review date range. Each panel has its own
 calibration source selector. FSRS uses blue; RWKV uses green.
 
 Both panels support [drag-to-zoom](TIME_AXIS_ZOOM.MD) with a local **Reset zoom**
-button. Both models share the selected dates, the vertical axis fits visible
-daily and averaged values, and smoothing uses full history before cropping.
+button. Both models share the selected dates, and smoothing uses full history
+before cropping. Except for the raw recall-gap view described below, the vertical
+axis fits both visible daily and averaged values.
 
 The shared comparison worker reuses the calibration samples and each model's
 index-aligned prediction array. FSRS uses the same held-out cached predictions
@@ -61,7 +62,14 @@ The standardized gap is:
 
 The variance uses each review's probability, not just the day's mean R.
 Positive means more recalls than predicted; negative means fewer. Zero is a
-dashed reference line. The vertical axis is symmetric around zero.
+dashed reference line. The vertical axis is symmetric around zero. In the raw
+view, when the moving average is disabled, its extent is the 95th percentile of
+the absolute visible daily gaps across the selected models (using linear
+interpolation). With the moving average enabled, its extent is 105% of the
+largest absolute visible moving average. A zero or unavailable extent falls
+back to one percentage point. Daily values outside the axis are clipped from
+the plot but remain available in the date tooltips. Zooming recalculates the
+extent from the visible days.
 
 The scale accounts for review count and predicted uncertainty. It assumes
 independent outcomes, so correlated reviews and small samples prevent treating
@@ -110,7 +118,7 @@ and do not persist settings or request new predictions.
 confidence, sparse/invalid data, boundary probabilities, and Anki day rollover.
 `test/dailyPredictionGraph.test.ts` covers rendering, signed values, gaps, unavailable
 scores, both gap views, both model series, grey daily values, smoothing, redraws,
-and mouse/keyboard tooltip behavior. Calibration parity and loading tests verify each model's
+raw-gap axis ranges and clipping, and mouse/keyboard tooltip behavior. Calibration parity and loading tests verify each model's
 independent eligible sample and the FSRS held-out boundary. Maturation regression
 tests cover the reused averaging helper.
 
