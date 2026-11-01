@@ -35,7 +35,7 @@ Its total can be lower than a native single-model histogram.
 | Interval, lapse, repetition, load | Current-card eligibility, suspended/zero settings, histogram/load totals, numeric interval boundaries |
 | Ratings and fatigue | Rated-answer counts, zero-time answers, manual entries, subgroup totals, normalized empty buckets, fixed retrievability axis |
 | Time distributions | Time units, review filters, source buckets, weighted means, true medians, redraw after width/statistic changes |
-| Review speed | Native daily counts and times, empty-day denominators |
+| Review speed | Native daily counts and times, empty-day denominators and gaps, calendar/study-day averages, visible date range and gap connectors |
 | Time Machine and hourly breakdown | Scheduling transitions, current suspended segments, selected history window, local calendar date/hour, exact day range |
 | Stability/retrievability heatmap | Native current R, independent FSRS population, card eligibility, S90, finite probabilities, constant-value dimensions, count conservation |
 | Stability increase factor | Full memory state, retention target, valid minimum stability, multiplier axis and tooltip units |

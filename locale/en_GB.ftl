@@ -572,6 +572,7 @@ averaging-raw-value = {$window}: {$value} pp
 averaging-gap-help = Faint dotted connectors indicate missing days; no daily values are added for those days.
 averaging-error = Could not calculate the selected average: {$error}
 averaging-review-loading = Calculating the review window…
+daily-line-average-help = The colored line averages available daily values in the selected window; the faint grey line shows the original daily values. Each available day has equal weight. The vertical scale follows the average; hover to see daily values outside it.
 daily-prediction-standardizedGap-help =
     Show raw difference to plot actual R minus predicted R in percentage points. Otherwise the standardized gap is actual recalls minus expected recalls, divided by the expected standard deviation: sum(actual - predicted) / sqrt(sum(predicted × (1 - predicted))).
     Positive values mean you remembered more than the model expected; negative values mean less. In the standardized view, further from zero means a more unexpected day, accounting for review count and prediction confidence.
@@ -588,15 +589,14 @@ show-question = Show?
 increase-date-range = Increase date range
 
 average-stability-over-time = Stability Over Time
+stability-in-days = Stability (days)
 average-stability-over-time-help =
     This graph represents how your average stability, which is desired retention
     independent, has evolved over time. The mean gives a better sense of daily increases,
     while the median gives a value that is better representative of the real average.
     The values shown here use S90 (the interval where retrievability reaches 90%), not raw FSRS stability.
 
-    Note that the young/mature values are based on the amount of the respective cards in the deck (if there are 9 young cards and 1 mature card,
-    90% of the bar will marked as young). A cards maturity is calculated here using the stability, not the interval,
-    which makes it also desired retention independent.
+    The tooltip also shows the young and mature shares of the cards on that day. Here a card is young when its S90 is below 21 days, independently of desired retention.
 
 median = Median
 mean = Mean

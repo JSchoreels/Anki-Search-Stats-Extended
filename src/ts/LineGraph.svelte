@@ -27,6 +27,7 @@
     let allTrends: InitialTrend[] = []
     const retainedTrends = () => allTrends
     let lastKey: string
+    let defaultTrendEnabled = false
 
     export let label: string
     export let data: number[]
@@ -39,6 +40,8 @@
     export let yPercentile: number | undefined = undefined
     export let includeNegative = false
     export let legendWidth = 130
+    export let tooltipDetails: ((day: number) => string[]) | undefined = undefined
+    export let drawDefaultTrend = false
     export let trend_data: DrawnTrend[] = []
     export let current_trend: TrendLine = undefined
     export let removeTrend: (id: number) => void = () => {}
@@ -59,6 +62,8 @@
 
     function controllerReady(controller: TrendSelectionController) {
         removeTrend = (id) => {
+            if (trend_data.find((trend) => trend.id === id)?.kind === "default")
+                defaultTrendEnabled = false
             allTrends = removeTrendFromAll(
                 allTrends,
                 trend_data.find((trend) => trend.id === id)
@@ -82,6 +87,7 @@
         lastKey = trendPersistenceKey
         zoomRange = undefined
         allTrends = []
+        defaultTrendEnabled = drawDefaultTrend
     }
 
     $: if (svg) {
@@ -115,6 +121,8 @@
             yPercentile,
             includeNegative,
             legendWidth,
+            tooltipDetails,
+            drawDefaultTrend: defaultTrendEnabled,
         })
     }
 </script>

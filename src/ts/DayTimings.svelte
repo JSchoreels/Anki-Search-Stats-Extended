@@ -1,40 +1,40 @@
 <script lang="ts">
-    import { barDateLabeler } from "./bar"
-    import BarScrollable from "./BarScrollable.svelte"
+    import DailyLineGraph from "./DailyLineGraph.svelte"
     import { calcTimePerReview } from "./dayTimings"
+    import type { AveragingMode } from "./dailyMovingAverage"
     import { i18n, i18n_pattern } from "./i18n"
     import type { GraphsResponse_ReviewCountsAndTimes } from "./proto/anki/stats_pb"
     import { today } from "./revlogGraphs"
     import { searchLimit } from "./stores"
     import { TREND_PERSISTENCE_KEYS } from "./trendPersistenceKeys"
-    import TrendValue from "./TrendValue.svelte"
 
     export let data: GraphsResponse_ReviewCountsAndTimes | undefined
-    $: time_spent = data ? calcTimePerReview(data) : []
 
-    let offset = 0
-
-    $: bar = {
-        row_colours: ["#fcba03"],
-        row_labels: [i18n("seconds-per-review")],
-        data: Array.from(time_spent).map((data, i) => ({
-            label: (i - today).toString(),
-            values: [data],
-        })),
-        tick_spacing: 5,
-        columnLabeler: barDateLabeler,
-    }
-
-    $: limit = -1 - $searchLimit
+    const modes: Exclude<AveragingMode, "reviews">[] = ["calendar", "study"]
+    $: daily = data ? calcTimePerReview(data) : []
+    $: timeSpent = data
+        ? Array.from({ length: Math.max(daily.length, today + 1) }, (_, day) => daily[day] ?? NaN)
+        : []
+    $: firstDay = timeSpent.findIndex(Number.isFinite)
+    $: dayRange =
+        firstDay < 0
+            ? undefined
+            : {
+                  start: Math.max(firstDay, $searchLimit ? today - $searchLimit + 1 : firstDay),
+                  end: today,
+              }
 </script>
 
-<BarScrollable
-    data={bar}
-    bind:offset
-    average
-    {limit}
-    trend
-    trend_date_axis
-    trendPersistenceKey={TREND_PERSISTENCE_KEYS.misc.reviewSpeedTrend}
-    trend_info={{ pattern: i18n_pattern("average-second-per-day") }}
-/>
+{#if data}
+    <DailyLineGraph
+        data={timeSpent}
+        label={i18n("seconds-per-review")}
+        color="#fcba03"
+        {dayRange}
+        {modes}
+        trendPersistenceKey={TREND_PERSISTENCE_KEYS.misc.reviewSpeedTrend}
+        trendInfo={{ pattern: i18n_pattern("average-second-per-day") }}
+    />
+{:else}
+    <p role="status">{i18n("loading")}</p>
+{/if}

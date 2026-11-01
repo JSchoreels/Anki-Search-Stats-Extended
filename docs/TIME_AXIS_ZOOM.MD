@@ -10,7 +10,8 @@ This applies to all add-on calendar-axis line graphs (including Memorised,
 Memorised Gain per 100 Reviews, load history and daily maturation), their
 candlestick Trend views, daily
 FSRS/RWKV Recall Gap and Surprise, date-axis scrollable bars, Future Due, and
-the hourly intraday Due and daily hourly breakdown charts. Numeric distributions and Anki's built-in charts
+the hourly intraday Due and daily hourly breakdown charts. Stability Over Time
+and Review Speed Trend use the same line-chart zoom and trend controls. Numeric distributions and Anki's built-in charts
 retain their existing interactions.
 
 Ordinary clicks still open a bar's cards or select trend endpoints. A six-pixel
@@ -35,6 +36,13 @@ continues to contribute. Missing daily
 predictions remain gaps, including a zoom consisting entirely of missing days.
 Both model series use the same selected domain while retaining their own
 samples and tooltips.
+
+Stability Over Time averages daily mean or median snapshots across calendar
+days, including days without reviews. Review Speed Trend offers calendar-day
+and study-day windows over the native daily seconds-per-review values; both
+weight available days equally, and days with no reviews remain gaps. Smoothing
+is calculated before the visible date range and zoom are applied. The optional
+dotted connectors do not create observations for missing days.
 
 Memorised Gain per 100 Reviews also calculates its rolling ratio before zooming.
 Its signed vertical axis includes a stronger zero reference for modeled negative

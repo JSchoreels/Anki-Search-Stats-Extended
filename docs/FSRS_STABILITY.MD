@@ -52,6 +52,16 @@ Daily maturation and Average Stability Over Time support local
 [drag-to-zoom](TIME_AXIS_ZOOM.MD). Maturation retains its percentile control
 and calculates smoothing from the full prepared history before cropping.
 
+Stability Over Time shows the selected daily mean or median as a line and keeps
+the existing date-based trend ranges. A seven-calendar-day moving average is
+enabled initially; its values are the equally weighted mean of the available
+daily snapshots, including days without reviews. The faint grey line and hover
+details retain the original daily value. The tooltip also shows the young and
+mature shares for that day. Optional connectors only bridge gaps visually.
+Turning smoothing off restores the daily line. A review-count window is not
+offered because these values describe whole-collection daily snapshots rather
+than individual reviews.
+
 - Source: [`getMemorisedDays()`](/Users/jschoreels/workspace/Anki-Search-Stats-Extended/src/ts/MemorisedBar.ts)
 - Output fields:
     - `day_means`

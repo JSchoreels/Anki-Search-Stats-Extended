@@ -7,7 +7,13 @@
     export let days = 7
     export let reviews = 1000
     export let connectGaps = true
+    export let modes: AveragingMode[] = ["calendar", "study", "reviews"]
 
+    const modeLabels: Record<AveragingMode, string> = {
+        calendar: "averaging-calendar-days",
+        study: "averaging-study-days",
+        reviews: "averaging-reviews",
+    }
     let draft: number | undefined = days
     let previousMode = mode
     $: if (mode !== previousMode) {
@@ -42,11 +48,19 @@
             on:change={applyWindow}
             on:blur={applyWindow}
         />
-        <select aria-label={i18n("averaging-window-type")} disabled={!enabled} bind:value={mode}>
-            <option value="calendar">{i18n("averaging-calendar-days")}</option>
-            <option value="study">{i18n("averaging-study-days")}</option>
-            <option value="reviews">{i18n("averaging-reviews")}</option>
-        </select>
+        {#if modes.length === 1}
+            <span>{i18n(modeLabels[modes[0]])}</span>
+        {:else}
+            <select
+                aria-label={i18n("averaging-window-type")}
+                disabled={!enabled}
+                bind:value={mode}
+            >
+                {#each modes as availableMode}
+                    <option value={availableMode}>{i18n(modeLabels[availableMode])}</option>
+                {/each}
+            </select>
+        {/if}
     </form>
     <label class="connect-gaps">
         <input type="checkbox" disabled={!enabled} bind:checked={connectGaps} />

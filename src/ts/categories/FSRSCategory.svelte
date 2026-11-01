@@ -14,11 +14,12 @@
     import ROC from "../ROC.svelte"
     import CurrentDisagreement from "../CurrentDisagreement.svelte"
     import DailyPredictionGraph from "../DailyPredictionGraph.svelte"
+    import DailyLineGraph from "../DailyLineGraph.svelte"
     import ForgettingCurve from "../ForgettingCurve.svelte"
     import TimeMachineScroll from "../TimeMachineScroll.svelte"
     import { i18n, i18n_bundle, i18n_pattern } from "../i18n"
     import { TREND_PERSISTENCE_KEYS } from "../trendPersistenceKeys"
-    import { barDateLabeler, barStringLabeler, barHourLabeler, type BarChart } from "../bar"
+    import { barStringLabeler, barHourLabeler, type BarChart } from "../bar"
     import {
         calibrationMode,
         calibrationComparison,
@@ -32,12 +33,7 @@
         revlogStats,
     } from "../stores"
     import { today, day_ms, no_rollover_today } from "../revlogGraphs"
-    import {
-        FSRS_COMPARISON_COLOUR,
-        MATURE_COLOUR,
-        RWKV_COMPARISON_COLOUR,
-        YOUNG_COLOUR,
-    } from "../graph"
+    import { FSRS_COMPARISON_COLOUR, RWKV_COMPARISON_COLOUR } from "../graph"
     import type { PieDatum } from "../pie"
     import _ from "lodash"
     import * as d3 from "d3"
@@ -54,11 +50,18 @@
     }
 
     let average_type = Average.MEDIAN
-    let interval_bin_size = 1
     let granularity = 20
 
-    function barLabel(i: number) {
-        return (i - today).toString()
+    const shareFormat = new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 })
+    function stabilityDetails(day: number) {
+        const stats = $memorised_stats
+        const ratio = stats?.day_young_ratio_s90?.[day]
+        if (typeof ratio !== "number" || !Number.isFinite(ratio) || !(stats?.day_means?.[day] ?? 0))
+            return []
+        return [
+            `${i18n("young")}: ${shareFormat.format(ratio * 100)}%`,
+            `${i18n("mature")}: ${shareFormat.format((1 - ratio) * 100)}%`,
+        ]
     }
 
     let stability_time_machine_bar: BarChart
@@ -360,29 +363,15 @@
     </MemorisedGraphContainer>
     <MemorisedGraphContainer graphId="fsrs:average-stability-over-time">
         <h1 slot="title">{i18n("average-stability-over-time")}</h1>
-        <BarScrollable
+        <DailyLineGraph
             slot="graph"
-            bind:binSize={interval_bin_size}
-            data={{
-                row_colours: [YOUNG_COLOUR, MATURE_COLOUR],
-                row_labels: [i18n("young"), i18n("mature")],
-                data: (average_type == Average.MEAN
-                    ? $memorised_stats!.day_means
-                    : $memorised_stats!.day_medians
-                ).map((day, i) => {
-                    const young_ratio = $memorised_stats!.day_young_ratio_s90?.[i] ?? 0
-                    return {
-                        values: [day * young_ratio, day * (1 - young_ratio)],
-                        label: barLabel(i),
-                    }
-                }),
-                columnLabeler: barDateLabeler,
-            }}
-            average
-            trend
-            trend_date_axis
+            data={average_type == Average.MEAN
+                ? $memorised_stats!.day_means
+                : $memorised_stats!.day_medians}
+            label={i18n("stability-in-days")}
+            tooltipDetails={stabilityDetails}
             trendPersistenceKey={TREND_PERSISTENCE_KEYS.fsrs.averageStabilityOverTime}
-            trend_info={{ pattern: i18n_pattern("stability-per-day") }}
+            trendInfo={{ pattern: i18n_pattern("stability-per-day") }}
         />
         <p>
             {i18n("average-stability-over-time-help")}

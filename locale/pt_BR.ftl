@@ -345,15 +345,10 @@ show-question = Mostrar?
 increase-date-range = Aumentar intervalo de datas
 
 average-stability-over-time = Estabilidade Média ao Longo do Tempo
+stability-in-days = Estabilidade (dias)
+daily-line-average-help = A linha colorida mostra a média dos valores diários disponíveis na janela selecionada; a linha cinza clara mostra os valores diários originais. Cada dia disponível tem o mesmo peso. A escala vertical acompanha a média; passe o cursor para ver valores diários fora dela.
 average-stability-over-time-help =
-    Este gráfico representa como sua estabilidade média, que é independente da retenção
-    desejada, evoluiu ao longo do tempo.
-    A média dá uma melhor noção dos aumentos diários,
-    enquanto a mediana dá um valor mais representativo da média real.
-    Note que os valores recente/maduro são baseados na quantidade dos respectivos cartões no baralho (se houver 9 cartões recentes e 1 cartão maduro,
-    90% da barra será marcada como recente).
-    A maturidade de um cartão é calculada aqui usando a estabilidade, não o intervalo,
-    o que a torna também independente da retenção desejada.
+    Este gráfico mostra a evolução da estabilidade média ou mediana ao longo do tempo. Os valores usam S90 (o intervalo em que a recuperabilidade é de 90%) e não dependem da retenção desejada. Ao passar o cursor, veja as proporções de cartões recentes e maduros no dia. Aqui, cartões com S90 inferior a 21 dias são considerados recentes.
 median = Mediana
 mean = Média
 

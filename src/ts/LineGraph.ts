@@ -119,6 +119,8 @@ export function renderLineChart(
         yPercentile = undefined,
         includeNegative = false,
         legendWidth = 130,
+        tooltipDetails = undefined,
+        drawDefaultTrend = false,
     }: {
         onTrendsChange?: (trends: DrawnTrend[]) => void
         onPreviewTrendChange?: (trend: TrendLine) => void
@@ -136,6 +138,8 @@ export function renderLineChart(
         yPercentile?: number
         includeNegative?: boolean
         legendWidth?: number
+        tooltipDetails?: (day: number) => string[]
+        drawDefaultTrend?: boolean
     } = {}
 ) {
     if (!svg) {
@@ -402,6 +406,7 @@ export function renderLineChart(
                                   : value.toPrecision(2)
                             return `${item.label}: ${rendered}`
                         }),
+                    ...(tooltipDetails?.(d.day) ?? []),
                 ],
             })
         })
@@ -419,7 +424,7 @@ export function renderLineChart(
         initialPinnedTrends,
         initialTrends,
         onPinnedRangesChange,
-        drawDefaultTrend: false,
+        drawDefaultTrend,
     })
 
     axis.on("mouseover", () => tooltipShown.set(true)).on("mouseleave", () =>

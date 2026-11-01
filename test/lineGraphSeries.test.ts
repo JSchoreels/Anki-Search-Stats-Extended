@@ -21,6 +21,38 @@ test("renderLineChart overlays progressive named series", () => {
     expect(svg.textContent).toContain("RWKV")
 })
 
+test("line tooltips can include details for the hovered date", () => {
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg")
+    renderLineChart(svg, [5, 10, 15], "Stability", {
+        zoomRange: { start: 1, end: 2 },
+        tooltipDetails: (day) => [`Young: ${day * 25}%`, `Mature: ${100 - day * 25}%`],
+    })
+
+    svg.querySelectorAll(".hover-bar")[0].dispatchEvent(new MouseEvent("mouseover"))
+    expect(get(tooltip).text).toEqual(
+        expect.arrayContaining(["Stability: 10", "Young: 25%", "Mature: 75%"])
+    )
+    svg.querySelectorAll(".hover-bar")[1].dispatchEvent(new MouseEvent("mouseover"))
+    expect(get(tooltip).text).toEqual(
+        expect.arrayContaining(["Stability: 15", "Young: 50%", "Mature: 50%"])
+    )
+})
+
+test("the default trend can be retained when migrating a date-axis bar chart", () => {
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg")
+    const previous = SSEconfig.trends
+    SSEconfig.trends = true
+    try {
+        const onTrendsChange = jest.fn()
+        renderLineChart(svg, [1, 2, 4, 8], "Stability", { onTrendsChange, drawDefaultTrend: true })
+        expect(onTrendsChange).toHaveBeenLastCalledWith([
+            expect.objectContaining({ kind: "default", startX: 0, endX: 3 }),
+        ])
+    } finally {
+        SSEconfig.trends = previous
+    }
+})
+
 test("the legend shows the same dashed style as a comparison line", () => {
     const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg")
     renderLineChart(svg, [], "Recall", {
