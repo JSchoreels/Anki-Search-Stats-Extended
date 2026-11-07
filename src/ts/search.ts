@@ -5,12 +5,37 @@ import type { CurrentDisagreementResponse } from "./currentDisagreementData"
 import { loadRevlogPages, MissingRevlogColumnsError } from "./revlogPages"
 import { realFetch, searchJoin } from "./root"
 import { searchString } from "./stores"
+import type { WorkloadForecastProgress } from "./workloadForecastData"
 export * from "./cardData"
 
 export async function getCurrentCardDisagreement(
     cids: number[]
 ): Promise<CurrentDisagreementResponse> {
     return endpoint("currentCardDisagreement", JSON.stringify(cids), false)
+}
+
+export async function getWorkloadForecastAvailable(): Promise<boolean> {
+    const response = await endpoint("workloadForecastAvailable", "{}", false)
+    return response?.available === true
+}
+
+export async function startWorkloadForecast(request: {
+    search: string
+    days: number
+    paths: number
+    fast?: boolean
+}): Promise<WorkloadForecastProgress> {
+    return endpoint("startWorkloadForecast", JSON.stringify(request), false)
+}
+
+export async function getWorkloadForecastProgress(
+    jobId: number
+): Promise<WorkloadForecastProgress> {
+    return endpoint("workloadForecastProgress", JSON.stringify({ job_id: jobId }), false)
+}
+
+export async function cancelWorkloadForecast(jobId: number) {
+    await endpoint("cancelWorkloadForecast", JSON.stringify({ job_id: jobId }), false)
 }
 
 export function browseCurrentDisagreementCards(cids: number[]) {

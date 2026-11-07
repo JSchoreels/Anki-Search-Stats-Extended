@@ -1644,6 +1644,43 @@ post_handlers["rwkvReviewGainWindow"] = rwkv_review_gain_window
 post_handlers["cancelRwkvReviewGain"] = cancel_rwkv_review_gain
 
 
+def _workload_forecast_json(value):
+    return Response(orjson.dumps(value))
+
+
+def workload_forecast_available() -> bytes:
+    from . import workload_forecast
+
+    return _workload_forecast_json({"available": workload_forecast.available(mw)})
+
+
+def start_workload_forecast() -> bytes:
+    from . import workload_forecast
+
+    return _workload_forecast_json(workload_forecast.start(mw, orjson.loads(request.data)))
+
+
+def workload_forecast_progress() -> bytes:
+    from . import workload_forecast
+
+    req = orjson.loads(request.data)
+    return _workload_forecast_json(workload_forecast.progress(req.get("job_id")))
+
+
+def cancel_workload_forecast() -> bytes:
+    from . import workload_forecast
+
+    workload_forecast.cancel(orjson.loads(request.data).get("job_id"))
+    return _workload_forecast_json({})
+
+
+post_handlers["workloadForecastAvailable"] = workload_forecast_available
+post_handlers["startWorkloadForecast"] = start_workload_forecast
+post_handlers["workloadForecastProgress"] = workload_forecast_progress
+post_handlers["cancelWorkloadForecast"] = cancel_workload_forecast
+
+
+
 def write_config():
     req = orjson.loads(request.data)
     config = mw.addonManager.getConfig(__name__)

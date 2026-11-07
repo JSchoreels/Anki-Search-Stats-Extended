@@ -1,4 +1,4 @@
-INCLUDED = __init__.py current_disagreement.py stats.min.js stats-worker.js stats.min.css developers.md manifest.json config.json LICENSE ${wildcard locale/*.ftl}
+INCLUDED = __init__.py current_disagreement.py workload_forecast.py stats.min.js stats-worker.js stats.min.css developers.md manifest.json config.json LICENSE ${wildcard locale/*.ftl}
 OUT = searchStatsExtended.ankiaddon
 
 COPIED = anki/graphs/Graph.sphelte

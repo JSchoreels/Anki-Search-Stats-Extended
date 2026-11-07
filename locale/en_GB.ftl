@@ -889,3 +889,32 @@ hidden-graphs = Hidden graphs
 # Time-axis navigation
 graph-drag-zoom-help = Drag across the plot to zoom. Press Esc to cancel.
 graph-reset-zoom = Reset zoom
+
+# RWKV workload forecast
+workload-forecast = RWKV workload forecast
+workload-forecast-unavailable = The workload forecast needs a newer Anki fork build with the RWKV backend running.
+workload-forecast-days = Days
+workload-forecast-paths = Simulated futures
+workload-forecast-run = Run forecast
+workload-forecast-rerun = Run again
+workload-forecast-cancel = Cancel
+workload-forecast-progress = Simulating futures: { $current } of { $total } ({ $percent }%)
+workload-forecast-failed = The workload forecast failed.
+workload-forecast-metric = Metric
+workload-forecast-metric-due = Reviews due
+workload-forecast-metric-done = Reviews done
+workload-forecast-metric-new = New cards
+workload-forecast-metric-lapses = Lapses
+workload-forecast-metric-minutes = Time (minutes)
+workload-forecast-x-axis = Days from today
+workload-forecast-y-cards = Cards
+workload-forecast-y-minutes = Minutes
+workload-forecast-today = Today
+workload-forecast-tomorrow = Tomorrow
+workload-forecast-day = Day { $day }
+workload-forecast-tooltip-mean = Mean: { $value }
+workload-forecast-tooltip-median = Median: { $value }
+workload-forecast-tooltip-p90 = 90% of futures: { $low } to { $high }
+workload-forecast-tooltip-p98 = 98% of futures: { $low } to { $high }
+workload-forecast-summary = Expected total over { $days } days: { $total } (mean of { $paths } simulated futures).
+workload-forecast-help = Solid line: mean. Dashed line: median. Dark band: 5th to 95th percentile; light band: 1st to 99th. The bands show only answer randomness under the RWKV model (which cards you pass or fail), not skipped days or partial sessions, so they assume you do every review every day. Today and tomorrow are nearly certain; the bands widen as answers compound. Reviews done are after deck limits; reviews due include backlog.

@@ -13,6 +13,7 @@
     import UMPlus from "../UMPlus.svelte"
     import ROC from "../ROC.svelte"
     import CurrentDisagreement from "../CurrentDisagreement.svelte"
+    import WorkloadForecast from "../WorkloadForecast.svelte"
     import DailyPredictionGraph from "../DailyPredictionGraph.svelte"
     import DailyLineGraph from "../DailyLineGraph.svelte"
     import ForgettingCurve from "../ForgettingCurve.svelte"
@@ -313,6 +314,7 @@
         </ul>
     </CalibrationGraphContainer>
     <CurrentDisagreement />
+    <WorkloadForecast />
     {#each dailyMetrics as metric}
         <CalibrationGraphContainer graphId={`fsrs:daily-${metric}`}>
             <h1 slot="title">{i18n(`daily-prediction-${metric}`)}</h1>
