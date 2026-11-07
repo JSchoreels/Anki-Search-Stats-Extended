@@ -159,9 +159,6 @@
             if (model.length === 34) {
                 return `${model[23].toFixed(2)}/${model[24].toFixed(2)}`
             }
-            if (model.length === 35) {
-                return `${model[27].toFixed(2)}/${model[28].toFixed(2)}`
-            }
             return (model[20] ?? FSRS5_DEFAULT_DECAY).toFixed(2)
         }
         return model.toFixed(2)

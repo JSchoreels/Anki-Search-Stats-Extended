@@ -4,6 +4,8 @@
 
 ### User facing changes
 
+- Use the current 34-parameter FSRS-7 model in Statistics; the older 35-parameter preview is no longer supported.
+
 - Reduce noisy RWKV statistics logs by abbreviating long generated card-ID searches and omitting repeated per-batch debug messages.
 
 - View Stability Over Time and Review Speed Trend as line charts with compact moving-average controls, date zoom, and trend selection. Stability retains its mean/median choice and young/mature shares in the tooltip; Review Speed can average over calendar or study days.
@@ -63,6 +65,8 @@
 - Identify unloaded data in troubleshooting exports instead of reporting misleading zero counts. Cancelling export writes no file.
 
 ### Technical details
+
+- Remove the vendored FSRS-7 preview and use the published `ts-fsrs` package for supported FSRS-4/5/6 and FSRS-7 models.
 
 - Compute review-count windows from individual eligible answers, including partial days. The standardized recall gap uses one Z-score for the window; Review Recall and Gain retains answer-weighted totals. Compute FSRS review windows on demand in the statistics worker and return RWKV rolling results from its in-memory replay without transferring per-answer data to the page.
 

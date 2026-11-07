@@ -1,4 +1,3 @@
-import { fsrs as legacyPreviewFsrs } from "ts-fsrs-legacy-preview"
 import { clipFSRS6Parameters, FSRS6Model, migrateFSRS6Parameters } from "ts-fsrs/models/fsrs-6"
 import { FSRS7Model, type FSRS7State } from "ts-fsrs/models/fsrs-7"
 import { ankiDayFromMs } from "./ankiDay"
@@ -14,7 +13,7 @@ export interface FsrsMemoryState {
 }
 
 export interface FsrsModel {
-    version: "six" | "seven" | "preview-seven"
+    version: "six" | "seven"
     weights: readonly number[]
     minimumStability: number
     nextState(state: FsrsMemoryState | null, elapsedDays: number, rating: number): FsrsMemoryState
@@ -31,24 +30,10 @@ function fullFsrs7State(state: FsrsMemoryState): FSRS7State {
     return { ...state, stabilityFast: state.stabilityFast }
 }
 
-function solveInterval(model: FsrsModel, state: FsrsMemoryState, target: number) {
-    let low = 0
-    let high = Math.max(state.stability, 1)
-    while (model.retrievability(state, high) > target && high < 36500) {
-        high = Math.min(high * 2, 36500)
-    }
-    for (let i = 0; i < 50; i++) {
-        const mid = (low + high) / 2
-        if (model.retrievability(state, mid) > target) low = mid
-        else high = mid
-    }
-    return (low + high) / 2
-}
-
 const models = new Map<string, FsrsModel>()
 
 export function getFsrsForParams(params: readonly number[]): FsrsModel {
-    if (![17, 19, 21, 34, 35].includes(params.length) || !params.every(Number.isFinite)) {
+    if (![17, 19, 21, 34].includes(params.length) || !params.every(Number.isFinite)) {
         throw new Error("Unsupported or non-finite FSRS parameters")
     }
     const signature = `${params.length}:${params.join(",")}`
@@ -71,23 +56,6 @@ export function getFsrsForParams(params: readonly number[]): FsrsModel {
             retrievability: (state, elapsedDays) =>
                 core.forgettingCurve(fullFsrs7State(state), elapsedDays),
             interval: (state, target) => core.nextInterval(fullFsrs7State(state), target),
-        }
-    } else if (params.length === 35) {
-        // Persisted preview weights describe a different model and cannot be converted to final FSRS-7.
-        const preview = legacyPreviewFsrs({
-            w: params,
-            enable_fuzz: false,
-            enable_short_term: true,
-        })
-        model = {
-            version: "preview-seven",
-            weights: preview.parameters.w,
-            minimumStability: 0.0001,
-            nextState: (state, elapsedDays, rating) =>
-                preview.next_state(state, elapsedDays, rating),
-            retrievability: (state, elapsedDays) =>
-                preview.forgetting_curve(elapsedDays, state.stability),
-            interval: (state, target) => solveInterval(model, state, target),
         }
     } else {
         // Preserve the existing 17/19 -> FSRS-6 parameter migration and same-day policy.

@@ -1,4 +1,3 @@
-import { fsrs as previousFsrs } from "ts-fsrs-legacy-preview"
 import { FSRS6_DEFAULT_WEIGHTS } from "ts-fsrs/models/fsrs-6"
 import { curve, FSRS7_DEFAULT_WEIGHTS } from "ts-fsrs/models/fsrs-7"
 import { forgettingCurveWithModel } from "../src/ts/forgettingCurveData"
@@ -11,12 +10,6 @@ import {
 } from "../src/ts/fsrsModel"
 
 const weights7 = [...FSRS7_DEFAULT_WEIGHTS]
-const previewWeights = [
-    0.041, 2.4175, 4.1283, 11.9709, 5.6385, 0.4468, 3.262, 2.3054, 0.1688, 1.3325, 0.3524, 0.0049,
-    0.7503, 0.0896, 0.6625, 1.3, 0.882, 0.3072, 3.5875, 0.303, 0.0107, 0.2279, 2.6413, 0.5594, 1.3,
-    2.5, 1.0, 0.0723, 0.1634, 0.5, 0.9555, 0.2245, 0.6232, 0.1362, 0.3862,
-]
-
 test("FSRS-7 matches the fsrs-rs and benchmark memory-state reference sequence", () => {
     const model = getFsrsForParams(weights7)
     let state: FsrsMemoryState | null = null
@@ -72,33 +65,66 @@ test("FSRS-7 preserves fractional review time across the collection rollover", (
     )
 })
 
-test.each([17, 19, 21, 35])(
-    "preserves the existing %i-weight model's replay and probabilities",
-    (length) => {
-        const weights = length === 35 ? previewWeights : FSRS6_DEFAULT_WEIGHTS.slice(0, length)
-        const model = getFsrsForParams(weights)
-        const previous = previousFsrs({ w: weights, enable_short_term: true, enable_fuzz: false })
-        let actual: FsrsMemoryState | null = null
-        let expected: FsrsMemoryState | null = null
-        for (const [elapsed, rating] of [
-            [0, 1],
-            [0, 3],
-            [1, 3],
-            [8, 1],
-            [0, 3],
-            [21, 4],
-        ]) {
-            actual = model.nextState(actual, elapsed, rating)
-            expected = previous.next_state(expected, elapsed, rating)
-            expect(actual.stability).toBeCloseTo(expected.stability, 6)
-            expect(actual.difficulty).toBeCloseTo(expected.difficulty, 6)
-            expect(model.retrievability(actual, 3)).toBeCloseTo(
-                previous.forgetting_curve(3, expected.stability),
-                6
-            )
-        }
+// Reference states and probabilities from the previous implementation before removing it.
+test.each([
+    [
+        17,
+        [
+            [0.212, 8.0801, 0.48116103],
+            [0.212, 8.0775998, 0.48116103],
+            [1.67727683, 8.0751021, 0.83931397],
+            [0.64598523, 9.57654272, 0.69182213],
+            [0.64598523, 9.57254608, 0.69182213],
+            [8.9848122, 9.40156711, 0.96299908],
+        ],
+    ],
+    [
+        19,
+        [
+            [0.212, 6.4133, 0.48116103],
+            [0.22275272, 6.40211507, 0.49034191],
+            [2.54777327, 6.39094132, 0.88519723],
+            [0.77818053, 8.79895532, 0.72465792],
+            [0.81765014, 8.78538473, 0.73310915],
+            [15.44919833, 8.36474527, 0.97797487],
+        ],
+    ],
+    [
+        21,
+        [
+            [0.212, 6.4133, 0.65950321],
+            [0.24668919, 6.40211507, 0.67395783],
+            [2.02147724, 6.39094132, 0.87067664],
+            [0.63848465, 8.79895532, 0.76657445],
+            [0.69096924, 8.78538473, 0.7742298],
+            [8.35093519, 8.36474527, 0.95454067],
+        ],
+    ],
+])("preserves the existing %i-weight model's replay and probabilities", (length, expected) => {
+    const model = getFsrsForParams(FSRS6_DEFAULT_WEIGHTS.slice(0, length))
+    let state: FsrsMemoryState | null = null
+    const reviews = [
+        [0, 1],
+        [0, 3],
+        [1, 3],
+        [8, 1],
+        [0, 3],
+        [21, 4],
+    ]
+    for (const [index, [elapsed, rating]] of reviews.entries()) {
+        state = model.nextState(state, elapsed, rating)
+        const [stability, difficulty, retrievability] = expected[index]
+        expect(state.stability).toBeCloseTo(stability, 6)
+        expect(state.difficulty).toBeCloseTo(difficulty, 6)
+        expect(model.retrievability(state, 3)).toBeCloseTo(retrievability, 6)
     }
-)
+})
+
+test("rejects the unsupported 35-weight FSRS-7 preview layout", () => {
+    expect(() => getFsrsForParams(Array(35).fill(1))).toThrow(
+        "Unsupported or non-finite FSRS parameters"
+    )
+})
 
 test("current FSRS-7 state reads stored slow/fast stability without inventing missing values", () => {
     const model = getFsrsForParams(weights7)

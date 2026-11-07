@@ -26,16 +26,17 @@ test("selects final fsrsParams7 when ts-fsrs compatible", () => {
     expect(selected).toStrictEqual(params7)
 })
 
-test("selects legacy preview fsrsParams7 while transition compatibility is enabled", () => {
+test("falls back to compatible FSRS-6 params for an unsupported FSRS-7 layout", () => {
     const params7 = Array.from({ length: 35 }, (_, i) => i + 1)
+    const params6 = Array.from({ length: 21 }, (_, i) => 100 + i)
     const selected = selectTsFsrsParams(
         deckConfigWithParams({
             fsrsParams7: params7,
-            fsrsParams6: Array.from({ length: 21 }, (_, i) => 100 + i),
+            fsrsParams6: params6,
         })
     )
 
-    expect(selected).toStrictEqual(params7)
+    expect(selected).toStrictEqual(params6)
 })
 
 test("falls back to fsrsParams6 when fsrsParams7 contains non-finite values", () => {

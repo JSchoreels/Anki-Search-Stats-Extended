@@ -33,8 +33,8 @@ The incomplete-history cases use 17-, 19-, 21-, and 34-parameter presets,
 intervals of 1/30/300 days, retention of 85%/90%/95%, legacy ease, an absent ease,
 and FSRS-encoded difficulty. Each bridge is followed by three graded reviews.
 The small remaining differences reflect native float32 versus JavaScript
-arithmetic. The 35-parameter preview has compatibility tests, but is outside this
-native numerical oracle.
+arithmetic. The older 35-parameter preview was outside this native numerical
+oracle and is no longer supported.
 
 The daily cases exercise the spring DST transition, a review immediately before
 rollover, and today's partial day. Additional tests cover the autumn 25-hour day,
@@ -122,10 +122,11 @@ Run it without another build or test workload competing for CPU time.
 
 ## Verification and remaining limits
 
-The main checkout passes 281 tests; the combined checkout, including the other
-chat's graph changes, passes 291. Both pass build/typecheck. The bundled worker
-passes FSRS-7 same-day replay/calibration/ratings and 17/19/21/35-parameter
-compatibility checks. Python endpoint checks verify omitted missing predictions,
+At the time of the benchmark, the main checkout passed 281 tests; the combined
+checkout, including the other chat's graph changes, passed 291. Both passed
+build/typecheck. The bundled worker passed FSRS-7 same-day replay/calibration/ratings
+and 17/19/21/35-parameter compatibility checks; the 35-parameter preview is no
+longer supported. Python endpoint checks verify omitted missing predictions,
 complete-preset deduplication, and empty searches. Updated Fluent resources
 parse. Browser checks verify asynchronous native heatmap loading, logarithmic
 redraw, the mixed-preset legend, and interval-control redraw using real components

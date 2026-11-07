@@ -1,7 +1,7 @@
 import { FSRS6_DEFAULT_WEIGHTS } from "ts-fsrs/models/fsrs-6"
 import type { DeckConfig, ResolvedFsrsPreset } from "./config"
 
-const TS_FSRS_SUPPORTED_PARAM_LENGTHS = [17, 19, 21, 34, 35]
+const TS_FSRS_SUPPORTED_PARAM_LENGTHS = [17, 19, 21, 34]
 const FSRS_VERSION_SEVEN = 0
 const FSRS_VERSION_SIX = 1
 const FSRS_VERSION_FIVE = 2

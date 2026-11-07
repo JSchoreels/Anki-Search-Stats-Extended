@@ -235,7 +235,7 @@ The selected `fsrsVersion` is used first when its parameters are usable. Otherwi
 5. `fsrsWeights`
 6. `ts-fsrs` default parameters
 
-Accepted parameter lengths are `17`, `19`, `21`, `34`, and the persisted legacy preview layout `35`.
+Accepted parameter lengths are `17`, `19`, `21`, and `34`. The older 35-weight FSRS-7 preview layout is not supported.
 
 Dynamic Desired Retention fields are carried with resolved presets so the graph
 data path stays aligned with Anki's current preset shape. Calibration and
@@ -286,7 +286,7 @@ Distinct overrides remain separate even when preset IDs match.
 The API receives current parameters, FSRS version, optimizer search (default
 `-is:suspended`), ignore-before date, within-day relearning-step count, and FSRS-7
 same-day/scheduling-penalty options. Filtered cards use their original deck options.
-Legacy 35-weight preview presets are reported and not passed to the final FSRS-7
+Unsupported FSRS-7 presets are reported and not passed to the final FSRS-7
 backend. Anki owns cache writes through supported APIs; SSE does not reschedule
 cards, change parameters, or rewrite reviews.
 
@@ -639,5 +639,5 @@ behavior.
 - FSRS-7 replay preserves internal slow stability, fast stability, and difficulty after every review. Review predictions and state transitions use actual elapsed milliseconds converted to fractional days, including same-day reviews.
 - Manual memory resets clear both traces before the next rated review. Replay remains a local graph calculation; it does not rewrite review history, current card data, or due dates. Existing cached Anki predictions retain priority over replayed calibration values.
 - FSRS-4/5/6 presets keep the existing 17/19-to-21 parameter migration and collection-rollover day policy through upstream `FSRS6Model`. Original 17/19-weight layouts are clipped before migration; the zero short-term weights inserted by migration are preserved.
-- The separately named `ts-fsrs-legacy-preview` dependency retains the checked-in vendored implementation solely for existing 35-weight preview presets. Those weights describe a different model and are never truncated or interpreted as final FSRS-7.
+- The earlier 35-weight FSRS-7 preview is not supported. Those weights describe a different model and are never truncated or interpreted as final FSRS-7.
 - All models are bundled into both browser and worker JavaScript. Anki needs no separately installed JavaScript dependencies.

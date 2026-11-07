@@ -61,12 +61,6 @@ const weights7 = [
     0.8146, 0.6398, 1.0, 1.3207, 0.6707, 3.8668, 0.4416, 0.0934, 1.8631, 0.6162, 1.0869, 0.1567,
     0.0801, 0.2421, 0.9464, 0.1433, 0.7145, 0.0, 0.5667, 0.3734, 0.5333, 0.3048,
 ]
-const legacyPreviewWeights7 = [
-    0.041, 2.4175, 4.1283, 11.9709, 5.6385, 0.4468, 3.262, 2.3054, 0.1688, 1.3325, 0.3524, 0.0049,
-    0.7503, 0.0896, 0.6625, 1.3, 0.882, 0.3072, 3.5875, 0.303, 0.0107, 0.2279, 2.6413, 0.5594, 1.3,
-    2.5, 1.0, 0.0723, 0.1634, 0.5, 0.9555, 0.2245, 0.6232, 0.1362, 0.3862,
-]
-
 const mappings = { 1: 1, 2: 2, 3: 3 }
 const configs: Record<number, Partial<DeckConfig>> = {
     1: { id: 1, fsrsWeights: weights, fsrsParams5: weights },
@@ -467,36 +461,6 @@ test("FSRS7 params are accepted in memorised graph pipeline", async () => {
         state = fsrs.nextState(state, (revlogs[i].id - revlogs[i - 1].id) / day_ms, revlogs[i].ease)
     const elapsed = (ankiDaySnapshotMs(0, 0, Date.now()) - revlogs[revlogs.length - 1].id) / day_ms
     expect(memorised[0]).toBeCloseTo(fsrs.retrievability(state, elapsed), 8)
-})
-
-test("Legacy preview FSRS7 params are accepted in memorised graph pipeline", async () => {
-    const card = new RevlogBuilder()
-    const cards = [
-        {
-            ...card.card(),
-            did: 4,
-        } as any,
-    ]
-    const legacyConfigs = {
-        ...configs,
-        4: { id: 4, fsrsParams7: legacyPreviewWeights7 },
-    }
-    const revlogs = [card.review(-3000, 3), card.review(-3000, 3), card.review(5, 3)] as Revlog[]
-
-    const memorised = (
-        await getMemorisedDaysForTest(
-            revlogs,
-            cards,
-            legacyConfigs,
-            { ...mappings, 4: 4 },
-            [],
-            2,
-            2
-        )
-    ).retrievabilityDays
-
-    expect(memorised.length).not.toBe(0)
-    expect(memorised[0]).toBe(1)
 })
 
 test("Calibration uses FSRS6 equation when deck option selects FSRS6", async () => {
