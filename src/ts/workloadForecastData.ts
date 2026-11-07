@@ -21,6 +21,7 @@ export type WorkloadForecastResult = {
     days: number
     paths: number
     cards: number
+    model?: "instant" | "curve"
     daily: ForecastDay[]
 }
 

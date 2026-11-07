@@ -4,6 +4,8 @@
 
 ### User facing changes
 
+- Explain how Instant workload forecasts use past review timings and answer patterns, review limits, and new-card settings.
+
 - Use the current 34-parameter FSRS-7 model in Statistics; the older 35-parameter preview is no longer supported.
 
 - Reduce noisy RWKV statistics logs by abbreviating long generated card-ID searches and omitting repeated per-batch debug messages.

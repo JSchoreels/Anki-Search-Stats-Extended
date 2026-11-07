@@ -1,19 +1,9 @@
-# RWKV workload forecast graph: handoff
+# RWKV workload forecast graph
 
-Branch `rwkv-workload-forecast` (off main 115bb21).
+The Statistics graph delegates simulation to the Anki fork's `aqt.rwkv_scheduler` forecast API. It passes the active search, forecast horizon, and number of simulated futures; polls the background job; and can cancel it. A compatible, running RWKV backend is required.
 
-## Done (written, NOT yet built or run)
-- `workload_forecast.py`: bridge to `aqt.rwkv_scheduler` (availability check, start/progress/cancel of the background job; days clamped 1..365, paths 1..2000).
-- `__init__.py`: POST handlers `workloadForecastAvailable`, `startWorkloadForecast`, `workloadForecastProgress`, `cancelWorkloadForecast`. `Makefile` and `package.sh` list the new module.
-- `src/ts/workloadForecastData.ts`: types and data shaping (`buildForecastPoints`, totals, progress).
-- `src/ts/WorkloadForecastGraph.ts`: d3 fan chart (mean line, dashed median, p5-p95 band, lighter p1-p99 band, hover tooltip).
-- `src/ts/WorkloadForecast.svelte`: card in the FSRS category (after Current Disagreement). Controls: days, number of futures (default 50), Run/Cancel, metric (due / done / new / lapses / minutes), progress line, caption. Shows a "needs a newer Anki fork build" note when the capability check is false.
-- `locale/en_GB.ftl`: strings. `test/workloadForecast.test.ts`: jest tests for the shaping and tooltip.
+The graph plots daily review due and done, introductions, lapses, or study time. Lines show the mean and median; bands show the 5th–95th and 1st–99th percentiles. The graph accepts the version 1 result, including the optional `model` field added by newer fork builds, and keeps working with older builds that omit it.
 
-## Not done
-- No Node/npm on the machine where this was written: `npm i`, `npm test`, `npm run format`, `npm run build` (or `make stats.min.js`) were never run. Run them first and fix any type or test errors.
-- Not tested against a real fork build.
-- Possible follow-ups: `fast=True` option in the UI, per-deck lines (`groups` in the result), other locale files, a Python test of `workload_forecast.py` with a fake scheduler.
+For an Instant forecast, the fork samples real historical study timings and successful-answer patterns, predicts recall with the Instant model, and applies the configured review limits, new-card limit toggle, queue refresh settings, and learning steps. Frequent full queue refreshes on a large search can take a long time. The forecast does not model skipped days, reviews outside the search, sibling burying, load balancing, or future settings changes. A search that includes RWKV-Curve scheduled cards is not supported by the Instant path. The complete algorithm and its limitations are documented in the fork's `docs/rwkv.MD` under “Workload Forecast”.
 
-## Testing against the fork
-Needs an Anki build of the fork branch `rwkv-workload-forecast` (commits c022b938d, 7a6a2d882, 89b3c27a7) with the RWKV backend running. Build 110 does not have it, so the card shows the note there. Contract: `docs/rwkv.MD`, "Workload Forecast". Package with `make` / `package.sh`, install into a test profile only (never the main one), open Stats, find "RWKV workload forecast" in the FSRS section, run 20 paths x 30 days (about a minute on a 30k-card collection).
+The bridge is in `workload_forecast.py`, the data transformations are in `src/ts/workloadForecastData.ts`, and the graph and controls are in `src/ts/WorkloadForecastGraph.ts` and `src/ts/WorkloadForecast.svelte`. Verify the TypeScript tests and production build, package with `./package.sh`, and synchronize the verified package to the local add-on runtime. Testing the Instant path requires an Anki fork build that includes the corresponding backend implementation.

@@ -174,6 +174,11 @@
             </p>
         {/if}
         <p>{i18n("workload-forecast-help")}</p>
+        {#if result?.model === "instant"}
+            <p>{i18n("workload-forecast-instant-help")}</p>
+        {:else if result}
+            <p>{i18n("workload-forecast-curve-help")}</p>
+        {/if}
     </GraphContainer>
 {:else if available === false}
     <GraphContainer graphId="fsrs:workload-forecast">

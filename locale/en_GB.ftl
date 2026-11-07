@@ -917,4 +917,6 @@ workload-forecast-tooltip-median = Median: { $value }
 workload-forecast-tooltip-p90 = 90% of futures: { $low } to { $high }
 workload-forecast-tooltip-p98 = 98% of futures: { $low } to { $high }
 workload-forecast-summary = Expected total over { $days } days: { $total } (mean of { $paths } simulated futures).
-workload-forecast-help = Solid line: mean. Dashed line: median. Dark band: 5th to 95th percentile; light band: 1st to 99th. The bands show only answer randomness under the RWKV model (which cards you pass or fail), not skipped days or partial sessions, so they assume you do every review every day. Today and tomorrow are nearly certain; the bands widen as answers compound. Reviews done are after deck limits; reviews due include backlog.
+workload-forecast-help = Solid line: mean. Dashed line: median. Dark band: 5th to 95th percentile; light band: 1st to 99th. Reviews done are after deck limits; reviews due include backlog.
+workload-forecast-instant-help = Each future samples past review times and answer patterns. It uses Instant recall predictions, your review minimum and maximum, the new-card limit setting, and learning steps. It assumes you study every day; skipped days, reviews outside the search, sibling burying, load balancing, and future settings changes are not simulated. Frequent full queue refreshes can take a long time.
+workload-forecast-curve-help = The bands show answer randomness, assuming you do every review the limits allow each day. They do not predict skipped days or partial sessions.
