@@ -112,8 +112,18 @@ test("switching to reviews due redraws the graph above the review limit", async 
     flush()
     await Promise.resolve()
     flush()
-    const pathChoice = document.querySelectorAll("select")[1]
-    expect(pathChoice.value).toBe("50")
+    const [dayChoice, pathChoice] = document.querySelectorAll("select")
+    expect(dayChoice.value).toBe("7")
+    expect(pathChoice.value).toBe("3")
+    expect(document.body.textContent).toContain("workload-forecast-fast-help")
+    document.querySelector("button").click()
+    await Promise.resolve()
+    await Promise.resolve()
+    flush()
+    expect(global.forecastRequest).toEqual({ search: "deck:current", days: 7, paths: 3 })
+    expect(document.querySelectorAll(".workload-forecast-estimate-bound")).toHaveLength(2)
+    dayChoice.value = "14"
+    dayChoice.dispatchEvent(new window.Event("change", { bubbles: true }))
     pathChoice.value = "20"
     pathChoice.dispatchEvent(new window.Event("change", { bubbles: true }))
     flush()
@@ -121,7 +131,7 @@ test("switching to reviews due redraws the graph above the review limit", async 
     await Promise.resolve()
     await Promise.resolve()
     flush()
-    expect(global.forecastRequest.paths).toBe(20)
+    expect(global.forecastRequest).toEqual({ search: "deck:current", days: 14, paths: 20 })
 
     const maxAxisTick = () =>
         Math.max(

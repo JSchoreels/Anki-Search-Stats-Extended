@@ -25,8 +25,8 @@
     const metrics: ForecastMetric[] = ["due", "done", "new", "lapses", "minutes"]
 
     let available: boolean | null = null
-    let days = 30
-    let paths = 50
+    let days = 7
+    let paths = 3
     let metric: ForecastMetric = "done"
     let running = false
     let progress: WorkloadForecastProgress | null = null

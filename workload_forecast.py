@@ -47,8 +47,8 @@ def start(mw, request: dict) -> dict:
         return scheduler.start_rwkv_workload_forecast(
             mw,
             search=search if isinstance(search, str) else "",
-            days=clamp(request.get("days"), 1, MAX_DAYS, 30),
-            paths=clamp(request.get("paths"), 1, MAX_PATHS, 50),
+            days=clamp(request.get("days"), 1, MAX_DAYS, 7),
+            paths=clamp(request.get("paths"), 1, MAX_PATHS, 3),
             fast=bool(request.get("fast", False)),
         )
     except Exception as error:
