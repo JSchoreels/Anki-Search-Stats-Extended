@@ -26,6 +26,7 @@ export type WorkloadForecastResult = {
     scenario_sigma?: number
     scenario_history_days?: number
     scenario_calibration?: "insufficient_history"
+    scenario_kind?: "stratified"
     partial?: boolean
     scenario_daily?: Array<{
         day: number
@@ -56,6 +57,7 @@ export type ForecastPoint = ForecastBands & {
     day: number
     estimatedRange?: { low: number; high: number }
     scenarios?: { minus?: number; center: number; plus?: number }
+    scenarioKind?: "stratified"
     preliminary?: boolean
 }
 
@@ -102,6 +104,7 @@ export function buildForecastPoints(
                         : undefined,
             }
             point.mean = point.scenarios.center
+            if (result?.scenario_kind === "stratified") point.scenarioKind = "stratified"
         } else if (result?.paths === 3 && !result.scenario_daily && !result.partial) {
             // The backend uses type-7 linear quantiles. For exactly three
             // paths, p1 and p99 are 98% of the way from the median to each

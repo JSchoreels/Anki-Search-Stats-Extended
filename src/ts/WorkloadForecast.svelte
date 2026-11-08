@@ -184,11 +184,13 @@
             {#if !result.partial}
                 <p>
                     {i18n(
-                        result.scenario_daily
-                            ? "workload-forecast-scenario-summary"
-                            : result.paths === 3
-                              ? "workload-forecast-fast-summary"
-                              : "workload-forecast-summary",
+                        result.scenario_kind === "stratified"
+                            ? "workload-forecast-stratum-summary"
+                            : result.scenario_daily
+                              ? "workload-forecast-scenario-summary"
+                              : result.paths === 3
+                                ? "workload-forecast-fast-summary"
+                                : "workload-forecast-summary",
                         {
                             total: Math.round(total),
                             paths: result.paths,
@@ -200,22 +202,30 @@
         {/if}
         <p>
             {i18n(
-                result?.scenario_daily
-                    ? "workload-forecast-scenario-help"
-                    : result?.partial
-                      ? "workload-forecast-partial-mean-help"
-                      : !result && paths === 3
-                        ? "workload-forecast-three-help"
-                        : result?.paths === 3
-                          ? "workload-forecast-fast-help"
-                          : "workload-forecast-help",
+                result?.scenario_kind === "stratified"
+                    ? "workload-forecast-stratum-help"
+                    : result?.scenario_daily
+                      ? "workload-forecast-scenario-help"
+                      : result?.partial
+                        ? "workload-forecast-partial-mean-help"
+                        : !result && paths === 3
+                          ? "workload-forecast-three-help"
+                          : result?.paths === 3
+                            ? "workload-forecast-fast-help"
+                            : "workload-forecast-help",
                 {
                     sigma: ((result?.scenario_sigma ?? 0) * 100).toFixed(1),
                     days: result?.scenario_history_days ?? 0,
                 }
             )}
         </p>
-        {#if result?.scenario_calibration === "insufficient_history"}
+        {#if result?.scenario_kind === "stratified" && result.scenario_history_days}
+            <p>
+                {i18n("workload-forecast-stratum-history", { days: result.scenario_history_days })}
+            </p>
+        {:else if result?.scenario_kind === "stratified" && result.scenario_calibration === "insufficient_history"}
+            <p>{i18n("workload-forecast-stratum-insufficient")}</p>
+        {:else if result?.scenario_calibration === "insufficient_history"}
             <p>{i18n("workload-forecast-scenario-insufficient")}</p>
         {/if}
         {#if result?.model === "instant"}

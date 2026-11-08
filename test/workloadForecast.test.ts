@@ -152,6 +152,7 @@ test("partial scenarios draw each day without inventing unavailable bounds", () 
         ...result,
         paths: 3,
         partial: true,
+        scenario_kind: "stratified",
         daily: [result.daily[1]],
         scenario_daily: [
             {
@@ -167,7 +168,9 @@ test("partial scenarios draw each day without inventing unavailable bounds", () 
     const points = buildForecastPoints(partial, "due")
     expect(points[0].mean).toBe(130)
     expect(points[0].scenarios).toEqual({ minus: 110, center: 130, plus: undefined })
+    expect(points[0].scenarioKind).toBe("stratified")
     expect(workloadForecastTooltip(points[0], "due")).toHaveLength(3)
+    expect(workloadForecastTooltip(points[0], "due")[1]).toContain("tooltip-stratum-center")
     const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg")
     renderWorkloadForecastGraph(svg, points, "due", 30)
     expect(svg.querySelector(".workload-forecast-scenario-minus")?.getAttribute("d")).toBeTruthy()
@@ -181,6 +184,10 @@ test("partial scenarios draw each day without inventing unavailable bounds", () 
     renderWorkloadForecastGraph(svg, buildForecastPoints(partial, "due"), "due", 30)
     expect(svg.querySelector(".workload-forecast-scenario-point-plus")).not.toBeNull()
     expect(svg.querySelector(".workload-forecast-scenario-spread")).not.toBeNull()
+    const spread = svg.querySelector(".workload-forecast-scenario-spread")!
+    const center = svg.querySelector("circle")!
+    expect(Number(spread.getAttribute("y2"))).toBe(Number(center.getAttribute("cy")))
+    expect(Number(spread.getAttribute("y1"))).toBeGreaterThan(Number(spread.getAttribute("y2")))
 })
 
 test("partial stochastic forecasts show their mean without premature percentile bands", () => {

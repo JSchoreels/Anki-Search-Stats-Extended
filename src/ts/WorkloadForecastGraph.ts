@@ -19,19 +19,35 @@ const format = (value: number, metric: ForecastMetric) =>
 export function workloadForecastTooltip(point: ForecastPoint, metric: ForecastMetric) {
     const f = (value: number) => format(value, metric)
     if (point.scenarios) {
+        const stratified = point.scenarioKind === "stratified"
         const lines = [
             dayLabel(point.day),
-            i18n("workload-forecast-tooltip-scenario-center", { value: f(point.scenarios.center) }),
+            i18n(
+                stratified
+                    ? "workload-forecast-tooltip-stratum-center"
+                    : "workload-forecast-tooltip-scenario-center",
+                { value: f(point.scenarios.center) }
+            ),
         ]
         if (point.scenarios.minus !== undefined)
             lines.push(
-                i18n("workload-forecast-tooltip-scenario-minus", {
-                    value: f(point.scenarios.minus),
-                })
+                i18n(
+                    stratified
+                        ? "workload-forecast-tooltip-stratum-minus"
+                        : "workload-forecast-tooltip-scenario-minus",
+                    {
+                        value: f(point.scenarios.minus),
+                    }
+                )
             )
         if (point.scenarios.plus !== undefined)
             lines.push(
-                i18n("workload-forecast-tooltip-scenario-plus", { value: f(point.scenarios.plus) })
+                i18n(
+                    stratified
+                        ? "workload-forecast-tooltip-stratum-plus"
+                        : "workload-forecast-tooltip-scenario-plus",
+                    { value: f(point.scenarios.plus) }
+                )
             )
         return lines
     }
@@ -146,8 +162,8 @@ export function renderWorkloadForecastGraph(
             .attr(
                 "d",
                 area(
-                    (p) => Math.min(minus(p), plus(p)),
-                    (p) => Math.max(minus(p), plus(p)),
+                    (p) => Math.min(minus(p), p.mean, plus(p)),
+                    (p) => Math.max(minus(p), p.mean, plus(p)),
                     (p) => p.scenarios?.minus !== undefined && p.scenarios?.plus !== undefined
                 )
             )
@@ -256,8 +272,8 @@ export function renderWorkloadForecastGraph(
             .attr("class", "workload-forecast-scenario-spread")
             .attr("x1", (p) => x(p.day))
             .attr("x2", (p) => x(p.day))
-            .attr("y1", (p) => y(p.scenarios!.minus!))
-            .attr("y2", (p) => y(p.scenarios!.plus!))
+            .attr("y1", (p) => y(Math.min(p.scenarios!.minus!, p.mean, p.scenarios!.plus!)))
+            .attr("y2", (p) => y(Math.max(p.scenarios!.minus!, p.mean, p.scenarios!.plus!)))
             .attr("stroke", COLOUR)
             .attr("stroke-opacity", 0.5)
         for (const name of ["minus", "plus"] as const) {

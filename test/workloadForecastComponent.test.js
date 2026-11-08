@@ -166,7 +166,7 @@ test("switching to reviews due redraws the graph above the review limit", async 
         paths: 3,
         model: "instant",
         partial: true,
-        scenario_sigma: 0.04,
+        scenario_kind: "stratified",
         scenario_history_days: 100,
         scenario_daily: [
             {
@@ -196,6 +196,8 @@ test("switching to reviews due redraws the graph above the review limit", async 
     flush()
     expect(document.body.textContent).toContain("workload-forecast-progress-days")
     expect(document.body.textContent).toContain("workload-forecast-partial")
+    expect(document.body.textContent).toContain("workload-forecast-stratum-help")
+    expect(document.body.textContent).toContain("workload-forecast-stratum-history")
     expect(document.querySelector(".workload-forecast-scenario-point-minus")).not.toBeNull()
     expect(document.querySelector(".workload-forecast-scenario-point-plus")).toBeNull()
     const complete = {
@@ -216,7 +218,7 @@ test("switching to reviews due redraws the graph above the review limit", async 
     await new Promise((resolve) => setTimeout(resolve, 1100))
     flush()
     expect(document.body.textContent).not.toContain("workload-forecast-partial")
-    expect(document.body.textContent).toContain("workload-forecast-scenario-summary")
+    expect(document.body.textContent).toContain("workload-forecast-stratum-summary")
     expect(document.querySelector(".workload-forecast-scenario-plus")).not.toBeNull()
     delete global.forecastStream
     delete global.forecastPollResult
