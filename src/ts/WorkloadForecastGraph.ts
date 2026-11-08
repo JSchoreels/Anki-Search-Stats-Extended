@@ -18,6 +18,28 @@ const format = (value: number, metric: ForecastMetric) =>
 
 export function workloadForecastTooltip(point: ForecastPoint, metric: ForecastMetric) {
     const f = (value: number) => format(value, metric)
+    if (point.scenarios) {
+        const lines = [
+            dayLabel(point.day),
+            i18n("workload-forecast-tooltip-scenario-center", { value: f(point.scenarios.center) }),
+        ]
+        if (point.scenarios.minus !== undefined)
+            lines.push(
+                i18n("workload-forecast-tooltip-scenario-minus", {
+                    value: f(point.scenarios.minus),
+                })
+            )
+        if (point.scenarios.plus !== undefined)
+            lines.push(
+                i18n("workload-forecast-tooltip-scenario-plus", { value: f(point.scenarios.plus) })
+            )
+        return lines
+    }
+    if (point.preliminary)
+        return [
+            dayLabel(point.day),
+            i18n("workload-forecast-tooltip-mean", { value: f(point.mean) }),
+        ]
     if (point.estimatedRange) {
         return [
             dayLabel(point.day),
@@ -40,7 +62,8 @@ export function workloadForecastTooltip(point: ForecastPoint, metric: ForecastMe
 export function renderWorkloadForecastGraph(
     svg: SVGElement,
     points: ForecastPoint[],
-    metric: ForecastMetric
+    metric: ForecastMetric,
+    horizon?: number
 ) {
     clearChart(svg)
     tooltipShown.set(false)
@@ -50,10 +73,20 @@ export function renderWorkloadForecastGraph(
     const last = d3.max(points, (p) => p.day)!
     const x = d3
         .scaleLinear()
-        .domain([first, Math.max(last, first + 1)])
+        .domain([first, Math.max(last, first + 1, (horizon ?? 1) - 1)])
         .range([0, width])
+    const scenario = !!points[0].scenarios
+    const preliminary = !!points[0].preliminary
     const approximate = !!points[0].estimatedRange
-    const top = d3.max(points, (p) => Math.max(p.mean, p.estimatedRange?.high ?? p.p99)) || 1
+    const top =
+        d3.max(points, (p) =>
+            Math.max(
+                p.mean,
+                p.scenarios?.minus ?? 0,
+                p.scenarios?.plus ?? 0,
+                p.estimatedRange?.high ?? (scenario ? 0 : p.p99)
+            )
+        ) || 1
     const y = d3.scaleLinear().domain([0, top]).nice().range([height, 0])
     const chart = d3.select(svg).attr("viewBox", `-70 -15 ${width + 90} ${height + 75}`)
 
@@ -82,20 +115,61 @@ export function renderWorkloadForecastGraph(
         .attr("text-anchor", "middle")
         .text(i18n("workload-forecast-x-axis"))
 
-    const area = (low: (p: ForecastPoint) => number, high: (p: ForecastPoint) => number) =>
+    const area = (
+        low: (p: ForecastPoint) => number,
+        high: (p: ForecastPoint) => number,
+        defined: (p: ForecastPoint) => boolean = () => true
+    ) =>
         d3
             .area<ForecastPoint>()
+            .defined(defined)
             .x((p) => x(p.day))
             .y0((p) => y(low(p)))
             .y1((p) => y(high(p)))
             .curve(d3.curveMonotoneX)(points)
-    const line = (value: (p: ForecastPoint) => number) =>
+    const line = (
+        value: (p: ForecastPoint) => number,
+        defined: (p: ForecastPoint) => boolean = () => true
+    ) =>
         d3
             .line<ForecastPoint>()
+            .defined(defined)
             .x((p) => x(p.day))
             .y((p) => y(value(p)))
             .curve(d3.curveMonotoneX)(points)
-    if (approximate) {
+    if (scenario) {
+        const minus = (p: ForecastPoint) => p.scenarios?.minus ?? p.mean
+        const plus = (p: ForecastPoint) => p.scenarios?.plus ?? p.mean
+        chart
+            .append("path")
+            .attr("class", "workload-forecast-scenario-band")
+            .attr(
+                "d",
+                area(
+                    (p) => Math.min(minus(p), plus(p)),
+                    (p) => Math.max(minus(p), plus(p)),
+                    (p) => p.scenarios?.minus !== undefined && p.scenarios?.plus !== undefined
+                )
+            )
+            .attr("fill", COLOUR)
+            .attr("fill-opacity", 0.2)
+        for (const [name, value, dash] of [
+            ["minus", minus, "5 3"],
+            ["plus", plus, "2 3"],
+        ] as const) {
+            chart
+                .append("path")
+                .attr("class", `workload-forecast-scenario-${name}`)
+                .attr(
+                    "d",
+                    line(value, (p) => p.scenarios?.[name] !== undefined)
+                )
+                .attr("fill", "none")
+                .attr("stroke", COLOUR)
+                .attr("stroke-width", 1.5)
+                .attr("stroke-dasharray", dash)
+        }
+    } else if (!preliminary && approximate) {
         const low = (p: ForecastPoint) => p.estimatedRange?.low ?? p.mean
         const high = (p: ForecastPoint) => p.estimatedRange?.high ?? p.mean
         chart
@@ -114,7 +188,7 @@ export function renderWorkloadForecastGraph(
                 .attr("stroke-width", 1.5)
                 .attr("stroke-dasharray", "5 3")
         }
-    } else {
+    } else if (!preliminary) {
         chart
             .append("path")
             .attr("class", "workload-forecast-band-p98")
@@ -161,6 +235,44 @@ export function renderWorkloadForecastGraph(
         .attr("fill", "none")
         .attr("stroke", COLOUR)
         .attr("stroke-width", 2.5)
+    if (points.length === 1) {
+        chart
+            .append("circle")
+            .attr("cx", x(points[0].day))
+            .attr("cy", y(points[0].mean))
+            .attr("r", 3)
+            .attr("fill", COLOUR)
+    }
+    if (scenario && preliminary) {
+        chart
+            .selectAll(".workload-forecast-scenario-spread")
+            .data(
+                points.filter(
+                    (p) => p.scenarios?.minus !== undefined && p.scenarios?.plus !== undefined
+                )
+            )
+            .enter()
+            .append("line")
+            .attr("class", "workload-forecast-scenario-spread")
+            .attr("x1", (p) => x(p.day))
+            .attr("x2", (p) => x(p.day))
+            .attr("y1", (p) => y(p.scenarios!.minus!))
+            .attr("y2", (p) => y(p.scenarios!.plus!))
+            .attr("stroke", COLOUR)
+            .attr("stroke-opacity", 0.5)
+        for (const name of ["minus", "plus"] as const) {
+            chart
+                .selectAll(`.workload-forecast-scenario-point-${name}`)
+                .data(points.filter((p) => p.scenarios?.[name] !== undefined))
+                .enter()
+                .append("circle")
+                .attr("class", `workload-forecast-scenario-point-${name}`)
+                .attr("cx", (p) => x(p.day))
+                .attr("cy", (p) => y(p.scenarios![name]!))
+                .attr("r", 2)
+                .attr("fill", COLOUR)
+        }
+    }
 
     const guide = chart
         .append("line")

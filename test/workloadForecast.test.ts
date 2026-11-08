@@ -100,6 +100,98 @@ test("total is the sum of daily means", () => {
     expect(forecastTotalMean(buildForecastPoints(result, "done"))).toBe(210)
 })
 
+test("scenario chart uses the unshifted R path even when it is outside the other two", () => {
+    const scenarioResult: WorkloadForecastResult = {
+        ...result,
+        paths: 3,
+        scenario_sigma: 0.04,
+        scenario_history_days: 42,
+        scenario_daily: [
+            {
+                day: 0,
+                due: [110, 130, 100],
+                done: [90, 100, 80],
+                new: [0, 1, 2],
+                lapses: [4, 3, 2],
+                seconds: [120, 180, 60],
+            },
+            {
+                day: 1,
+                due: [90, 70, 80],
+                done: [60, 70, 80],
+                new: [0, 1, 2],
+                lapses: [3, 2, 1],
+                seconds: [60, 120, 180],
+            },
+        ],
+        daily: result.daily.filter((day) => day.day < 2),
+    }
+    const points = buildForecastPoints(scenarioResult, "due")
+    expect(points.map((point) => point.mean)).toEqual([130, 70])
+    expect(forecastTotalMean(points)).toBe(200)
+    expect(points[0].scenarios).toEqual({ minus: 110, center: 130, plus: 100 })
+    const tooltip = workloadForecastTooltip(points[0], "due")
+    expect(tooltip[1]).toContain('"value":"130"')
+    expect(tooltip[2]).toContain('"value":"110"')
+    expect(tooltip[3]).toContain('"value":"100"')
+    expect(buildForecastPoints(scenarioResult, "minutes")[0].scenarios).toEqual({
+        minus: 2,
+        center: 3,
+        plus: 1,
+    })
+
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg")
+    renderWorkloadForecastGraph(svg, points, "due")
+    expect(svg.querySelector(".workload-forecast-scenario-minus")).not.toBeNull()
+    expect(svg.querySelector(".workload-forecast-scenario-plus")).not.toBeNull()
+    expect(svg.querySelector(".workload-forecast-band-p90")).toBeNull()
+})
+
+test("partial scenarios draw each day without inventing unavailable bounds", () => {
+    const partial: WorkloadForecastResult = {
+        ...result,
+        paths: 3,
+        partial: true,
+        daily: [result.daily[1]],
+        scenario_daily: [
+            {
+                day: 0,
+                due: [110, 130, null],
+                done: [90, 100, null],
+                new: [0, 1, null],
+                lapses: [4, 3, null],
+                seconds: [120, 180, null],
+            },
+        ],
+    }
+    const points = buildForecastPoints(partial, "due")
+    expect(points[0].mean).toBe(130)
+    expect(points[0].scenarios).toEqual({ minus: 110, center: 130, plus: undefined })
+    expect(workloadForecastTooltip(points[0], "due")).toHaveLength(3)
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg")
+    renderWorkloadForecastGraph(svg, points, "due", 30)
+    expect(svg.querySelector(".workload-forecast-scenario-minus")?.getAttribute("d")).toBeTruthy()
+    expect(svg.querySelector(".workload-forecast-scenario-plus")?.getAttribute("d")).toBeNull()
+    expect(svg.querySelector(".workload-forecast-scenario-band")?.getAttribute("d")).toBeNull()
+    expect(svg.querySelector("circle")).not.toBeNull()
+    expect(svg.querySelector(".workload-forecast-scenario-point-minus")).not.toBeNull()
+    expect(svg.querySelector(".workload-forecast-scenario-point-plus")).toBeNull()
+    expect(svg.querySelector(".workload-forecast-scenario-spread")).toBeNull()
+    partial.scenario_daily![0].due[2] = 100
+    renderWorkloadForecastGraph(svg, buildForecastPoints(partial, "due"), "due", 30)
+    expect(svg.querySelector(".workload-forecast-scenario-point-plus")).not.toBeNull()
+    expect(svg.querySelector(".workload-forecast-scenario-spread")).not.toBeNull()
+})
+
+test("partial stochastic forecasts show their mean without premature percentile bands", () => {
+    const points = buildForecastPoints({ ...result, partial: true }, "done")
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg")
+    renderWorkloadForecastGraph(svg, points, "done")
+    expect(svg.querySelector(".workload-forecast-mean")).not.toBeNull()
+    expect(svg.querySelector(".workload-forecast-band-p90")).toBeNull()
+    expect(workloadForecastTooltip(points[0], "done")).toHaveLength(2)
+})
+
 test("progress fraction is bounded", () => {
     expect(forecastProgressFraction(null)).toBe(0)
     expect(forecastProgressFraction({ current: 5, total: 20 })).toBe(0.25)

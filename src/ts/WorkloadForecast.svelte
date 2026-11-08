@@ -56,6 +56,7 @@
                 error = next.error || i18n("workload-forecast-failed")
                 running = false
             } else {
+                if (next.partial_result) result = next.partial_result
                 timer = setTimeout(() => poll(id, current), 1000)
             }
         } catch {
@@ -71,6 +72,7 @@
         running = true
         error = null
         progress = null
+        result = null
         try {
             const started = await startWorkloadForecast({
                 search: $searchString ?? "",
@@ -147,17 +149,25 @@
         </div>
         {#if running}
             <p>
-                {i18n("workload-forecast-progress", {
-                    current: progress?.current ?? 0,
-                    total: progress?.total ?? paths,
-                    percent,
-                })}
+                {i18n(
+                    progress?.unit === "days"
+                        ? "workload-forecast-progress-days"
+                        : "workload-forecast-progress",
+                    {
+                        current: progress?.current ?? 0,
+                        total: progress?.total ?? paths,
+                        percent,
+                    }
+                )}
             </p>
         {/if}
         {#if error}
             <p class="message">{error}</p>
         {/if}
         {#if result}
+            {#if result.partial}
+                <p>{i18n("workload-forecast-partial")}</p>
+            {/if}
             <div class="controls" role="group" aria-label={i18n("workload-forecast-metric")}>
                 {#each metrics as option}
                     <label>
@@ -167,28 +177,47 @@
                 {/each}
             </div>
             {#key points}
-                <GraphSvg render={(svg) => renderWorkloadForecastGraph(svg, points, metric)} />
+                <GraphSvg
+                    render={(svg) => renderWorkloadForecastGraph(svg, points, metric, result?.days)}
+                />
             {/key}
-            <p>
-                {i18n(
-                    result.paths === 3
-                        ? "workload-forecast-fast-summary"
-                        : "workload-forecast-summary",
-                    {
-                        total: Math.round(total),
-                        paths: result.paths,
-                        days: result.days,
-                    }
-                )}
-            </p>
+            {#if !result.partial}
+                <p>
+                    {i18n(
+                        result.scenario_daily
+                            ? "workload-forecast-scenario-summary"
+                            : result.paths === 3
+                              ? "workload-forecast-fast-summary"
+                              : "workload-forecast-summary",
+                        {
+                            total: Math.round(total),
+                            paths: result.paths,
+                            days: result.days,
+                        }
+                    )}
+                </p>
+            {/if}
         {/if}
         <p>
             {i18n(
-                result?.paths === 3 || (!result && paths === 3)
-                    ? "workload-forecast-fast-help"
-                    : "workload-forecast-help"
+                result?.scenario_daily
+                    ? "workload-forecast-scenario-help"
+                    : result?.partial
+                      ? "workload-forecast-partial-mean-help"
+                      : !result && paths === 3
+                        ? "workload-forecast-three-help"
+                        : result?.paths === 3
+                          ? "workload-forecast-fast-help"
+                          : "workload-forecast-help",
+                {
+                    sigma: ((result?.scenario_sigma ?? 0) * 100).toFixed(1),
+                    days: result?.scenario_history_days ?? 0,
+                }
             )}
         </p>
+        {#if result?.scenario_calibration === "insufficient_history"}
+            <p>{i18n("workload-forecast-scenario-insufficient")}</p>
+        {/if}
         {#if result?.model === "instant"}
             <p>{i18n("workload-forecast-instant-help")}</p>
         {:else if result}

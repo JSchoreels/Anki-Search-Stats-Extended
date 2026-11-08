@@ -23,6 +23,18 @@ export type WorkloadForecastResult = {
     cards: number
     model?: "instant" | "curve"
     daily: ForecastDay[]
+    scenario_sigma?: number
+    scenario_history_days?: number
+    scenario_calibration?: "insufficient_history"
+    partial?: boolean
+    scenario_daily?: Array<{
+        day: number
+        due: [number | null, number | null, number | null]
+        done: [number | null, number | null, number | null]
+        new: [number | null, number | null, number | null]
+        lapses: [number | null, number | null, number | null]
+        seconds: [number | null, number | null, number | null]
+    }>
 }
 
 export type WorkloadForecastProgress = {
@@ -30,9 +42,11 @@ export type WorkloadForecastProgress = {
     phase?: "running" | "complete" | "failed" | "missing"
     current?: number
     total?: number
+    unit?: "days" | "paths"
     done?: boolean
     error?: string | null
     result?: WorkloadForecastResult | null
+    partial_result?: WorkloadForecastResult | null
 }
 
 /** Which series to draw: reviews due, reviews done after limits, new cards, or time. */
@@ -41,6 +55,8 @@ export type ForecastMetric = "due" | "done" | "new" | "lapses" | "minutes"
 export type ForecastPoint = ForecastBands & {
     day: number
     estimatedRange?: { low: number; high: number }
+    scenarios?: { minus?: number; center: number; plus?: number }
+    preliminary?: boolean
 }
 
 const finite = (value: unknown) => (typeof value === "number" && Number.isFinite(value) ? value : 0)
@@ -52,6 +68,9 @@ export function buildForecastPoints(
 ): ForecastPoint[] {
     const source = metric === "minutes" ? "seconds" : metric
     const scale = metric === "minutes" ? 1 / 60 : 1
+    const scenariosByDay = new Map(
+        (result?.scenario_daily ?? []).map((entry) => [entry.day, entry])
+    )
     const points = (result?.daily ?? []).map((entry) => {
         const bands = entry[source] ?? ({} as Partial<ForecastBands>)
         const p1 = finite(bands.p1) * scale
@@ -69,7 +88,21 @@ export function buildForecastPoints(
             p95,
             p99: Math.max(p99, p95),
         }
-        if (result?.paths === 3) {
+        const values = scenariosByDay.get(entry.day)?.[source]
+        if (values?.length === 3 && typeof values[1] === "number" && Number.isFinite(values[1])) {
+            point.scenarios = {
+                minus:
+                    typeof values[0] === "number" && Number.isFinite(values[0])
+                        ? values[0] * scale
+                        : undefined,
+                center: values[1] * scale,
+                plus:
+                    typeof values[2] === "number" && Number.isFinite(values[2])
+                        ? values[2] * scale
+                        : undefined,
+            }
+            point.mean = point.scenarios.center
+        } else if (result?.paths === 3 && !result.scenario_daily && !result.partial) {
             // The backend uses type-7 linear quantiles. For exactly three
             // paths, p1 and p99 are 98% of the way from the median to each
             // extreme, so all three samples can be recovered from the API.
@@ -84,6 +117,7 @@ export function buildForecastPoints(
                 high: Math.max(minimum, Math.min(maximum, mean + sd)),
             }
         }
+        if (result?.partial) point.preliminary = true
         return point
     })
     return points.sort((a, b) => a.day - b.day)

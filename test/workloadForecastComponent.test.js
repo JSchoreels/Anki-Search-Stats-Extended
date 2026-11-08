@@ -30,8 +30,8 @@ const mocks = {
     "./stores": `export const searchString = { subscribe(fn) { fn("deck:current"); return () => {}; } };
         export const tooltip = { set() {} }; export const tooltipShown = { set() {} };`,
     "./search": `export async function getWorkloadForecastAvailable() { return true; }
-        export async function startWorkloadForecast(request) { globalThis.forecastRequest = request; return { job_id: 1, phase: "complete", result: { ...${JSON.stringify(result)}, paths: request.paths } }; }
-        export async function getWorkloadForecastProgress() {}
+        export async function startWorkloadForecast(request) { globalThis.forecastRequest = request; return globalThis.forecastStream ? { job_id: 1, phase: "running" } : { job_id: 1, phase: "complete", result: { ...${JSON.stringify(result)}, paths: request.paths } }; }
+        export async function getWorkloadForecastProgress() { return globalThis.forecastPollResult; }
         export async function cancelWorkloadForecast() {}`,
 }
 
@@ -115,7 +115,7 @@ test("switching to reviews due redraws the graph above the review limit", async 
     const [dayChoice, pathChoice] = document.querySelectorAll("select")
     expect(dayChoice.value).toBe("7")
     expect(pathChoice.value).toBe("3")
-    expect(document.body.textContent).toContain("workload-forecast-fast-help")
+    expect(document.body.textContent).toContain("workload-forecast-three-help")
     document.querySelector("button").click()
     await Promise.resolve()
     await Promise.resolve()
@@ -160,6 +160,66 @@ test("switching to reviews due redraws the graph above the review limit", async 
     document.querySelector('input[value="due"]').click()
     flush()
     expect(maxAxisTick()).toBe(1800)
+
+    const partial = {
+        ...result,
+        paths: 3,
+        model: "instant",
+        partial: true,
+        scenario_sigma: 0.04,
+        scenario_history_days: 100,
+        scenario_daily: [
+            {
+                day: 0,
+                due: [1900, 1800, null],
+                done: [100, 100, null],
+                new: [0, 0, null],
+                lapses: [20, 10, null],
+                seconds: [1200, 1200, null],
+            },
+        ],
+    }
+    global.forecastStream = true
+    global.forecastPollResult = {
+        job_id: 1,
+        phase: "running",
+        unit: "days",
+        current: 2,
+        total: 3,
+        partial_result: partial,
+    }
+    document.querySelector("button").click()
+    await Promise.resolve()
+    await Promise.resolve()
+    flush()
+    await new Promise((resolve) => setTimeout(resolve, 1100))
+    flush()
+    expect(document.body.textContent).toContain("workload-forecast-progress-days")
+    expect(document.body.textContent).toContain("workload-forecast-partial")
+    expect(document.querySelector(".workload-forecast-scenario-point-minus")).not.toBeNull()
+    expect(document.querySelector(".workload-forecast-scenario-point-plus")).toBeNull()
+    const complete = {
+        ...partial,
+        partial: false,
+        scenario_daily: [
+            {
+                day: 0,
+                due: [1900, 1800, 1700],
+                done: [100, 100, 100],
+                new: [0, 0, 0],
+                lapses: [20, 10, 5],
+                seconds: [1200, 1200, 1200],
+            },
+        ],
+    }
+    global.forecastPollResult = { job_id: 1, phase: "complete", result: complete }
+    await new Promise((resolve) => setTimeout(resolve, 1100))
+    flush()
+    expect(document.body.textContent).not.toContain("workload-forecast-partial")
+    expect(document.body.textContent).toContain("workload-forecast-scenario-summary")
+    expect(document.querySelector(".workload-forecast-scenario-plus")).not.toBeNull()
+    delete global.forecastStream
+    delete global.forecastPollResult
 
     await bundle.exports.unmount(app)
     dom.window.close()
