@@ -14,7 +14,10 @@ import {
     type ForecastBands,
     type WorkloadForecastResult,
 } from "../src/ts/workloadForecastData"
-import { workloadForecastTooltip } from "../src/ts/WorkloadForecastGraph"
+import {
+    renderWorkloadForecastGraph,
+    workloadForecastTooltip,
+} from "../src/ts/WorkloadForecastGraph"
 
 const bands = (mean: number, spread: number): ForecastBands => ({
     mean,
@@ -113,7 +116,59 @@ test("tooltip names the day and lists mean, median and both bands", () => {
     expect(lines[3]).toContain('"low":"65","high":"75"')
     expect(lines[4]).toContain('"low":"60","high":"80"')
     expect(workloadForecastTooltip(today, "done")[0]).toContain("workload-forecast-today")
-    expect(workloadForecastTooltip(buildForecastPoints(result, "minutes")[0], "minutes")[1]).toContain(
-        '"value":"12.0"'
-    )
+    expect(
+        workloadForecastTooltip(buildForecastPoints(result, "minutes")[0], "minutes")[1]
+    ).toContain('"value":"12.0"')
+})
+
+test("three futures show an indicative standard deviation within the simulated limits", () => {
+    // The three simulated values are 80, 100 and 100. These percentiles use
+    // the backend's linear interpolation between sorted paths.
+    const sampled: ForecastBands = {
+        mean: 280 / 3,
+        p1: 80.4,
+        p5: 82,
+        p50: 100,
+        p95: 100,
+        p99: 100,
+    }
+    const day = {
+        day: 0,
+        due: sampled,
+        done: sampled,
+        new: sampled,
+        lapses: sampled,
+        seconds: sampled,
+    }
+    const [point] = buildForecastPoints({ ...result, paths: 3, daily: [day] }, "done")
+    const sd = Math.sqrt(((80 - 280 / 3) ** 2 + 2 * (100 - 280 / 3) ** 2) / 2)
+    expect(point.estimatedRange?.low).toBeCloseTo(280 / 3 - sd)
+    expect(point.estimatedRange?.high).toBeCloseTo(100)
+    const tooltip = workloadForecastTooltip(point, "done")
+    expect(tooltip).toHaveLength(3)
+    expect(tooltip[2]).toContain("workload-forecast-tooltip-estimate")
+    expect(tooltip.join(" ")).not.toContain("workload-forecast-tooltip-p90")
+
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg")
+    renderWorkloadForecastGraph(svg, [point], "done")
+    expect(svg.querySelectorAll(".workload-forecast-estimate-band")).toHaveLength(1)
+    expect(svg.querySelectorAll(".workload-forecast-estimate-bound")).toHaveLength(2)
+    expect(svg.querySelector(".workload-forecast-band-p90")).toBeNull()
+    expect(svg.querySelector(".workload-forecast-median")).toBeNull()
+})
+
+test("the three-future estimate scales answer time to minutes", () => {
+    const sampled: ForecastBands = { mean: 120, p1: 61.2, p5: 66, p50: 120, p95: 174, p99: 178.8 }
+    const day = {
+        day: 0,
+        due: sampled,
+        done: sampled,
+        new: sampled,
+        lapses: sampled,
+        seconds: sampled,
+    }
+    const [point] = buildForecastPoints({ ...result, paths: 3, daily: [day] }, "minutes")
+    expect(point.mean).toBe(2)
+    expect(point.estimatedRange?.low).toBeCloseTo(1)
+    expect(point.estimatedRange?.high).toBeCloseTo(3)
 })

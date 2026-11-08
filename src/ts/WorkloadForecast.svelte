@@ -131,7 +131,9 @@
                 {i18n("workload-forecast-paths")}
                 <select bind:value={paths} disabled={running}>
                     {#each FORECAST_PATH_CHOICES as choice}
-                        <option value={choice}>{choice}</option>
+                        <option value={choice}>
+                            {choice === 3 ? i18n("workload-forecast-fast-option") : choice}
+                        </option>
                     {/each}
                 </select>
             </label>
@@ -164,16 +166,29 @@
                     </label>
                 {/each}
             </div>
-            <GraphSvg render={(svg) => renderWorkloadForecastGraph(svg, points, metric)} />
+            {#key points}
+                <GraphSvg render={(svg) => renderWorkloadForecastGraph(svg, points, metric)} />
+            {/key}
             <p>
-                {i18n("workload-forecast-summary", {
-                    total: Math.round(total),
-                    paths: result.paths,
-                    days: result.days,
-                })}
+                {i18n(
+                    result.paths === 3
+                        ? "workload-forecast-fast-summary"
+                        : "workload-forecast-summary",
+                    {
+                        total: Math.round(total),
+                        paths: result.paths,
+                        days: result.days,
+                    }
+                )}
             </p>
         {/if}
-        <p>{i18n("workload-forecast-help")}</p>
+        <p>
+            {i18n(
+                result?.paths === 3 || (!result && paths === 3)
+                    ? "workload-forecast-fast-help"
+                    : "workload-forecast-help"
+            )}
+        </p>
         {#if result?.model === "instant"}
             <p>{i18n("workload-forecast-instant-help")}</p>
         {:else if result}

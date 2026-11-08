@@ -18,6 +18,16 @@ const format = (value: number, metric: ForecastMetric) =>
 
 export function workloadForecastTooltip(point: ForecastPoint, metric: ForecastMetric) {
     const f = (value: number) => format(value, metric)
+    if (point.estimatedRange) {
+        return [
+            dayLabel(point.day),
+            i18n("workload-forecast-tooltip-mean", { value: f(point.mean) }),
+            i18n("workload-forecast-tooltip-estimate", {
+                low: f(point.estimatedRange.low),
+                high: f(point.estimatedRange.high),
+            }),
+        ]
+    }
     return [
         dayLabel(point.day),
         i18n("workload-forecast-tooltip-mean", { value: f(point.mean) }),
@@ -42,7 +52,8 @@ export function renderWorkloadForecastGraph(
         .scaleLinear()
         .domain([first, Math.max(last, first + 1)])
         .range([0, width])
-    const top = d3.max(points, (p) => p.p99) || 1
+    const approximate = !!points[0].estimatedRange
+    const top = d3.max(points, (p) => Math.max(p.mean, p.estimatedRange?.high ?? p.p99)) || 1
     const y = d3.scaleLinear().domain([0, top]).nice().range([height, 0])
     const chart = d3.select(svg).attr("viewBox", `-70 -15 ${width + 90} ${height + 75}`)
 
@@ -78,48 +89,75 @@ export function renderWorkloadForecastGraph(
             .y0((p) => y(low(p)))
             .y1((p) => y(high(p)))
             .curve(d3.curveMonotoneX)(points)
-    chart
-        .append("path")
-        .attr("class", "workload-forecast-band-p98")
-        .attr(
-            "d",
-            area(
-                (p) => p.p1,
-                (p) => p.p99
-            )
-        )
-        .attr("fill", COLOUR)
-        .attr("fill-opacity", 0.15)
-    chart
-        .append("path")
-        .attr("class", "workload-forecast-band-p90")
-        .attr(
-            "d",
-            area(
-                (p) => p.p5,
-                (p) => p.p95
-            )
-        )
-        .attr("fill", COLOUR)
-        .attr("fill-opacity", 0.3)
     const line = (value: (p: ForecastPoint) => number) =>
         d3
             .line<ForecastPoint>()
             .x((p) => x(p.day))
             .y((p) => y(value(p)))
             .curve(d3.curveMonotoneX)(points)
-    chart
-        .append("path")
-        .attr("class", "workload-forecast-median")
-        .attr("d", line((p) => p.p50))
-        .attr("fill", "none")
-        .attr("stroke", COLOUR)
-        .attr("stroke-width", 1.5)
-        .attr("stroke-dasharray", "5 3")
+    if (approximate) {
+        const low = (p: ForecastPoint) => p.estimatedRange?.low ?? p.mean
+        const high = (p: ForecastPoint) => p.estimatedRange?.high ?? p.mean
+        chart
+            .append("path")
+            .attr("class", "workload-forecast-estimate-band")
+            .attr("d", area(low, high))
+            .attr("fill", COLOUR)
+            .attr("fill-opacity", 0.2)
+        for (const bound of [low, high]) {
+            chart
+                .append("path")
+                .attr("class", "workload-forecast-estimate-bound")
+                .attr("d", line(bound))
+                .attr("fill", "none")
+                .attr("stroke", COLOUR)
+                .attr("stroke-width", 1.5)
+                .attr("stroke-dasharray", "5 3")
+        }
+    } else {
+        chart
+            .append("path")
+            .attr("class", "workload-forecast-band-p98")
+            .attr(
+                "d",
+                area(
+                    (p) => p.p1,
+                    (p) => p.p99
+                )
+            )
+            .attr("fill", COLOUR)
+            .attr("fill-opacity", 0.15)
+        chart
+            .append("path")
+            .attr("class", "workload-forecast-band-p90")
+            .attr(
+                "d",
+                area(
+                    (p) => p.p5,
+                    (p) => p.p95
+                )
+            )
+            .attr("fill", COLOUR)
+            .attr("fill-opacity", 0.3)
+        chart
+            .append("path")
+            .attr("class", "workload-forecast-median")
+            .attr(
+                "d",
+                line((p) => p.p50)
+            )
+            .attr("fill", "none")
+            .attr("stroke", COLOUR)
+            .attr("stroke-width", 1.5)
+            .attr("stroke-dasharray", "5 3")
+    }
     chart
         .append("path")
         .attr("class", "workload-forecast-mean")
-        .attr("d", line((p) => p.mean))
+        .attr(
+            "d",
+            line((p) => p.mean)
+        )
         .attr("fill", "none")
         .attr("stroke", COLOUR)
         .attr("stroke-width", 2.5)
