@@ -59,7 +59,12 @@ export type ForecastPoint = ForecastBands & {
     scenarios?: { minus?: number; center: number; plus?: number }
     scenarioKind?: "stratified"
     preliminary?: boolean
+    /** True with at least FORECAST_P98_MIN_PATHS paths, where p1 and p99 are not just the sample extremes. */
+    p98Band?: boolean
 }
+
+/** Fewest simulated paths for which the 1st to 99th percentile band is meaningful. */
+export const FORECAST_P98_MIN_PATHS = 100
 
 const finite = (value: unknown) => (typeof value === "number" && Number.isFinite(value) ? value : 0)
 
@@ -121,6 +126,7 @@ export function buildForecastPoints(
             }
         }
         if (result?.partial) point.preliminary = true
+        if ((result?.paths ?? 0) >= FORECAST_P98_MIN_PATHS) point.p98Band = true
         return point
     })
     return points.sort((a, b) => a.day - b.day)
@@ -129,6 +135,49 @@ export function buildForecastPoints(
 /** Sum of the daily means over the horizon (expected total workload). */
 export function forecastTotalMean(points: ForecastPoint[]) {
     return points.reduce((sum, point) => sum + point.mean, 0)
+}
+
+export type ForecastScenarioTotals = {
+    low: number
+    central: number
+    high: number
+    expected: number
+    sd: number
+}
+
+/**
+ * Totals over the horizon for the three stratified scenario paths. A quadratic
+ * fit through the z = -1, 0, +1 strata of the aggregate answer outcome gives the
+ * expected total (f0 + b) and standard deviation (sqrt(a^2 + 2 b^2)) for a
+ * standard normal aggregate. Returns null unless every point has all three
+ * finite scenario values, so partial results show no totals.
+ */
+export function forecastScenarioTotals(points: ForecastPoint[]): ForecastScenarioTotals | null {
+    if (!points.length) return null
+    let fMinus = 0
+    let f0 = 0
+    let fPlus = 0
+    for (const { scenarios } of points) {
+        if (
+            !scenarios ||
+            !Number.isFinite(scenarios.minus) ||
+            !Number.isFinite(scenarios.center) ||
+            !Number.isFinite(scenarios.plus)
+        )
+            return null
+        fMinus += scenarios.minus!
+        f0 += scenarios.center
+        fPlus += scenarios.plus!
+    }
+    const a = (fPlus - fMinus) / 2
+    const b = (fPlus + fMinus) / 2 - f0
+    return {
+        low: fMinus,
+        central: f0,
+        high: fPlus,
+        expected: f0 + b,
+        sd: Math.sqrt(a * a + 2 * b * b),
+    }
 }
 
 export function forecastProgressFraction(progress: WorkloadForecastProgress | null) {

@@ -218,7 +218,7 @@ test("switching to reviews due redraws the graph above the review limit", async 
     await new Promise((resolve) => setTimeout(resolve, 1100))
     flush()
     expect(document.body.textContent).not.toContain("workload-forecast-partial")
-    expect(document.body.textContent).toContain("workload-forecast-stratum-summary")
+    expect(document.body.textContent).toContain("workload-forecast-stratum-totals")
     expect(document.querySelector(".workload-forecast-scenario-plus")).not.toBeNull()
     delete global.forecastStream
     delete global.forecastPollResult

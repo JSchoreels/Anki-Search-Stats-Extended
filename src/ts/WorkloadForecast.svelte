@@ -13,8 +13,10 @@
     import {
         buildForecastPoints,
         FORECAST_DAY_CHOICES,
+        FORECAST_P98_MIN_PATHS,
         FORECAST_PATH_CHOICES,
         forecastProgressFraction,
+        forecastScenarioTotals,
         forecastTotalMean,
         type ForecastMetric,
         type WorkloadForecastProgress,
@@ -114,6 +116,8 @@
 
     $: points = buildForecastPoints(result, metric)
     $: total = forecastTotalMean(points)
+    $: scenarioTotals =
+        result?.scenario_kind === "stratified" ? forecastScenarioTotals(points) : null
     $: percent = Math.round(forecastProgressFraction(progress) * 100)
 </script>
 
@@ -184,15 +188,22 @@
             {#if !result.partial}
                 <p>
                     {i18n(
-                        result.scenario_kind === "stratified"
-                            ? "workload-forecast-stratum-summary"
-                            : result.scenario_daily
-                              ? "workload-forecast-scenario-summary"
-                              : result.paths === 3
-                                ? "workload-forecast-fast-summary"
-                                : "workload-forecast-summary",
+                        scenarioTotals
+                            ? "workload-forecast-stratum-totals"
+                            : result.scenario_kind === "stratified"
+                              ? "workload-forecast-stratum-summary"
+                              : result.scenario_daily
+                                ? "workload-forecast-scenario-summary"
+                                : result.paths === 3
+                                  ? "workload-forecast-fast-summary"
+                                  : "workload-forecast-summary",
                         {
                             total: Math.round(total),
+                            low: Math.round(scenarioTotals?.low ?? 0),
+                            central: Math.round(scenarioTotals?.central ?? 0),
+                            high: Math.round(scenarioTotals?.high ?? 0),
+                            expected: Math.round(scenarioTotals?.expected ?? 0),
+                            sd: Math.round(scenarioTotals?.sd ?? 0),
                             paths: result.paths,
                             days: result.days,
                         }
@@ -212,7 +223,9 @@
                           ? "workload-forecast-three-help"
                           : result?.paths === 3
                             ? "workload-forecast-fast-help"
-                            : "workload-forecast-help",
+                            : (result?.paths ?? 0) >= FORECAST_P98_MIN_PATHS
+                              ? "workload-forecast-help"
+                              : "workload-forecast-help-p90",
                 {
                     sigma: ((result?.scenario_sigma ?? 0) * 100).toFixed(1),
                     days: result?.scenario_history_days ?? 0,

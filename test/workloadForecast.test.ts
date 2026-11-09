@@ -10,6 +10,7 @@ jest.mock("../src/ts/stores", () => ({
 import {
     buildForecastPoints,
     forecastProgressFraction,
+    forecastScenarioTotals,
     forecastTotalMean,
     type ForecastBands,
     type WorkloadForecastResult,
@@ -206,18 +207,35 @@ test("progress fraction is bounded", () => {
     expect(forecastProgressFraction({ current: 1, total: 0 })).toBe(0)
 })
 
-test("tooltip names the day and lists mean, median and both bands", () => {
+test("tooltip names the day and lists mean, median and the 5-95 band for 20 paths", () => {
     const [today, tomorrow] = buildForecastPoints(result, "done")
     const lines = workloadForecastTooltip(tomorrow, "done")
-    expect(lines).toHaveLength(5)
+    expect(lines).toHaveLength(4)
     expect(lines[0]).toContain("workload-forecast-tomorrow")
     expect(lines[1]).toContain('"value":"70"')
     expect(lines[3]).toContain('"low":"65","high":"75"')
-    expect(lines[4]).toContain('"low":"60","high":"80"')
+    expect(lines.join(" ")).not.toContain("workload-forecast-tooltip-p98")
     expect(workloadForecastTooltip(today, "done")[0]).toContain("workload-forecast-today")
     expect(
         workloadForecastTooltip(buildForecastPoints(result, "minutes")[0], "minutes")[1]
     ).toContain('"value":"12.0"')
+})
+
+test("the 1-99 band appears in the tooltip and graph only with 100 or more paths", () => {
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg")
+    renderWorkloadForecastGraph(svg, buildForecastPoints(result, "done"), "done")
+    expect(svg.querySelector(".workload-forecast-band-p90")).not.toBeNull()
+    expect(svg.querySelector(".workload-forecast-band-p98")).toBeNull()
+
+    const wide = buildForecastPoints({ ...result, paths: 100 }, "done")
+    const lines = workloadForecastTooltip(wide[1], "done")
+    expect(lines).toHaveLength(5)
+    expect(lines[4]).toContain('"low":"60","high":"80"')
+    renderWorkloadForecastGraph(svg, wide, "done")
+    expect(svg.querySelector(".workload-forecast-band-p90")).not.toBeNull()
+    expect(svg.querySelector(".workload-forecast-band-p98")).not.toBeNull()
+    const narrow = buildForecastPoints({ ...result, paths: 99 }, "done")
+    expect(workloadForecastTooltip(narrow[1], "done")).toHaveLength(4)
 })
 
 test("three futures show an indicative standard deviation within the simulated limits", () => {
@@ -270,4 +288,59 @@ test("the three-future estimate scales answer time to minutes", () => {
     expect(point.mean).toBe(2)
     expect(point.estimatedRange?.low).toBeCloseTo(1)
     expect(point.estimatedRange?.high).toBeCloseTo(3)
+})
+
+const scenarioPoints = (triples: Array<[number | null, number | null, number | null]>) =>
+    buildForecastPoints(
+        {
+            ...result,
+            paths: 3,
+            scenario_kind: "stratified",
+            daily: triples.map((_, day) => ({ ...result.daily[1], day })),
+            scenario_daily: triples.map((due, day) => ({
+                day,
+                due,
+                done: due,
+                new: due,
+                lapses: due,
+                seconds: due,
+            })),
+        },
+        "due"
+    )
+
+test("scenario totals are exact for a symmetric linear dependence", () => {
+    const totals = forecastScenarioTotals(
+        scenarioPoints([
+            [80, 100, 120],
+            [40, 50, 60],
+        ])
+    )!
+    expect(totals.low).toBe(120)
+    expect(totals.central).toBe(150)
+    expect(totals.high).toBe(180)
+    expect(totals.expected).toBe(150)
+    expect(totals.sd).toBe(30)
+})
+
+test("scenario totals add the curvature of a convex dependence", () => {
+    // f(z) = 100 + 10 z + 5 z^2 evaluated at z = -1, 0, 1: E = 105, Var = 100 + 2 * 25.
+    const totals = forecastScenarioTotals(scenarioPoints([[95, 100, 115]]))!
+    expect(totals.expected).toBe(105)
+    expect(totals.sd).toBeCloseTo(Math.sqrt(150))
+    expect(totals.low).toBe(95)
+    expect(totals.high).toBe(115)
+})
+
+test("scenario totals need every point to have all three finite values", () => {
+    expect(forecastScenarioTotals([])).toBeNull()
+    expect(
+        forecastScenarioTotals(
+            scenarioPoints([
+                [80, 100, 120],
+                [40, 50, null],
+            ])
+        )
+    ).toBeNull()
+    expect(forecastScenarioTotals(buildForecastPoints(result, "due"))).toBeNull()
 })

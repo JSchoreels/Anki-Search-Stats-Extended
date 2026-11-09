@@ -71,7 +71,9 @@ export function workloadForecastTooltip(point: ForecastPoint, metric: ForecastMe
         i18n("workload-forecast-tooltip-mean", { value: f(point.mean) }),
         i18n("workload-forecast-tooltip-median", { value: f(point.p50) }),
         i18n("workload-forecast-tooltip-p90", { low: f(point.p5), high: f(point.p95) }),
-        i18n("workload-forecast-tooltip-p98", { low: f(point.p1), high: f(point.p99) }),
+        ...(point.p98Band
+            ? [i18n("workload-forecast-tooltip-p98", { low: f(point.p1), high: f(point.p99) })]
+            : []),
     ]
 }
 
@@ -100,7 +102,7 @@ export function renderWorkloadForecastGraph(
                 p.mean,
                 p.scenarios?.minus ?? 0,
                 p.scenarios?.plus ?? 0,
-                p.estimatedRange?.high ?? (scenario ? 0 : p.p99)
+                p.estimatedRange?.high ?? (scenario ? 0 : p.p98Band ? p.p99 : p.p95)
             )
         ) || 1
     const y = d3.scaleLinear().domain([0, top]).nice().range([height, 0])
@@ -205,18 +207,19 @@ export function renderWorkloadForecastGraph(
                 .attr("stroke-dasharray", "5 3")
         }
     } else if (!preliminary) {
-        chart
-            .append("path")
-            .attr("class", "workload-forecast-band-p98")
-            .attr(
-                "d",
-                area(
-                    (p) => p.p1,
-                    (p) => p.p99
+        if (points[0].p98Band)
+            chart
+                .append("path")
+                .attr("class", "workload-forecast-band-p98")
+                .attr(
+                    "d",
+                    area(
+                        (p) => p.p1,
+                        (p) => p.p99
+                    )
                 )
-            )
-            .attr("fill", COLOUR)
-            .attr("fill-opacity", 0.15)
+                .attr("fill", COLOUR)
+                .attr("fill-opacity", 0.15)
         chart
             .append("path")
             .attr("class", "workload-forecast-band-p90")
