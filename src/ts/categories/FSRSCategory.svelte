@@ -8,6 +8,7 @@
     import MemorisedBar from "../MemorisedBar.svelte"
     import MemorisedPerReview from "../MemorisedPerReview.svelte"
     import MemorisedGraphContainer from "../MemorisedGraphContainer.svelte"
+    import MemorisedSourceControls from "../MemorisedSourceControls.svelte"
     import FsrsCalibration from "../FSRSCalibration.svelte"
     import FsrsCalibrationStatus from "../FsrsCalibrationStatus.svelte"
     import UMPlus from "../UMPlus.svelte"
@@ -24,14 +25,17 @@
     import {
         calibrationMode,
         calibrationComparison,
+        cancelRwkvStabilityComputation,
         fsrsCalibrationGeneration,
         fsrsCalibrationStats,
         memorised_stats,
         rwkvCalibrationStats,
+        rwkvStabilityStats,
         scroll,
         searchLimit,
         binSize,
         revlogStats,
+        stabilityOverTimeMode,
     } from "../stores"
     import { today, day_ms, no_rollover_today } from "../revlogGraphs"
     import { FSRS_COMPARISON_COLOUR, RWKV_COMPARISON_COLOUR } from "../graph"
@@ -54,16 +58,53 @@
     let granularity = 20
 
     const shareFormat = new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 })
-    function stabilityDetails(day: number) {
-        const stats = $memorised_stats
-        const ratio = stats?.day_young_ratio_s90?.[day]
-        if (typeof ratio !== "number" || !Number.isFinite(ratio) || !(stats?.day_means?.[day] ?? 0))
-            return []
+    function youngMatureShares(ratio: number | undefined, hasCards: boolean, prefix: string) {
+        if (typeof ratio !== "number" || !Number.isFinite(ratio) || !hasCards) return []
         return [
-            `${i18n("young")}: ${shareFormat.format(ratio * 100)}%`,
-            `${i18n("mature")}: ${shareFormat.format((1 - ratio) * 100)}%`,
+            `${prefix}${i18n("young")}: ${shareFormat.format(ratio * 100)}%`,
+            `${prefix}${i18n("mature")}: ${shareFormat.format((1 - ratio) * 100)}%`,
         ]
     }
+    function fsrsStabilityShares(day: number, prefix = "") {
+        const stats = $memorised_stats
+        return youngMatureShares(
+            stats?.day_young_ratio_s90?.[day],
+            !!(stats?.day_means?.[day] ?? 0),
+            prefix
+        )
+    }
+    function rwkvStabilityShares(day: number, prefix = "") {
+        const stats = $rwkvStabilityStats
+        return youngMatureShares(
+            stats?.youngRatioDays[day],
+            (stats?.cardCountDays[day] ?? 0) > 0,
+            prefix
+        )
+    }
+    function stabilityDetails(day: number) {
+        if ($stabilityOverTimeMode === "rwkv") return rwkvStabilityShares(day)
+        if ($stabilityOverTimeMode === "fsrs") return fsrsStabilityShares(day)
+        return [
+            ...fsrsStabilityShares(day, `${i18n("memorised-source-fsrs")} — `),
+            ...rwkvStabilityShares(day, `${i18n("memorised-source-rwkv")} — `),
+        ]
+    }
+
+    $: fsrsStability =
+        (average_type == Average.MEAN
+            ? $memorised_stats?.day_means
+            : $memorised_stats?.day_medians) ?? []
+    $: rwkvStability =
+        (average_type == Average.MEAN
+            ? $rwkvStabilityStats?.meanDays
+            : $rwkvStabilityStats?.medianDays) ?? []
+    $: rwkvStabilityPending =
+        $stabilityOverTimeMode !== "fsrs" &&
+        !$rwkvStabilityStats?.done &&
+        !$rwkvStabilityStats?.error
+    $: rwkvStabilityPercent = $rwkvStabilityStats?.total
+        ? Math.min(100, Math.round((100 * $rwkvStabilityStats.current) / $rwkvStabilityStats.total))
+        : 0
 
     let stability_time_machine_bar: BarChart
     $: stability_time_machine_bar = {
@@ -365,19 +406,70 @@
     </MemorisedGraphContainer>
     <MemorisedGraphContainer graphId="fsrs:average-stability-over-time">
         <h1 slot="title">{i18n("average-stability-over-time")}</h1>
-        <DailyLineGraph
-            slot="graph"
-            data={average_type == Average.MEAN
-                ? $memorised_stats!.day_means
-                : $memorised_stats!.day_medians}
-            label={i18n("stability-in-days")}
-            tooltipDetails={stabilityDetails}
-            trendPersistenceKey={TREND_PERSISTENCE_KEYS.fsrs.averageStabilityOverTime}
-            trendInfo={{ pattern: i18n_pattern("stability-per-day") }}
-        />
+        <svelte:fragment slot="graph">
+            <MemorisedSourceControls
+                bind:mode={$stabilityOverTimeMode}
+                showHistoryProgress={false}
+            />
+            {#if $stabilityOverTimeMode !== "fsrs" && $rwkvStabilityStats?.error}
+                <Warning always>{$rwkvStabilityStats.error}</Warning>
+            {:else if $stabilityOverTimeMode !== "fsrs" && $rwkvStabilityStats?.phase === "cancelled"}
+                <Warning always>{i18n("stability-rwkv-cancelled")}</Warning>
+            {:else if $stabilityOverTimeMode !== "fsrs" && $rwkvStabilityStats && !$rwkvStabilityStats.done}
+                <div class="rwkv-progress">
+                    <div>
+                        {$rwkvStabilityStats.phase === "waiting"
+                            ? i18n("stability-rwkv-waiting")
+                            : $rwkvStabilityStats.phase === "loading"
+                              ? i18n("loading")
+                              : i18n("stability-rwkv-progress", {
+                                    current: $rwkvStabilityStats.current,
+                                    total: $rwkvStabilityStats.total,
+                                    percent: rwkvStabilityPercent,
+                                })}
+                    </div>
+                    <progress
+                        max={$rwkvStabilityStats.total || 1}
+                        value={$rwkvStabilityStats.current}
+                        aria-label={i18n("stability-rwkv-progress-label")}
+                    ></progress>
+                    <button type="button" on:click={() => cancelRwkvStabilityComputation()}>
+                        {i18n("cancel")}
+                    </button>
+                </div>
+            {/if}
+            <DailyLineGraph
+                data={$stabilityOverTimeMode === "rwkv" ? rwkvStability : fsrsStability}
+                label={i18n("stability-in-days")}
+                seriesLabel={$stabilityOverTimeMode === "both"
+                    ? i18n("memorised-source-fsrs")
+                    : $stabilityOverTimeMode === "rwkv"
+                      ? i18n("memorised-source-rwkv")
+                      : undefined}
+                color={$stabilityOverTimeMode === "rwkv"
+                    ? RWKV_COMPARISON_COLOUR
+                    : FSRS_COMPARISON_COLOUR}
+                comparison={$stabilityOverTimeMode === "both"
+                    ? {
+                          data: rwkvStability,
+                          label: i18n("memorised-source-rwkv"),
+                          color: RWKV_COMPARISON_COLOUR,
+                      }
+                    : undefined}
+                loading={rwkvStabilityPending}
+                tooltipDetails={stabilityDetails}
+                trendPersistenceKey={$stabilityOverTimeMode === "rwkv"
+                    ? `${TREND_PERSISTENCE_KEYS.fsrs.averageStabilityOverTime}:rwkv`
+                    : TREND_PERSISTENCE_KEYS.fsrs.averageStabilityOverTime}
+                trendInfo={{ pattern: i18n_pattern("stability-per-day") }}
+            />
+        </svelte:fragment>
         <p>
             {i18n("average-stability-over-time-help")}
         </p>
+        {#if $stabilityOverTimeMode !== "fsrs"}
+            <p>{i18n("average-stability-over-time-rwkv-help")}</p>
+        {/if}
         <div>
             <label>
                 <input type="radio" value={Average.MEDIAN} bind:group={average_type} />
@@ -423,5 +515,21 @@
     .um-plus-help {
         margin-top: 1em;
         font-size: small;
+    }
+
+    .rwkv-progress {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 0.35rem 0.75rem;
+        align-items: center;
+        margin: 0.5rem 0;
+    }
+
+    .rwkv-progress div {
+        grid-column: 1 / -1;
+    }
+
+    .rwkv-progress progress {
+        width: 100%;
     }
 </style>

@@ -4,6 +4,8 @@
 
 ### User facing changes
 
+- Show RWKV in Stability Over Time with an FSRS / RWKV / Both selector. RWKV S90 is the delay until RWKV-Instant predicts 90% recall after a card's last answer of the day, corrected downward for RWKV's typical optimism when no further reviews are assumed. Median/Mean, the moving average, and the young/mature tooltip follow the selected source; the background replay shows its progress and can be cancelled.
+
 - Switch the workload forecast to three simulated futures for a quicker, approximate range while retaining the configured queue refreshes and limits. Larger samples remain available for percentile bands.
 
 - Redraw the workload graph when changing metrics, so Reviews due shows the eligible backlog rather than the previous Reviews done curve.

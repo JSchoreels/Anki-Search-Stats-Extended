@@ -13,7 +13,11 @@ visible while RWKV catches up.
 
 Cards, Notes, Cards by Burden, and Average Retrievability support RWKV.
 Retrievability & Stability and the B-W matrix remain FSRS-only because RWKV
-does not expose equivalent stability and difficulty state.
+does not expose equivalent stability and difficulty state. The separate
+Stability Over Time graph supports RWKV through its own source selector: it
+derives a drift-corrected RWKV S90 from a separate in-memory replay of
+recall predictions, described in
+[FSRS_STABILITY.MD](FSRS_STABILITY.MD#rwkv-source).
 
 Memorised's Total and Trend views support [drag-to-zoom](TIME_AXIS_ZOOM.MD).
 Zoom changes only the displayed dates, preserves cumulative totals and drawn
@@ -178,4 +182,5 @@ the latest periodic checkpoint. Neither replaces the last completed cache.
 - Review-gain graph and rolling-ratio calculation:
   `src/ts/MemorisedPerReview.svelte` and `src/ts/memorisedPerReview.ts`
 - RWKV per-answer replay and progress: `rwkv_review_gain.py`
+- RWKV Stability Over Time replay: `rwkv_stability.py`
 - Shared trailing-average helper: `src/ts/dailyMovingAverage.ts`

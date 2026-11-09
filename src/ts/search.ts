@@ -316,6 +316,40 @@ export async function cancelRwkvReviewGain(jobId: number) {
     await endpoint("cancelRwkvReviewGain", JSON.stringify({ job_id: jobId }), false)
 }
 
+export type RwkvStabilityProgress = {
+    jobId?: number
+    phase: "loading" | "waiting" | "computing" | "complete" | "cancelled" | "failed"
+    current?: number
+    total?: number
+    firstDay?: number | null
+    medianByDay?: (number | null)[]
+    meanByDay?: (number | null)[]
+    youngRatioByDay?: (number | null)[]
+    cardCountByDay?: number[]
+    done: boolean
+    error?: string | null
+}
+
+export async function startRwkvStabilityHistory(cids: number[]) {
+    return (await endpoint(
+        "startRwkvStabilityHistory",
+        JSON.stringify({ cids }),
+        false
+    )) as RwkvStabilityProgress
+}
+
+export async function getRwkvStabilityHistoryProgress(jobId: number) {
+    return (await endpoint(
+        "rwkvStabilityHistoryProgress",
+        JSON.stringify({ job_id: jobId }),
+        false
+    )) as RwkvStabilityProgress
+}
+
+export async function cancelRwkvStabilityHistory(jobId: number) {
+    await endpoint("cancelRwkvStabilityHistory", JSON.stringify({ job_id: jobId }), false)
+}
+
 export type FsrsCalibrationProgress = {
     phase: "queued" | "running" | "ready" | "failed"
     label?: string

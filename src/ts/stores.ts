@@ -27,6 +27,7 @@ import { today, type calculateRevlogStats } from "./revlogGraphs"
 import {
     cancelRwkvMemorisedHistory,
     cancelRwkvReviewGain,
+    cancelRwkvStabilityHistory,
     catchErrors,
     ensureFsrsCalibration,
     getCardData,
@@ -34,9 +35,11 @@ import {
     getReviewRetrievabilityPages,
     getRwkvMemorisedHistoryProgress,
     getRwkvReviewGainProgress,
+    getRwkvStabilityHistoryProgress,
     saveConfigValue,
     startRwkvMemorisedHistory,
     startRwkvReviewGain,
+    startRwkvStabilityHistory,
     type CardData,
     type FsrsCalibrationProgress,
 } from "./search"
@@ -472,6 +475,81 @@ derived(
     }
 ).subscribe(rwkvMemorisedStats.set)
 
+type RwkvJobProgress = { jobId?: number; done: boolean }
+
+// One kind of cancellable RWKV background job. Starts and cancellations share a queue so they
+// stay in order when the search or selected model changes quickly; only the latest run reports.
+function rwkvJobRunner<Progress extends RwkvJobProgress>(
+    poll: (jobId: number) => Promise<Progress>,
+    cancel: (jobId: number) => Promise<void>,
+    missingJobIdMessage: string
+) {
+    let generation = 0
+    let requests = Promise.resolve()
+    function queue<T>(request: () => Promise<T>): Promise<T> {
+        const result = requests.then(request)
+        requests = result.then(
+            () => {},
+            () => {}
+        )
+        return result
+    }
+    const queueCancel = (jobId: number) => queue(() => cancel(jobId))
+
+    // Starts a job, reports each progress every 500 ms until it is done, and returns the teardown
+    // that cancels it once a derived store input changes.
+    function run(
+        start: () => Promise<Progress>,
+        report: (progress: Progress, jobId: number | null) => void,
+        fail: (error: string, jobId: number | null) => void
+    ) {
+        const current = ++generation
+        let jobId: number | null = null
+        let finished = false
+        void (async () => {
+            try {
+                let progress = await queue(async () => {
+                    if (current !== generation) return null
+                    const started = await start()
+                    if (current !== generation) {
+                        if (started.jobId !== undefined && !started.done)
+                            await cancel(started.jobId)
+                        return null
+                    }
+                    return started
+                })
+                if (!progress) return
+                jobId = progress.jobId ?? null
+                if (current !== generation) {
+                    if (jobId !== null && !progress.done) await queueCancel(jobId)
+                    return
+                }
+                while (current === generation) {
+                    report(progress, jobId)
+                    if (progress.done) {
+                        finished = true
+                        return
+                    }
+                    if (jobId === null) throw new Error(missingJobIdMessage)
+                    await new Promise((resolve) => setTimeout(resolve, 500))
+                    if (current !== generation) return
+                    progress = await poll(jobId)
+                }
+            } catch (error) {
+                if (jobId !== null && !finished) void queueCancel(jobId).catch(() => {})
+                if (current === generation)
+                    fail(error instanceof Error ? error.message : String(error), jobId)
+            }
+        })()
+        return () => {
+            if (current === generation) generation++
+            if (jobId !== null && !finished) void queueCancel(jobId).catch(() => {})
+        }
+    }
+
+    return { run, cancel: queueCancel }
+}
+
 export type RwkvReviewGainStats = {
     jobId: number | null
     phase: string
@@ -487,18 +565,11 @@ export type RwkvReviewGainStats = {
 }
 
 export const rwkvReviewGainStats = writable<RwkvReviewGainStats | null>(null)
-let rwkvReviewGainGeneration = 0
-let rwkvReviewGainRequests = Promise.resolve()
-
-// Keep starts and cancellations in order when the search or selected model changes quickly.
-function queueRwkvReviewGainRequest<T>(request: () => Promise<T>): Promise<T> {
-    const result = rwkvReviewGainRequests.then(request)
-    rwkvReviewGainRequests = result.then(
-        () => {},
-        () => {}
-    )
-    return result
-}
+const rwkvReviewGainJob = rwkvJobRunner(
+    getRwkvReviewGainProgress,
+    cancelRwkvReviewGain,
+    "RWKV review replay did not return a job ID"
+)
 
 derived(
     [memorisedPerReviewMode, cids, showMemorisedStats, searchLimit, reviewGainHorizon],
@@ -506,89 +577,114 @@ derived(
         [$mode, $cids, $requested, $limit, $horizon],
         set: (value: RwkvReviewGainStats | null) => void
     ) => {
-        const generation = ++rwkvReviewGainGeneration
         set(null)
         if ($mode === "fsrs" || !$cids || !$requested) return
-        let jobId: number | null = null
-        let finished = false
-        void (async () => {
-            try {
-                let progress = await queueRwkvReviewGainRequest(async () => {
-                    if (generation !== rwkvReviewGainGeneration) return null
-                    const started = await startRwkvReviewGain($cids, $limit, $horizon)
-                    if (generation !== rwkvReviewGainGeneration) {
-                        if (started.jobId !== undefined && !started.done)
-                            await cancelRwkvReviewGain(started.jobId)
-                        return null
-                    }
-                    return started
+        return rwkvReviewGainJob.run(
+            () => startRwkvReviewGain($cids, $limit, $horizon),
+            (progress, jobId) =>
+                set({
+                    jobId,
+                    phase: progress.phase,
+                    current: progress.current ?? 0,
+                    total: progress.total ?? 0,
+                    gainDays: anchoredRwkvDays(progress.gainByDay, progress.firstDay),
+                    withDays: anchoredRwkvDays(progress.withByDay, progress.firstDay),
+                    withoutDays: anchoredRwkvDays(progress.withoutByDay, progress.firstDay),
+                    countDays: anchoredRwkvDays(progress.countByDay, progress.firstDay),
+                    slowReplay: progress.slowReplay === true,
+                    done: progress.done,
+                    error: progress.error ?? null,
+                }),
+            (error, jobId) =>
+                set({
+                    jobId,
+                    phase: "failed",
+                    current: 0,
+                    total: 0,
+                    gainDays: [],
+                    withDays: [],
+                    withoutDays: [],
+                    countDays: [],
+                    slowReplay: false,
+                    done: true,
+                    error,
                 })
-                if (!progress) return
-                jobId = progress.jobId ?? null
-                if (generation !== rwkvReviewGainGeneration) {
-                    if (jobId !== null && !progress.done)
-                        await queueRwkvReviewGainRequest(() => cancelRwkvReviewGain(jobId!))
-                    return
-                }
-                while (generation === rwkvReviewGainGeneration) {
-                    set({
-                        jobId,
-                        phase: progress.phase,
-                        current: progress.current ?? 0,
-                        total: progress.total ?? 0,
-                        gainDays: anchoredRwkvDays(progress.gainByDay, progress.firstDay),
-                        withDays: anchoredRwkvDays(progress.withByDay, progress.firstDay),
-                        withoutDays: anchoredRwkvDays(progress.withoutByDay, progress.firstDay),
-                        countDays: anchoredRwkvDays(progress.countByDay, progress.firstDay),
-                        slowReplay: progress.slowReplay === true,
-                        done: progress.done,
-                        error: progress.error ?? null,
-                    })
-                    if (progress.done) {
-                        finished = true
-                        return
-                    }
-                    if (jobId === null)
-                        throw new Error("RWKV review replay did not return a job ID")
-                    await new Promise((resolve) => setTimeout(resolve, 500))
-                    if (generation !== rwkvReviewGainGeneration) return
-                    progress = await getRwkvReviewGainProgress(jobId)
-                }
-            } catch (error) {
-                if (jobId !== null && !finished) {
-                    void queueRwkvReviewGainRequest(() => cancelRwkvReviewGain(jobId!)).catch(
-                        () => {}
-                    )
-                }
-                if (generation === rwkvReviewGainGeneration) {
-                    set({
-                        jobId,
-                        phase: "failed",
-                        current: 0,
-                        total: 0,
-                        gainDays: [],
-                        withDays: [],
-                        withoutDays: [],
-                        countDays: [],
-                        slowReplay: false,
-                        done: true,
-                        error: error instanceof Error ? error.message : String(error),
-                    })
-                }
-            }
-        })()
-        return () => {
-            if (generation === rwkvReviewGainGeneration) rwkvReviewGainGeneration++
-            if (jobId !== null && !finished)
-                void queueRwkvReviewGainRequest(() => cancelRwkvReviewGain(jobId!)).catch(() => {})
-        }
+        )
     }
 ).subscribe(rwkvReviewGainStats.set)
 
 export async function cancelRwkvReviewGainComputation() {
     const stats = get(rwkvReviewGainStats)
     if (stats?.jobId !== null && stats?.jobId !== undefined && !stats.done) {
-        await queueRwkvReviewGainRequest(() => cancelRwkvReviewGain(stats.jobId!))
+        await rwkvReviewGainJob.cancel(stats.jobId)
+    }
+}
+
+export const stabilityOverTimeMode = writable<MemorisedMode>("fsrs")
+
+export type RwkvStabilityStats = {
+    jobId: number | null
+    phase: string
+    current: number
+    total: number
+    medianDays: number[]
+    meanDays: number[]
+    youngRatioDays: number[]
+    cardCountDays: number[]
+    done: boolean
+    error: string | null
+}
+
+export const rwkvStabilityStats = writable<RwkvStabilityStats | null>(null)
+const rwkvStabilityJob = rwkvJobRunner(
+    getRwkvStabilityHistoryProgress,
+    cancelRwkvStabilityHistory,
+    "RWKV stability replay did not return a job ID"
+)
+// Switching between RWKV and Both keeps the running replay.
+const rwkvStabilityRequested = derived(stabilityOverTimeMode, ($mode) => $mode !== "fsrs")
+
+derived(
+    [rwkvStabilityRequested, cids, showMemorisedStats],
+    ([$rwkvRequested, $cids, $requested], set: (value: RwkvStabilityStats | null) => void) => {
+        set(null)
+        if (!$rwkvRequested || !$cids || !$requested) return
+        return rwkvStabilityJob.run(
+            () => startRwkvStabilityHistory($cids),
+            (progress, jobId) =>
+                set({
+                    jobId,
+                    phase: progress.phase,
+                    current: progress.current ?? 0,
+                    total: progress.total ?? 0,
+                    medianDays: anchoredRwkvDays(progress.medianByDay, progress.firstDay),
+                    meanDays: anchoredRwkvDays(progress.meanByDay, progress.firstDay),
+                    youngRatioDays: anchoredRwkvDays(progress.youngRatioByDay, progress.firstDay),
+                    cardCountDays: anchoredRwkvDays(progress.cardCountByDay, progress.firstDay),
+                    done: progress.done,
+                    error: progress.error ?? null,
+                }),
+            (error, jobId) =>
+                set({
+                    jobId,
+                    phase: "failed",
+                    current: 0,
+                    total: 0,
+                    medianDays: [],
+                    meanDays: [],
+                    youngRatioDays: [],
+                    cardCountDays: [],
+                    done: true,
+                    error,
+                })
+        )
+    }
+).subscribe(rwkvStabilityStats.set)
+
+export async function cancelRwkvStabilityComputation() {
+    const stats = get(rwkvStabilityStats)
+    if (stats?.jobId !== null && stats?.jobId !== undefined && !stats.done) {
+        await rwkvStabilityJob.cancel(stats.jobId)
     }
 }
 

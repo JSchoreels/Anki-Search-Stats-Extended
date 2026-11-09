@@ -91,6 +91,70 @@ than individual reviews.
 - FSRS-7 current-state graphs skip cards missing valid `s_int`, `s_fast`, or difficulty rather than inventing a fast trace or interpreting S90 as slow stability. Historical replay reconstructs its own state from the loaded review history.
 - Older models accept Anki stability down to `0.0001` and raise it to the upstream model's `0.001` minimum before state updates. FSRS-7 supports the `0.0001` minimum directly.
 
+### RWKV source
+
+The graph has an FSRS / RWKV / Both source selector (FSRS by default; the
+FSRS view is unchanged). RWKV draws the RWKV median or mean as the only line,
+with its own trend persistence key
+(`fsrs:average-stability-over-time:rwkv`). Both draws FSRS as the primary line
+(legend "FSRS") and RWKV as a comparison (legend "RWKV"); the RWKV moving
+average uses the same window, mode, and gap connectors, its faint grey daily
+line is dashed, and trends stay on the FSRS line and key. The Median/Mean
+choice applies to both sources. The tooltip's young/mature shares follow the
+selected source; Both lists each source's shares, prefixed with its name.
+
+The RWKV replay starts once Memorised has been requested and RWKV or Both is
+selected. Switching between RWKV and Both keeps the running replay; selecting
+FSRS or changing the search cancels an unfinished one. A progress bar counts replayed history
+entries and can cancel the replay; the RWKV line grows while it runs.
+
+- Endpoints, polled every 500 ms by `rwkvStabilityStats` in
+  [`stores.ts`](/Users/jschoreels/workspace/Anki-Search-Stats-Extended/src/ts/stores.ts):
+    - `/_anki/startRwkvStabilityHistory` with `{"cids": [...]}`
+    - `/_anki/rwkvStabilityHistoryProgress` with `{"job_id": n}`
+    - `/_anki/cancelRwkvStabilityHistory` with `{"job_id": n}`
+- Progress fields: `medianByDay`, `meanByDay`, `youngRatioByDay`, and
+  `cardCountByDay`, starting at RWKV scheduler day `firstDay`.
+- Backend: `rwkv_stability.py`.
+
+Semantics:
+
+- The anchor is each card's last graded answer of an Anki day. At that day's
+  end, the replayed RWKV-Instant state predicts the card's recall at a frozen
+  grid of later day ends, k = 0…3650 days after the anchor day, each queried
+  one second before the rollover and assuming no further reviews.
+- RWKV's prediction for a card also depends on later reviews of other cards,
+  so the frozen curve is usually optimistic. For each horizon, the drift is
+  the median logit gap live − frozen over all cards, where live is the same
+  query asked of the replayed state at that later day end while the card has
+  not been answered again. The median comes from a histogram, is refitted
+  every 30 days from pairs already in the past, and is capped at ≤ 0, so the
+  correction can only lower recall. Between horizons it is interpolated in
+  ln k and held beyond 365 days.
+- S90 is the first downward crossing of 90% by the corrected curve,
+  interpolated in log time since the answer. When the grid misses the
+  crossing, S90 is extrapolated through the first or last point on
+  R = (1 + f·t/S)^(−0.1542), with f fixed so that R(S) = 90%. S90 is clamped
+  to [1 second, 3,650 days], the end of the query grid: a longer S90 would be
+  extrapolated from a single point. RWKV-Instant can predict above 90% recall
+  for years on some cards (6% of cards on the developer's collection were at
+  the cap), so the mean depends on that cap while the median does not.
+- Daily statistics over the selected cards are the median, the mean, and the
+  young ratio (`S90 < 21` days, as for FSRS). A card keeps its RWKV S90 until
+  its next graded answer, so resets do not clear it, and the last day is
+  carried through today.
+- Results are kept in memory for the Anki session, not cached to disk. The
+  replay waits while an RWKV Memorised replay or another heavy RWKV replay is
+  running.
+
+### Validation
+
+On the developer's collection (207,636 reviews, 2026-07 snapshot), frozen
+predictions over-predicted the next answer's pass rate by 2.9 percentage
+points; the capped correction by 0.0. Log loss was 0.460 frozen, 0.455
+corrected, and 0.447 with full context. Answers at 0.8–1.25× S90 passed 87.4%
+of the time with frozen S90 and 89.5% with corrected S90.
+
 ## Average Stability Over Reps
 
 - Source: [`getMemorisedDays()`](/Users/jschoreels/workspace/Anki-Search-Stats-Extended/src/ts/MemorisedBar.ts)
