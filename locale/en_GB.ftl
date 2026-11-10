@@ -600,6 +600,7 @@ average-stability-over-time-help =
 average-stability-over-time-rwkv-help =
     RWKV S90 is the time from a card's last answer of the day until RWKV-Instant predicts 90% recall. RWKV's prediction for a card also depends on later reviews of other cards. Asked with no further reviews it is usually optimistic, so each S90 is corrected by the typical shift between that prediction and the replayed prediction at the same delay. The correction is learned from earlier history only, refitted every 30 days, and can only lower recall.
     The replay runs in the background and can take a few minutes on a large collection. A card keeps its RWKV S90 until its next answer; resets do not clear it. RWKV S90 is capped at 10 years, the end of the predictions it is checked against; the mean depends on cards at that cap, the median does not. As for FSRS, a card is young when its S90 is below 21 days. In Both, the grey RWKV daily line is dashed.
+    The RWKV line usually swings more than FSRS. RWKV-Instant's predictions for every card follow your recent results, so a few points of pass rate can double or halve S90, and a wave of new cards, which start with short S90s, pulls the median down. A longer moving-average window gives a calmer line.
 stability-rwkv-progress = Computing RWKV stability: {$current} / {$total} reviews — {$percent}%
 stability-rwkv-progress-label = RWKV stability replay progress
 stability-rwkv-waiting = Waiting for other RWKV calculations to finish…

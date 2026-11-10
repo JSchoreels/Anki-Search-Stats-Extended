@@ -155,6 +155,15 @@ points; the capped correction by 0.0. Log loss was 0.460 frozen, 0.455
 corrected, and 0.447 with full context. Answers at 0.8–1.25× S90 passed 87.4%
 of the time with frozen S90 and 89.5% with corrected S90.
 
+On the same collection the RWKV line swings more than FSRS, and not because
+of the correction: the uncorrected median has the same swings. RWKV-Instant's
+predictions for all cards follow recent results. For the 4,037 cards answered
+by January 2025, the median S90 went from 12 to 31 days in April 2025 while
+that month's pass rate rose from 86% to 91%. Waves of new cards, which start
+with short S90s, pull the all-card median down (October–November 2024,
+December 2025 onward). S90s range from under a day (up to 40% of cards) to the
+10-year cap, so the median moves quickly when the mix changes.
+
 ## Average Stability Over Reps
 
 - Source: [`getMemorisedDays()`](/Users/jschoreels/workspace/Anki-Search-Stats-Extended/src/ts/MemorisedBar.ts)
