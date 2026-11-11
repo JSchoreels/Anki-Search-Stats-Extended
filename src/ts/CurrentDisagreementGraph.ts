@@ -6,7 +6,12 @@ import { browseCurrentDisagreementCards } from "./search"
 
 const percent = (value: number) => `${value > 0 ? "+" : ""}${+(value * 100).toFixed(1)}%`
 
-export function renderCurrentDisagreementGraph(svg: SVGElement, bins: CurrentDisagreementBin[]) {
+export function renderCurrentDisagreementGraph(
+    svg: SVGElement,
+    bins: CurrentDisagreementBin[],
+    firstModel = i18n("calibration-source-fsrs"),
+    secondModel = i18n("model-rwkv-current")
+) {
     clearChart(svg)
     const { width, height } = comparisonGraphBounds()
     const lower = Math.floor((bins[0]?.lower ?? -0.1) * 10) / 10
@@ -43,7 +48,7 @@ export function renderCurrentDisagreementGraph(svg: SVGElement, bins: CurrentDis
         .attr("y", 42)
         .attr("fill", "currentColor")
         .attr("text-anchor", "middle")
-        .text(i18n("current-disagreement-x-axis"))
+        .text(i18n("current-disagreement-x-axis", { first: firstModel, second: secondModel }))
     if (lower <= 0 && upper >= 0)
         chart
             .append("line")

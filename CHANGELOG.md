@@ -4,6 +4,8 @@
 
 ### User facing changes
 
+- Compare any two FSRS or RWKV models in Model Current Disagreement, and browse the cards in each difference bucket.
+
 - Compare any two FSRS or RWKV models in Model ROC Comparison, with paired-review AUC and confidence intervals.
 
 - Rename Daily Surprise to Daily Log Loss to better describe the metric.
@@ -81,6 +83,8 @@
 - Identify unloaded data in troubleshooting exports instead of reporting misleading zero counts. Cancelling export writes no file.
 
 ### Technical details
+
+- Prepare current RWKV model scores in cancellable isolated background replays, pairing selected scores by card without changing the neighboring FSRS/current-RWKV retrievability graph.
 
 - Reuse the shared model prediction store for ROC; run model-neutral paired ROC and card-clustered DeLong calculations for the selected models.
 

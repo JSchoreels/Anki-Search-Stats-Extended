@@ -107,7 +107,9 @@ when collapsed or removed, but its other hidden graph contents do not mount.
 Graph-specific automatic requests also follow
 visibility: the Time Active matrix requests history only when that matrix is
 visible or pinned; current disagreement/retrievability requests run when either
-of those cards is visible or pinned. A pinned heatmap or ease-factor graph can
+of those cards is visible or pinned. Explicit-model current disagreement replays
+run only while the disagreement graph is visible or pinned, and are cancelled
+when it is hidden or its model selection changes. A pinned heatmap or ease-factor graph can
 load the resolved presets it needs even when Misc is collapsed. A pinned review
 speed graph does not request those presets. Individually hidden cards do not
 activate these requests until revealed; hiding also overrides a saved pin.

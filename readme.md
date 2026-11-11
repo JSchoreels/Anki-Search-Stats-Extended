@@ -76,6 +76,7 @@ Like the new anki stats screen? Want more? This is the addon for you.
 - Model Calibration (one or two selected FSRS/RWKV models)
 - Model UM+ Comparison (FSRS, current RWKV, and individual RWKV models)
 - Model ROC Comparison (any two FSRS/RWKV models)
+- Model Current Disagreement (any two models' current card predictions)
 - Stability Time Machine
 - Difficulty Time Machine
 - Stability Over Time

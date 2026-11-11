@@ -1,10 +1,16 @@
 import { UM_PLUS_BINS_PER_UNIT } from "./umPlusData"
 
 export type CurrentPrediction = { cid: number; fsrs: number; rwkv: number }
+export type CurrentScore = [number, number]
+export type CurrentModelPair = { cid: number; first: number; second: number }
+export type CurrentSourceStatus = "ready" | "pending" | "unavailable" | "failed"
+export type CurrentModelScores = { status: CurrentSourceStatus; data: CurrentScore[] }
 export type CurrentDisagreementResponse = {
     rows: CurrentPrediction[]
     total: number
-    status: "ready" | "pending" | "unavailable" | "failed"
+    status: CurrentSourceStatus
+    rwkvStatus: CurrentSourceStatus
+    rwkvScores: CurrentScore[]
 }
 export type CurrentDisagreementBin = {
     index: number
@@ -14,30 +20,50 @@ export type CurrentDisagreementBin = {
     cids: number[]
 }
 
+function validCurrentScore(cid: number, value: number) {
+    return (
+        Number.isSafeInteger(cid) && cid > 0 && Number.isFinite(value) && value >= 0 && value <= 1
+    )
+}
+
 export function validCurrentPredictions(rows: CurrentPrediction[]): CurrentPrediction[] {
     const seen = new Set<number>()
     return rows.filter(({ cid, fsrs, rwkv }) => {
-        if (
-            seen.has(cid) ||
-            !Number.isSafeInteger(cid) ||
-            cid <= 0 ||
-            !Number.isFinite(fsrs) ||
-            !Number.isFinite(rwkv) ||
-            fsrs < 0 ||
-            fsrs > 1 ||
-            rwkv < 0 ||
-            rwkv > 1
-        )
+        if (seen.has(cid) || !validCurrentScore(cid, fsrs) || !validCurrentScore(cid, rwkv))
             return false
         seen.add(cid)
         return true
     })
 }
 
-export function buildCurrentDisagreementBins(rows: CurrentPrediction[]): CurrentDisagreementBin[] {
+export function pairCurrentModelScores(
+    first: CurrentScore[],
+    second: CurrentScore[]
+): CurrentModelPair[] {
+    const secondByCard = new Map<number, number>()
+    for (const [cid, score] of second) {
+        if (validCurrentScore(cid, score) && !secondByCard.has(cid)) secondByCard.set(cid, score)
+    }
+    const seen = new Set<number>()
+    const pairs: CurrentModelPair[] = []
+    for (const [cid, score] of first) {
+        const other = secondByCard.get(cid)
+        if (validCurrentScore(cid, score) && !seen.has(cid) && other !== undefined) {
+            pairs.push({ cid, first: score, second: other })
+            seen.add(cid)
+        }
+    }
+    return pairs
+}
+
+export function buildCurrentDisagreementBins(rows: CurrentModelPair[]): CurrentDisagreementBin[] {
     const bins = new Map<number, CurrentDisagreementBin>()
-    for (const { cid, fsrs, rwkv } of validCurrentPredictions(rows)) {
-        const index = Math.round((fsrs - rwkv) * UM_PLUS_BINS_PER_UNIT)
+    const seen = new Set<number>()
+    for (const { cid, first, second } of rows) {
+        if (seen.has(cid) || !validCurrentScore(cid, first) || !validCurrentScore(cid, second))
+            continue
+        seen.add(cid)
+        const index = Math.round((first - second) * UM_PLUS_BINS_PER_UNIT)
         const center = index / UM_PLUS_BINS_PER_UNIT
         let bin = bins.get(index)
         if (!bin) {

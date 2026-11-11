@@ -389,14 +389,16 @@ generation. The four explicit RWKV models use the same isolated, model-specific
 history replays and persistent add-on caches as UM+, described below. Their
 bins and confidence intervals use the existing calibration computations.
 
-## FSRS vs RWKV current Disagreement
+## Model Current Disagreement
 
-The **FSRS vs RWKV current Disagreement** histogram compares current
-card retrievability rather than review-time predictions. It uses the cards in
+The **Model Current Disagreement** histogram compares current card
+retrievability rather than review-time predictions. Its independent selectors
+offer FSRS, RWKV (current), RWKV Big, RWKV Small Curve, RWKV Small Instant and
+RWKV Tiny Instant, initially FSRS and RWKV (current). It uses the cards in
 the current statistics search, independently of the review date range and
 historical Memorised calculation. Each card with both valid current probabilities
 belongs to one bucket, rounded to the nearest 5 percentage points of
-`FSRS R - RWKV R` (41 possible centers from -100% to +100%). As in UM+, exact
+`first model R - second model R` (41 possible centers from -100% to +100%). As in UM+, exact
 halfway values round toward the higher center. All populated buckets are shown;
 there is no minimum card count. Bars show card counts, with bounds in their
 tooltips. Lower bounds are inclusive and upper bounds exclusive, except +100%.
@@ -406,7 +408,29 @@ and selects all results after saving any pending browser edit. Keyboard users
 can focus a bar and press Enter or Space. Missing scores are excluded, and the
 chart reports paired cards out of all cards in the search.
 
-`/_anki/currentCardDisagreement` returns a transient snapshot. The add-on's
+The default pair reuses the paired snapshot for **FSRS vs RWKV Card
+Retrievability**. Other pairs join the two selected models by card ID, so an
+RWKV-only pair does not require an FSRS prediction, and FSRS-only comparisons do
+not require a current-RWKV prediction. The add-on obtains independent FSRS values
+through `currentFsrsModelPredictions`; `currentCardDisagreement` also returns
+the configured RWKV model's independently eligible scores and status.
+
+The four explicit RWKV models use the same model weights and output heads as
+UM+, but their review-time prediction cache cannot supply current card state.
+When selected, each model replays complete collection history in an isolated
+native runtime, then scores the searched cards using their current scheduling
+inputs, including cards in decks where RWKV scheduling is disabled. The configured
+RWKV source retains its scheduler's usual eligibility rules. The replay runs in a
+background job, is serialized with other explicit model replays, reports review
+and card progress, and can be cancelled when the selection, search or visibility
+changes. Completed scores are reused while the graph remains visible and the
+search is unchanged. They are transient and do not create another persisted cache.
+Large histories can take time to prepare; model scores represent the time
+each model was prepared, so two models may have been scored at different times.
+Reopen Statistics to refresh the snapshots. Changed history, replay settings,
+profile or model weights prevent a partial or obsolete result from being used.
+
+`/_anki/currentCardDisagreement` returns the configured-model snapshot. The add-on's
 `current_disagreement.py` adapter uses the adapted Anki scheduler's guarded,
 batched current RWKV statistics scoring path and the Collection API
 `card_memory_metrics(..., include_retrievability=True)`. The backend computes R
@@ -415,7 +439,7 @@ days, using the same curve as Anki's native Card Retrievability chart. For FSRS-
 this includes slow and fast stability and the card's difficulty. The scalar
 `fsrs_current_retrievability()` compatibility helper assumes equal stability
 traces and difficulty 5, so it must not be used for these current-card charts.
-Cards without a valid backend FSRS R or RWKV R are excluded; the backend resolves
+Cards without both selected models' valid probabilities are excluded; the backend resolves
 missing last-review timestamps from review history without updating cards.
 Builds without the full-state metrics API show an unavailable message.
 It adds no persisted cache or direct database operations. The RWKV
@@ -435,9 +459,10 @@ configuration and user files. Fully quit and reopen Anki after Python changes.
 ## FSRS vs RWKV Card Retrievability
 
 The **FSRS vs RWKV Card Retrievability** histogram immediately follows current
-Disagreement and shares its transient prediction snapshot, loading state, retry,
-search scope, and paired-card eligibility. It makes no additional prediction
-requests and introduces no persisted data or database operations.
+Disagreement and uses the default FSRS/current-RWKV transient prediction snapshot,
+loading state, retry, search scope, and paired-card eligibility. Its models do not
+change with the Disagreement selectors. It makes no additional prediction requests
+and introduces no persisted data or database operations.
 
 Anki's native Card Retrievability graph counts each model's available predictions
 independently. This comparison includes only cards with valid predictions from

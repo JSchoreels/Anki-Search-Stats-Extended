@@ -49,3 +49,23 @@ test("other threads and later requests retain normal logging, including after fa
         text: `after failure: search='${result.full_search}'`,
     })
 })
+
+test("current sources can be compared without requiring the other model", () => {
+    expect(result.independent_fsrs).toEqual({
+        status: "ready",
+        data: [
+            [1, 0.9],
+            [2, 0.9],
+            [3, 0.9],
+        ],
+    })
+    expect(result.without_fsrs).toMatchObject({
+        status: "unavailable",
+        rwkvStatus: "ready",
+        rwkvScores: [
+            [1, 0.75],
+            [2, 0.8],
+        ],
+        rows: [],
+    })
+})

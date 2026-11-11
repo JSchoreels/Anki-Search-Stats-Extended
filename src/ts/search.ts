@@ -1,7 +1,11 @@
 import { get } from "svelte/store"
 import type { CardData } from "./cardData"
 import type { ResolvedFsrsPreset } from "./config"
-import type { CurrentDisagreementResponse } from "./currentDisagreementData"
+import type {
+    CurrentDisagreementResponse,
+    CurrentModelScores,
+    CurrentScore,
+} from "./currentDisagreementData"
 import { loadRevlogPages, MissingRevlogColumnsError } from "./revlogPages"
 import { realFetch, searchJoin } from "./root"
 import { searchString } from "./stores"
@@ -12,6 +16,66 @@ export async function getCurrentCardDisagreement(
     cids: number[]
 ): Promise<CurrentDisagreementResponse> {
     return endpoint("currentCardDisagreement", JSON.stringify(cids), false)
+}
+
+export async function getCurrentFsrsModelPredictions(cids: number[], signal: AbortSignal) {
+    const response = await fetchEndpoint(
+        "currentFsrsModelPredictions",
+        JSON.stringify({ cids }),
+        false,
+        signal
+    )
+    return (await response.json()) as CurrentModelScores
+}
+
+export async function getCurrentRwkvModelPredictions(
+    model: RwkvUmPlusModel,
+    cids: number[],
+    signal: AbortSignal,
+    onProgress: (progress: RwkvUmPlusProgress) => void
+): Promise<CurrentScore[]> {
+    let jobId: number | undefined
+    try {
+        // Read the job ID even if the selection changes while the request starts,
+        // so the backend replay can always be cancelled.
+        const initial = await fetchEndpoint(
+            "startCurrentRwkvModel",
+            JSON.stringify({ model, cids }),
+            false
+        )
+        let state = (await initial.json()) as RwkvUmPlusProgress
+        jobId = state.jobId
+        signal.throwIfAborted()
+        onProgress(state)
+        while (!state.done) {
+            if (jobId === undefined) throw new Error("RWKV model preparation has no job ID")
+            await calibrationPollDelay(signal)
+            const response = await fetchEndpoint(
+                "currentRwkvModelProgress",
+                JSON.stringify({ job_id: jobId }),
+                false,
+                signal
+            )
+            state = (await response.json()) as RwkvUmPlusProgress
+            onProgress(state)
+        }
+        if (state.phase !== "complete" || jobId === undefined)
+            throw new Error(state.error || "RWKV model preparation failed")
+        const response = await fetchEndpoint(
+            "currentRwkvModelPredictions",
+            JSON.stringify({ job_id: jobId }),
+            false,
+            signal
+        )
+        const result = (await response.json()) as { data: CurrentScore[] }
+        if (!Array.isArray(result.data)) throw new Error("Missing current model predictions")
+        return result.data
+    } finally {
+        if (jobId !== undefined)
+            void endpoint("cancelCurrentRwkvModel", JSON.stringify({ job_id: jobId }), false).catch(
+                () => {}
+            )
+    }
 }
 
 export async function getWorkloadForecastAvailable(): Promise<boolean> {

@@ -4,17 +4,20 @@ jest.mock("../src/ts/i18n", () => ({
 }))
 jest.mock("../src/ts/search", () => ({ browseCurrentDisagreementCards: jest.fn() }))
 
-import { buildCurrentDisagreementBins } from "../src/ts/currentDisagreementData"
+import {
+    buildCurrentDisagreementBins,
+    pairCurrentModelScores,
+} from "../src/ts/currentDisagreementData"
 import { renderCurrentDisagreementGraph } from "../src/ts/CurrentDisagreementGraph"
 import { browseCurrentDisagreementCards } from "../src/ts/search"
 
 test("current buckets retain exact card membership, signs and endpoint bounds", () => {
     const bins = buildCurrentDisagreementBins([
-        { cid: 1, fsrs: 0, rwkv: 1 },
-        { cid: 2, fsrs: 0.7, rwkv: 0.9 },
-        { cid: 3, fsrs: 0.71, rwkv: 0.9 },
-        { cid: 4, fsrs: 0.9, rwkv: 0.7 },
-        { cid: 5, fsrs: 1, rwkv: 0 },
+        { cid: 1, first: 0, second: 1 },
+        { cid: 2, first: 0.7, second: 0.9 },
+        { cid: 3, first: 0.71, second: 0.9 },
+        { cid: 4, first: 0.9, second: 0.7 },
+        { cid: 5, first: 1, second: 0 },
     ])
     expect(bins.map((b) => [b.center, b.cids])).toEqual([
         [-1, [1]],
@@ -28,10 +31,10 @@ test("current buckets retain exact card membership, signs and endpoint bounds", 
 
 test("halfway boundaries follow UM+ rounding toward the higher center", () => {
     const bins = buildCurrentDisagreementBins([
-        { cid: 1, fsrs: 0.025, rwkv: 0 },
-        { cid: 2, fsrs: 0, rwkv: 0.025 },
-        { cid: 3, fsrs: 0.02499, rwkv: 0 },
-        { cid: 4, fsrs: 0, rwkv: 0.02501 },
+        { cid: 1, first: 0.025, second: 0 },
+        { cid: 2, first: 0, second: 0.025 },
+        { cid: 3, first: 0.02499, second: 0 },
+        { cid: 4, first: 0, second: 0.02501 },
     ])
     expect(bins.map((b) => [b.center, b.cids])).toEqual([
         [-0.05, [4]],
@@ -43,23 +46,51 @@ test("halfway boundaries follow UM+ rounding toward the higher center", () => {
 test("invalid or missing probabilities and duplicate cards cannot inflate counts", () => {
     expect(
         buildCurrentDisagreementBins([
-            { cid: 1, fsrs: NaN, rwkv: 0.5 },
-            { cid: 2, fsrs: 0.8, rwkv: undefined as unknown as number },
-            { cid: 3, fsrs: 0.8, rwkv: 1.1 },
-            { cid: 4, fsrs: 0.8, rwkv: 0.8 },
-            { cid: 4, fsrs: 0.8, rwkv: 0.8 },
+            { cid: 1, first: NaN, second: 0.5 },
+            { cid: 2, first: 0.8, second: undefined as unknown as number },
+            { cid: 3, first: 0.8, second: 1.1 },
+            { cid: 4, first: 0.8, second: 0.8 },
+            { cid: 4, first: 0.8, second: 0.8 },
         ]).map((b) => b.cids)
     ).toEqual([[4]])
+})
+
+test("any selected models use only their paired current cards, in selector order", () => {
+    const first: [number, number][] = [
+        [1, 0.8],
+        [2, 0.3],
+        [3, NaN],
+        [4, 0.4],
+        [1, 0.9],
+    ]
+    const second: [number, number][] = [
+        [2, 0.9],
+        [1, 0.2],
+        [3, 0.8],
+        [5, 0.5],
+    ]
+    const forward = buildCurrentDisagreementBins(pairCurrentModelScores(first, second))
+    const reversed = buildCurrentDisagreementBins(pairCurrentModelScores(second, first))
+    expect(forward.map((bin) => [bin.center, bin.cids])).toEqual([
+        [-0.6, [2]],
+        [0.6, [1]],
+    ])
+    expect(reversed.map((bin) => [bin.center, bin.cids])).toEqual([
+        [-0.6, [1]],
+        [0.6, [2]],
+    ])
 })
 
 test("all populated buckets render and mouse/keyboard open only their cards", () => {
     const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg")
     const bins = buildCurrentDisagreementBins([
-        { cid: 11, fsrs: 0.7, rwkv: 0.9 },
-        { cid: 12, fsrs: 0.71, rwkv: 0.9 },
-        { cid: 13, fsrs: 0.9, rwkv: 0.7 },
+        { cid: 11, first: 0.7, second: 0.9 },
+        { cid: 12, first: 0.71, second: 0.9 },
+        { cid: 13, first: 0.9, second: 0.7 },
     ])
-    renderCurrentDisagreementGraph(svg, bins)
+    renderCurrentDisagreementGraph(svg, bins, "RWKV Big", "RWKV Tiny Instant")
+    expect(svg.textContent).toContain('"first":"RWKV Big"')
+    expect(svg.textContent).toContain('"second":"RWKV Tiny Instant"')
     const bars = [...svg.querySelectorAll<SVGRectElement>(".current-disagreement-bar")]
     expect(bars).toHaveLength(2)
     expect(+bars[0].getAttribute("height")!).toBeCloseTo(2 * +bars[1].getAttribute("height")!)

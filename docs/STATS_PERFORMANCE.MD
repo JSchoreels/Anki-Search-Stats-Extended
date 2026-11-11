@@ -103,6 +103,15 @@ collection frame ends before resampling, releasing its card map and counters.
 The 500 deterministic bootstrap iterations, first-seen card/draw order, per-bin
 summation order and card-cluster weighting are unchanged.
 
+Current-card disagreement uses a separate transient snapshot from historical
+calibration. Selecting an explicit RWKV model warms an isolated native runtime
+from the complete collection history and then scores the searched cards in
+batches; Curve scores use per-card queries. These jobs run in the background and
+are serialized with explicit-model review-prediction replays to limit concurrent
+native runtimes. Only selected models are prepared, completed scores are reused
+for the open search, and changing the search or removing a loading model cancels
+its obsolete job. They do not start calibration bootstrap or Memorised replay.
+
 Historical FSRS calibration preparation starts automatically once eligible
 history loads. Ordinary Statistics loads read caches immediately while preparation
 runs. FSRS and RWKV cache reads are independent, so RWKV is available while FSRS

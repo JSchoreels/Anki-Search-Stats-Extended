@@ -101,6 +101,10 @@ options["wait"] = False
 short_result = module.current_predictions(mw, [1, 2])
 short_messages = list(messages)
 
+independent_fsrs = module.current_fsrs_predictions(mw, [1, 2, 3])
+without_fsrs_mw = NS(col=NS())
+without_fsrs = module.current_predictions(without_fsrs_mw, [1, 2])
+
 messages.clear()
 options["fail"] = True
 failed_result = module.current_predictions(mw, ids)
@@ -111,7 +115,9 @@ print(json.dumps({
     "result": result,
     "short_result": short_result,
     "failed_result": failed_result,
-    "searches_unchanged": seen_searches == [full_search, "cid:1,2", full_search],
+    "independent_fsrs": independent_fsrs,
+    "without_fsrs": without_fsrs,
+    "searches_unchanged": seen_searches == [full_search, "cid:1,2", "cid:1,2", full_search],
     "full_search": full_search,
     "first_messages": first_messages,
     "short_messages": short_messages,

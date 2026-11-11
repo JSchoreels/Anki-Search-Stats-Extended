@@ -43,13 +43,19 @@ logging.getLogger("aqt.rwkv_scheduler").addFilter(_StatsSchedulerLogFilter())
 
 def current_predictions(mw, cids):
     cids = list(dict.fromkeys(int(cid) for cid in cids))
-    empty = {"rows": [], "total": len(cids), "status": "ready"}
+    empty = {
+        "rows": [],
+        "total": len(cids),
+        "status": "ready",
+        "rwkvStatus": "ready",
+        "rwkvScores": [],
+    }
     if not cids:
         return empty
     try:
         from aqt import rwkv_scheduler as scheduler
     except ImportError:
-        return {**empty, "status": "unavailable"}
+        return {**empty, "status": "unavailable", "rwkvStatus": "unavailable"}
 
     # The adapted scheduler owns batching, model configuration and state guards.
     required = (
@@ -59,9 +65,7 @@ def current_predictions(mw, cids):
         "_reviewer_backend_prediction_state_token_is_current",
     )
     if not all(callable(getattr(scheduler, name, None)) for name in required):
-        return {**empty, "status": "unavailable"}
-    if not callable(getattr(mw.col, "card_memory_metrics", None)):
-        return {**empty, "status": "unavailable"}
+        return {**empty, "status": "unavailable", "rwkvStatus": "unavailable"}
 
     reviewer = getattr(mw, "reviewer", None) or SimpleNamespace(mw=mw)
     search = "cid:" + ",".join(map(str, cids))
@@ -69,15 +73,15 @@ def current_predictions(mw, cids):
     try:
         status = scheduler.prepare_stats_retrievability_scores(reviewer, search).value
         if status != "ready":
-            return {**empty, "status": status}
+            return {**empty, "status": status, "rwkvStatus": status}
         token = scheduler._capture_reviewer_backend_prediction_state_token(reviewer)
         if token is None:
-            return {**empty, "status": "pending"}
+            return {**empty, "status": "pending", "rwkvStatus": "pending"}
         result = scheduler._rwkv_stats_graph_scores_for_search(
             reviewer=reviewer, search=search, state_token=token
         )
         if result is None:
-            return {**empty, "status": "unavailable"}
+            return {**empty, "status": "unavailable", "rwkvStatus": "unavailable"}
 
         selected = set(cids)
         rwkv_scores = {
@@ -85,26 +89,59 @@ def current_predictions(mw, cids):
             for cid, rwkv in result.scores
             if cid in selected and valid_probability(rwkv)
         }
+        if not scheduler._reviewer_backend_prediction_state_token_is_current(token):
+            return {**empty, "status": "pending", "rwkvStatus": "pending"}
+        rwkv_snapshot = {**empty, "rwkvScores": list(rwkv_scores.items())}
+        if not callable(getattr(mw.col, "card_memory_metrics", None)):
+            return {**rwkv_snapshot, "status": "unavailable"}
         rows = []
         # The backend uses the complete stored FSRS state and resolved preset,
         # matching Anki's native chart (including both FSRS-7 stability traces).
-        for metrics in mw.col.card_memory_metrics(
-            list(rwkv_scores), include_retrievability=True
-        ):
-            if not metrics.HasField("fsrs_retrievability"):
-                continue
-            cid = metrics.card_id
-            fsrs = metrics.fsrs_retrievability
-            if valid_probability(fsrs):
-                rows.append({"cid": cid, "fsrs": fsrs, "rwkv": rwkv_scores[cid]})
+        try:
+            for metrics in mw.col.card_memory_metrics(
+                list(rwkv_scores), include_retrievability=True
+            ):
+                if not metrics.HasField("fsrs_retrievability"):
+                    continue
+                cid = metrics.card_id
+                fsrs = metrics.fsrs_retrievability
+                if cid in rwkv_scores and valid_probability(fsrs):
+                    rows.append({"cid": cid, "fsrs": fsrs, "rwkv": rwkv_scores[cid]})
+        except Exception:
+            logger.exception("Current FSRS disagreement snapshot failed")
+            if not scheduler._reviewer_backend_prediction_state_token_is_current(token):
+                return {**empty, "status": "pending", "rwkvStatus": "pending"}
+            return {**rwkv_snapshot, "status": "failed"}
         if not scheduler._reviewer_backend_prediction_state_token_is_current(token):
-            return {**empty, "status": "pending"}
-        return {**empty, "rows": rows}
+            return {**empty, "status": "pending", "rwkvStatus": "pending"}
+        return {**rwkv_snapshot, "rows": rows}
     except Exception:
         logger.exception("Current FSRS/RWKV disagreement snapshot failed")
-        return {**empty, "status": "failed"}
+        return {**empty, "status": "failed", "rwkvStatus": "failed"}
     finally:
         _stats_search_log_scope.reset(log_scope)
+
+
+def current_fsrs_predictions(mw, cids):
+    """Get current FSRS scores independently of the configured RWKV model."""
+    cids = list(dict.fromkeys(int(cid) for cid in cids))
+    if not cids:
+        return {"status": "ready", "data": []}
+    if not callable(getattr(mw.col, "card_memory_metrics", None)):
+        return {"status": "unavailable", "data": []}
+    try:
+        selected = set(cids)
+        rows = [
+            [metrics.card_id, metrics.fsrs_retrievability]
+            for metrics in mw.col.card_memory_metrics(cids, include_retrievability=True)
+            if metrics.card_id in selected
+            and metrics.HasField("fsrs_retrievability")
+            and valid_probability(metrics.fsrs_retrievability)
+        ]
+        return {"status": "ready", "data": rows}
+    except Exception:
+        logger.exception("Current FSRS model predictions failed")
+        return {"status": "failed", "data": []}
 
 
 def valid_probability(value):

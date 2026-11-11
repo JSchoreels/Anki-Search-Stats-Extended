@@ -158,6 +158,79 @@ def current_card_disagreement():
 post_handlers["currentCardDisagreement"] = current_card_disagreement
 
 
+def current_fsrs_model_predictions():
+    from .current_disagreement import current_fsrs_predictions
+
+    return Response(
+        orjson.dumps(
+            current_fsrs_predictions(
+                mw, _positive_ints(orjson.loads(request.data).get("cids", []))
+            )
+        )
+    )
+
+
+def start_current_rwkv_model():
+    from . import current_model_comparison
+
+    req = orjson.loads(request.data)
+    try:
+        from aqt import rwkv_scheduler
+    except ImportError:
+        return Response(
+            orjson.dumps(
+                {
+                    "phase": "failed",
+                    "done": True,
+                    "error": "This Anki build does not provide RWKV historical replay.",
+                }
+            )
+        )
+    return Response(
+        orjson.dumps(
+            current_model_comparison.start(
+                mw,
+                rwkv_scheduler,
+                req.get("model"),
+                _positive_ints(req.get("cids", [])),
+            )
+        )
+    )
+
+
+def current_rwkv_model_progress():
+    from . import current_model_comparison
+
+    req = orjson.loads(request.data)
+    return Response(
+        orjson.dumps(current_model_comparison.progress(mw, req.get("job_id")))
+    )
+
+
+def current_rwkv_model_predictions():
+    from . import current_model_comparison
+
+    req = orjson.loads(request.data)
+    return Response(
+        orjson.dumps(current_model_comparison.predictions(mw, req.get("job_id")))
+    )
+
+
+def cancel_current_rwkv_model():
+    from . import current_model_comparison
+
+    req = orjson.loads(request.data)
+    current_model_comparison.cancel(mw, req.get("job_id"))
+    return Response(orjson.dumps({}))
+
+
+post_handlers["currentFsrsModelPredictions"] = current_fsrs_model_predictions
+post_handlers["startCurrentRwkvModel"] = start_current_rwkv_model
+post_handlers["currentRwkvModelProgress"] = current_rwkv_model_progress
+post_handlers["currentRwkvModelPredictions"] = current_rwkv_model_predictions
+post_handlers["cancelCurrentRwkvModel"] = cancel_current_rwkv_model
+
+
 def current_disagreement_bridge(self, cmd, _old):
     if handle_graph_visibility_command(self, cmd):
         return True

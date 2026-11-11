@@ -104,7 +104,7 @@
             {/if}
         </div>
     {:else}
-        <p>{i18n("current-disagreement-no-data")}</p>
+        <p>{i18n("current-retrievability-no-data")}</p>
     {/if}
     {#if response?.status === "ready"}
         <p>{i18n("current-retrievability-count", { count: paired, total: response.total })}</p>
