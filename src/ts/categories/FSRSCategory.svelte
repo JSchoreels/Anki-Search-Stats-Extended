@@ -1,4 +1,5 @@
 <script lang="ts">
+    import { onDestroy } from "svelte"
     import RevlogGraphContainer from "../RevlogGraphContainer.svelte"
     import BarScrollable from "../BarScrollable.svelte"
     import Bar from "../Bar.svelte"
@@ -9,8 +10,7 @@
     import MemorisedPerReview from "../MemorisedPerReview.svelte"
     import MemorisedGraphContainer from "../MemorisedGraphContainer.svelte"
     import MemorisedSourceControls from "../MemorisedSourceControls.svelte"
-    import FsrsCalibration from "../FSRSCalibration.svelte"
-    import FsrsCalibrationStatus from "../FsrsCalibrationStatus.svelte"
+    import ModelCalibration from "../ModelCalibration.svelte"
     import UMPlusComparison from "../UMPlusComparison.svelte"
     import ROC from "../ROC.svelte"
     import CurrentDisagreement from "../CurrentDisagreement.svelte"
@@ -23,7 +23,6 @@
     import { TREND_PERSISTENCE_KEYS } from "../trendPersistenceKeys"
     import { barStringLabeler, barHourLabeler, type BarChart } from "../bar"
     import {
-        calibrationMode,
         calibrationComparison,
         calibration_samples,
         cancelRwkvStabilityComputation,
@@ -44,8 +43,12 @@
     import _ from "lodash"
     import * as d3 from "d3"
     import type { DailyPredictionMetric } from "../dailyPredictionData"
+    import { createModelPredictionSources } from "../modelPredictionSources"
 
     const dailyMetrics: DailyPredictionMetric[] = ["standardizedGap", "logLoss"]
+    const modelPredictions = createModelPredictionSources()
+    $: modelPredictions.setSamples($calibration_samples)
+    onDestroy(() => modelPredictions.destroy())
 
     $: truncated = $searchLimit !== 0
     $: realScroll = -Math.abs($scroll)
@@ -150,63 +153,6 @@
 
     $: review_leftmost = minIndex($revlogStats?.intervals ?? {}) - today
     $: time_machine_min = review_leftmost
-    $: cachedFsrsCalibrationData = $fsrsCalibrationStats?.bins ?? []
-    $: fsrsCalibrationData =
-        _.sumBy(cachedFsrsCalibrationData, (bin) => bin?.count ?? 0) > 0
-            ? cachedFsrsCalibrationData
-            : ($memorised_stats?.calibration ?? [])
-    $: rwkvCalibrationData = $rwkvCalibrationStats?.bins ?? []
-    $: calibrationData = $calibrationMode === "rwkv" ? rwkvCalibrationData : fsrsCalibrationData
-    $: fsrsPending = !$fsrsCalibrationStats
-    $: rwkvPending = !$rwkvCalibrationStats
-    $: calibrationSeries =
-        $calibrationMode === "both"
-            ? [
-                  {
-                      label: i18n("calibration-legend-fsrs"),
-                      bins: fsrsCalibrationData,
-                      color: FSRS_COMPARISON_COLOUR,
-                  },
-                  {
-                      label: i18n("calibration-legend-rwkv"),
-                      bins: rwkvCalibrationData,
-                      color: RWKV_COMPARISON_COLOUR,
-                  },
-              ].filter((_, i) => !(i === 0 ? fsrsPending : rwkvPending))
-            : $calibrationMode === "rwkv"
-              ? [
-                    {
-                        label: i18n("calibration-legend-rwkv"),
-                        bins: rwkvCalibrationData,
-                        color: RWKV_COMPARISON_COLOUR,
-                    },
-                ]
-              : undefined
-    $: calibrationPending =
-        $calibrationMode === "both"
-            ? fsrsPending || rwkvPending
-            : $calibrationMode === "rwkv"
-              ? rwkvPending
-              : fsrsPending
-    $: calibrationLoading =
-        $calibrationMode === "both"
-            ? fsrsPending && rwkvPending
-            : $calibrationMode === "rwkv"
-              ? rwkvPending
-              : fsrsPending
-    $: calibrationCount = _.sumBy(
-        calibrationSeries?.flatMap((series) => series.bins) ?? calibrationData,
-        (bin) => bin?.count ?? 0
-    )
-    $: calibrationWarnings =
-        $calibrationMode === "both"
-            ? [
-                  ...($fsrsCalibrationStats?.warnings ?? []),
-                  ...($rwkvCalibrationStats?.warnings ?? []),
-              ]
-            : $calibrationMode === "rwkv"
-              ? ($rwkvCalibrationStats?.warnings ?? [])
-              : ($fsrsCalibrationStats?.warnings ?? [])
     $: rocData = $calibrationComparison?.roc
     // Comparisons and daily FSRS scores use held-out cached predictions, never replay.
     $: fsrsHeldOutMissing =
@@ -249,58 +195,18 @@
         <p>{i18n("memorised-per-review-help")}</p>
     </MemorisedGraphContainer>
     <CalibrationGraphContainer graphId="fsrs:calibration">
-        <h1 slot="title">
-            {i18n(
-                $calibrationMode === "rwkv"
-                    ? "rwkv-calibration"
-                    : $calibrationMode === "both"
-                      ? "combined-calibration"
-                      : "fsrs-calibration"
-            )}
-        </h1>
+        <h1 slot="title">{i18n("model-calibration")}</h1>
         <div slot="graph" class="calibration-panel">
-            <div class="calibration-mode" role="group" aria-label={i18n("calibration-source")}>
-                <label>
-                    <input type="radio" value="fsrs" bind:group={$calibrationMode} />
-                    {i18n("calibration-source-fsrs")}
-                </label>
-                <label>
-                    <input type="radio" value="rwkv" bind:group={$calibrationMode} />
-                    {i18n("calibration-source-rwkv")}
-                </label>
-                <label>
-                    <input type="radio" value="both" bind:group={$calibrationMode} />
-                    {i18n("calibration-source-both")}
-                </label>
-            </div>
-            {#if calibrationWarnings.length > 0}
-                <Warning always>{calibrationWarnings.join(" ")}</Warning>
-            {/if}
-            {#if calibrationLoading}
-                <div class="calibration-message">{i18n("loading")}</div>
-            {:else if calibrationCount > 0}
-                <FsrsCalibration data={calibrationData} series={calibrationSeries} />
-            {:else if !calibrationPending}
-                <div class="calibration-message">
-                    {i18n(
-                        $calibrationMode === "rwkv" || $calibrationMode === "both"
-                            ? "rwkv-calibration-no-data"
-                            : "calibration-no-data"
-                    )}
-                </div>
-            {/if}
-            {#if $calibrationMode === "both" && !calibrationLoading}
-                {#if fsrsPending}<small>
-                        {i18n("calibration-legend-fsrs")}: {i18n("loading")}
-                    </small>{/if}
-                {#if rwkvPending}<small>
-                        {i18n("calibration-legend-rwkv")}: {i18n("loading")}
-                    </small>{/if}
-            {/if}
-            <FsrsCalibrationStatus />
+            <ModelCalibration
+                samples={$calibration_samples}
+                fsrs={$fsrsCalibrationStats}
+                rwkv={$rwkvCalibrationStats}
+                fallbackFsrsBins={$memorised_stats?.calibration ?? []}
+                {modelPredictions}
+            />
         </div>
         <p>
-            {i18n("fsrs-calibration-help")}
+            {i18n("model-calibration-help")}
         </p>
     </CalibrationGraphContainer>
     <CalibrationGraphContainer graphId="fsrs:um-plus">
@@ -312,6 +218,7 @@
                 rwkv={$rwkvCalibrationStats}
                 comparison={$calibrationComparison}
                 fsrsGenerating={fsrsHeldOutGenerating}
+                {modelPredictions}
             />
         </div>
         <ul class="um-plus-help">
@@ -489,12 +396,6 @@
         min-height: 16rem;
         flex-direction: column;
         gap: 0.5rem;
-    }
-
-    .calibration-mode {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 1rem;
     }
 
     .calibration-message {

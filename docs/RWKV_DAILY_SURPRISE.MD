@@ -9,7 +9,7 @@ current Disagreement), in this order:
 
 Both respect the statistics search and review date range. Each panel has its own
 **FSRS / RWKV / Both** selector, initially **Both**, independently of the ordinary
-calibration source selector. FSRS uses blue; RWKV uses green.
+Model Calibration selectors. FSRS uses blue; RWKV uses green.
 
 Both panels support [drag-to-zoom](TIME_AXIS_ZOOM.MD) with a local **Reset zoom**
 button. Both models share the selected dates, and smoothing uses full history

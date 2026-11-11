@@ -18,6 +18,8 @@ const plugin = {
             if (
                 [
                     "./UMPlus.svelte",
+                    "./FSRSCalibration.svelte",
+                    "./FsrsCalibrationStatus.svelte",
                     "./Warning.svelte",
                     "./i18n",
                     "./search",
@@ -31,7 +33,17 @@ const plugin = {
             if (args.path === "entry") {
                 contents = `import { mount, unmount, flushSync } from "svelte";
                     import App from "${project}/src/ts/UMPlusComparison.svelte";
-                    export const start = (target, props) => mount(App, { target, props });
+                    import Calibration from "${project}/src/ts/ModelCalibration.svelte";
+                    import { createModelPredictionSources } from "${project}/src/ts/modelPredictionSources";
+                    export const sources = samples => {
+                        const modelPredictions = createModelPredictionSources();
+                        modelPredictions.setSamples(samples);
+                        return modelPredictions;
+                    };
+                    export const start = (target, props, modelPredictions = sources(props.samples)) =>
+                        mount(App, { target, props: { ...props, modelPredictions } });
+                    export const startCalibration = (target, props, modelPredictions) =>
+                        mount(Calibration, { target, props: { ...props, modelPredictions } });
                     export { unmount, flushSync };`
             } else if (args.path === "./UMPlus.svelte") {
                 contents = compile(
@@ -42,19 +54,36 @@ const plugin = {
             } else if (args.path === "./Warning.svelte") {
                 contents = compile("<slot />", { filename: "Warning.svelte", generate: "client" })
                     .js.code
+            } else if (args.path === "./FSRSCalibration.svelte") {
+                contents = compile(
+                    `<script>export let data; export let series;</script>
+                    <div class="calibration-result">{#each series as item}
+                    <span data-model={item.label} data-bands={!!item.bins[0]?.confidenceInterval} data-predicted={item.bins[0]?.predicted}>{item.label}</span>
+                    {/each}</div>`,
+                    { filename: "FSRSCalibration.svelte", generate: "client" }
+                ).js.code
+            } else if (args.path === "./FsrsCalibrationStatus.svelte") {
+                contents = compile("<div></div>", {
+                    filename: "FsrsCalibrationStatus.svelte",
+                    generate: "client",
+                }).js.code
             } else if (args.path === "./i18n") {
                 contents = `export function i18n(key, args) { return key + (args?.error ? ": " + args.error : ""); }`
             } else if (args.path === "./search") {
                 contents = `export async function getRwkvUmPlusModelPages(model, ids, signal, progress) {
                     globalThis.modelLoads.push(model);
                     progress({phase:"replaying", current:1, total:2, done:false});
+                    if (globalThis.failNextModel === model) { globalThis.failNextModel = null; throw new Error("model unavailable"); }
+                    if (globalThis.holdModel === model) await new Promise(resolve => { globalThis.releaseModel = resolve; });
                     return model;
                 }`
             } else {
                 contents = `export async function runStatsTask(task, args) {
                     if (task === "calibrationPredictions") {
-                        return { predictions: new Float64Array([globalThis.modelValues[args[1]]]), warnings: [] };
+                        const value = globalThis.modelValues[args[1]];
+                        return { predictions: new Float64Array([value]), bins: [{real:1, predicted:value, count:1}], warnings: [] };
                     }
+                    if (task === "calibrationBands") { globalThis.bandCalls++; return [[0.2, 0.8]]; }
                     globalThis.modelPairs.push([Array.from(args[1]), Array.from(args[2])]);
                     return { count: 1, bins: [], disagreementPercentiles: [] };
                 }`
@@ -86,6 +115,9 @@ test("model selectors load and compare each requested model on the chosen side",
         requestAnimationFrame: window.requestAnimationFrame.bind(window),
         modelLoads: [],
         modelPairs: [],
+        bandCalls: 0,
+        failNextModel: null,
+        holdModel: null,
         modelValues: {
             "rwkv-big": 0.3,
             "rwkv-small-curve": 0.4,
@@ -149,7 +181,7 @@ test("model selectors load and compare each requested model on the chosen side",
     expect(global.modelLoads).toEqual(["rwkv-big", "rwkv-small-instant"])
     expect(global.modelPairs.at(-1)).toEqual([[0.3], [0.5]])
     expect(document.querySelector(".model-result").textContent).toContain(
-        "rwkv-big vs um-plus-model-rwkv-small-instant"
+        "rwkv-big vs model-rwkv-small-instant"
     )
 
     first.value = "rwkv-small-curve"
@@ -199,5 +231,175 @@ test("model selectors load and compare each requested model on the chosen side",
     }
     expect(global.modelLoads.sort()).toEqual(Object.keys(global.modelValues).sort())
     bundle.exports.unmount(secondApp)
+
+    global.modelLoads = []
+    global.bandCalls = 0
+    const samples = {
+        revlogIds: new Float64Array([1]),
+        cardIds: new Float64Array([10]),
+        actual: new Uint8Array([1]),
+    }
+    const fsrs = {
+        cachedPredictionCount: 1,
+        predictions: new Float64Array([0.9]),
+        bins: [{ real: 1, predicted: 0.9, count: 1 }],
+        warnings: [],
+    }
+    const rwkv = {
+        predictions: new Float64Array([0.8]),
+        bins: [{ real: 1, predicted: 0.8, count: 1 }],
+        warnings: [],
+    }
+    const shared = bundle.exports.sources(samples)
+    const umTarget = document.createElement("div")
+    const calibrationTarget = document.createElement("div")
+    document.body.append(umTarget, calibrationTarget)
+    const umApp = bundle.exports.start(
+        umTarget,
+        {
+            samples,
+            fsrs,
+            rwkv,
+            comparison: { umPlus: { count: 1, bins: [], disagreementPercentiles: [] } },
+            fsrsGenerating: false,
+        },
+        shared
+    )
+    const calibrationApp = bundle.exports.startCalibration(
+        calibrationTarget,
+        {
+            samples,
+            fsrs,
+            rwkv,
+            fallbackFsrsBins: [],
+        },
+        shared
+    )
+    flush()
+    const [umFirst] = umTarget.querySelectorAll("select")
+    umFirst.value = "rwkv-big"
+    umFirst.dispatchEvent(new window.Event("change", { bubbles: true }))
+    flush()
+    await settle()
+    expect(global.modelLoads).toEqual(["rwkv-big"])
+    expect(global.bandCalls).toBe(0)
+    expect(
+        [...calibrationTarget.querySelectorAll("[data-model]")].map((item) => item.dataset.model)
+    ).toEqual(["calibration-source-fsrs"])
+
+    const [calibrationFirst, calibrationSecond] = calibrationTarget.querySelectorAll("select")
+    expect(calibrationSecond.value).toBe("none")
+    calibrationSecond.value = "rwkv-big"
+    calibrationSecond.dispatchEvent(new window.Event("change", { bubbles: true }))
+    flush()
+    await settle()
+    expect(global.modelLoads).toEqual(["rwkv-big"])
+    expect(global.bandCalls).toBe(1)
+    expect(
+        [...calibrationTarget.querySelectorAll("[data-model]")].map((item) => item.dataset.model)
+    ).toEqual(["calibration-source-fsrs", "model-rwkv-big"])
+    expect(calibrationTarget.querySelector('[data-model="model-rwkv-big"]').dataset.bands).toBe(
+        "true"
+    )
+
+    calibrationFirst.value = "rwkv-small-curve"
+    calibrationFirst.dispatchEvent(new window.Event("change", { bubbles: true }))
+    calibrationSecond.value = "rwkv-tiny-instant"
+    calibrationSecond.dispatchEvent(new window.Event("change", { bubbles: true }))
+    flush()
+    await settle()
+    expect(
+        [...calibrationTarget.querySelectorAll("[data-model]")].map((item) => item.dataset.model)
+    ).toEqual(["model-rwkv-small-curve", "model-rwkv-tiny-instant"])
+    expect(global.bandCalls).toBe(3)
+    const labels = {
+        fsrs: "calibration-source-fsrs",
+        rwkv: "model-rwkv-current",
+        ...Object.fromEntries(
+            Object.keys(global.modelValues).map((name) => [name, `model-${name}`])
+        ),
+    }
+    for (const left of Object.keys(labels)) {
+        for (const right of ["none", ...Object.keys(labels)]) {
+            calibrationFirst.value = left
+            calibrationFirst.dispatchEvent(new window.Event("change", { bubbles: true }))
+            calibrationSecond.value = right
+            calibrationSecond.dispatchEvent(new window.Event("change", { bubbles: true }))
+            flush()
+            await settle()
+            expect(
+                [...calibrationTarget.querySelectorAll("[data-model]")].map(
+                    (item) => item.dataset.model
+                )
+            ).toEqual(right === "none" ? [labels[left]] : [labels[left], labels[right]])
+        }
+    }
+    expect(global.modelLoads.sort()).toEqual(Object.keys(global.modelValues).sort())
+    expect(global.bandCalls).toBe(4)
+    umFirst.value = "rwkv-tiny-instant"
+    umFirst.dispatchEvent(new window.Event("change", { bubbles: true }))
+    flush()
+    await settle()
+    expect(global.modelLoads.sort()).toEqual(Object.keys(global.modelValues).sort())
+    bundle.exports.unmount(umApp)
+    bundle.exports.unmount(calibrationApp)
+    shared.destroy()
+
+    const fallback = bundle.exports.sources(samples)
+    const fallbackApp = bundle.exports.startCalibration(
+        calibrationTarget,
+        {
+            samples,
+            fsrs: { ...fsrs, bins: [] },
+            rwkv,
+            fallbackFsrsBins: [{ real: 1, predicted: 0.7, count: 1 }],
+        },
+        fallback
+    )
+    flush()
+    expect(
+        calibrationTarget.querySelector('[data-model="calibration-source-fsrs"]').dataset.predicted
+    ).toBe("0.7")
+    bundle.exports.unmount(fallbackApp)
+    fallback.destroy()
+
+    const pendingSources = bundle.exports.sources(samples)
+    const pendingApp = bundle.exports.startCalibration(
+        calibrationTarget,
+        {
+            samples,
+            fsrs,
+            rwkv,
+            fallbackFsrsBins: [],
+        },
+        pendingSources
+    )
+    flush()
+    const pendingSecond = calibrationTarget.querySelectorAll("select")[1]
+    global.holdModel = "rwkv-small-curve"
+    pendingSecond.value = "rwkv-small-curve"
+    pendingSecond.dispatchEvent(new window.Event("change", { bubbles: true }))
+    flush()
+    await settle()
+    expect(calibrationTarget.querySelector('[data-model="calibration-source-fsrs"]')).not.toBeNull()
+    expect(calibrationTarget.textContent).toContain("model-preparing")
+    global.holdModel = null
+    global.releaseModel()
+    await settle()
+    expect(calibrationTarget.querySelector('[data-model="model-rwkv-small-curve"]')).not.toBeNull()
+
+    global.failNextModel = "rwkv-big"
+    pendingSecond.value = "rwkv-big"
+    pendingSecond.dispatchEvent(new window.Event("change", { bubbles: true }))
+    flush()
+    await settle()
+    expect(calibrationTarget.querySelector('[data-model="calibration-source-fsrs"]')).not.toBeNull()
+    expect(calibrationTarget.textContent).toContain("model unavailable")
+    calibrationTarget.querySelector("button").click()
+    flush()
+    await settle()
+    expect(calibrationTarget.querySelector('[data-model="model-rwkv-big"]')).not.toBeNull()
+    bundle.exports.unmount(pendingApp)
+    pendingSources.destroy()
     dom.window.close()
 })

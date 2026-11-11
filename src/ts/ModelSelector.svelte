@@ -4,11 +4,12 @@
     export let models: { id: string; label: string }[]
     export let first: string
     export let second: string
+    export let allowNone = false
 </script>
 
 <div class="model-selector">
     <label>
-        {i18n("um-plus-first-model")}
+        {i18n("model-first")}
         <select bind:value={first}>
             {#each models as model}
                 <option value={model.id}>{model.label}</option>
@@ -16,8 +17,11 @@
         </select>
     </label>
     <label>
-        {i18n("um-plus-second-model")}
+        {i18n("model-second")}
         <select bind:value={second}>
+            {#if allowNone}
+                <option value="none">{i18n("model-none")}</option>
+            {/if}
             {#each models as model}
                 <option value={model.id}>{model.label}</option>
             {/each}

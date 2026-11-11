@@ -1,16 +1,17 @@
 <script lang="ts">
     import { onDestroy } from "svelte"
     import UMPlus from "./UMPlus.svelte"
-    import UMPlusModelSelector from "./UMPlusModelSelector.svelte"
+    import ModelSelector from "./ModelSelector.svelte"
     import Warning from "./Warning.svelte"
     import { heldOutFsrsPredictions, type CalibrationSamples } from "./calibrationSamples"
     import { i18n } from "./i18n"
     import { latestResult } from "./latestResult"
     import {
-        getRwkvUmPlusModelPages,
-        type RwkvUmPlusModel,
-        type RwkvUmPlusProgress,
-    } from "./search"
+        isRwkvModel,
+        modelOptions,
+        type ModelPredictionSources,
+        type ModelPredictionStates,
+    } from "./modelPredictionSources"
     import type { FsrsCalibrationStats, RwkvCalibrationStats } from "./stores"
     import type { Tasks } from "./statsTasks"
     import { runStatsTask } from "./statsWorkerClient"
@@ -21,36 +22,21 @@
     export let rwkv: RwkvCalibrationStats | null
     export let comparison: ReturnType<Tasks["comparison"]> | null
     export let fsrsGenerating: boolean
+    export let modelPredictions: ModelPredictionSources
 
     let first = "fsrs"
     let second = "rwkv"
     let data: UmPlusData | null = null
     let inputs: unknown[] | undefined
     let cancel: (() => void) | undefined
-    type VariantState = {
-        phase: "loading" | "ready" | "failed"
-        progress?: RwkvUmPlusProgress
-        predictions?: Float64Array
-        warnings?: string[]
-        error?: string
-    }
-    let variants: Partial<Record<RwkvUmPlusModel, VariantState>> = {}
-    let sourceSamples: CalibrationSamples | null = null
-    let sourceController = new AbortController()
-    $: models = [
-        { id: "fsrs", label: i18n("calibration-source-fsrs") },
-        { id: "rwkv", label: i18n("um-plus-model-rwkv-current") },
-        { id: "rwkv-big", label: i18n("um-plus-model-rwkv-big") },
-        { id: "rwkv-small-curve", label: i18n("um-plus-model-rwkv-small-curve") },
-        { id: "rwkv-small-instant", label: i18n("um-plus-model-rwkv-small-instant") },
-        { id: "rwkv-tiny-instant", label: i18n("um-plus-model-rwkv-tiny-instant") },
-    ]
+    $: models = modelOptions()
+    $: variants = $modelPredictions
     $: firstLabel = models.find((model) => model.id === first)?.label ?? first
     $: secondLabel = models.find((model) => model.id === second)?.label ?? second
     $: usesFsrs = first === "fsrs" || second === "fsrs"
     $: usesRwkv = first === "rwkv" || second === "rwkv"
-    $: selectedVariants = [...new Set([first, second].filter(isVariant))]
-    $: ensureVariants(samples, first, second)
+    $: selectedVariants = [...new Set([first, second].filter(isRwkvModel))]
+    $: if (samples) selectedVariants.forEach((model) => modelPredictions.ensure(model))
     $: variantPending = selectedVariants.some((model) => variants[model]?.phase !== "ready")
     $: variantError = selectedVariants.find((model) => variants[model]?.phase === "failed")
     $: missingFsrs = !!fsrs && fsrs.cachedPredictionCount === 0 && fsrs.predictions.length > 0
@@ -64,81 +50,6 @@
     )
     $: calculate(samples, first, second, fsrs, rwkv, comparison, fsrsGenerating, variants)
 
-    function isVariant(model: string): model is RwkvUmPlusModel {
-        return (
-            model === "rwkv-big" ||
-            model === "rwkv-small-curve" ||
-            model === "rwkv-small-instant" ||
-            model === "rwkv-tiny-instant"
-        )
-    }
-
-    function ensureVariants(samples: CalibrationSamples | null, first: string, second: string) {
-        if (sourceSamples !== samples) {
-            sourceController.abort()
-            sourceController = new AbortController()
-            sourceSamples = samples
-            variants = {}
-        }
-        if (!samples) return
-        for (const model of new Set([first, second].filter(isVariant))) {
-            if (variants[model]) continue
-            if (samples.revlogIds.length === 0) {
-                variants = {
-                    ...variants,
-                    [model]: { phase: "ready", predictions: new Float64Array(0) },
-                }
-                continue
-            }
-            variants = { ...variants, [model]: { phase: "loading" } }
-            void loadVariant(model, samples, sourceController.signal)
-        }
-    }
-
-    async function loadVariant(
-        model: RwkvUmPlusModel,
-        samples: CalibrationSamples,
-        signal: AbortSignal
-    ) {
-        try {
-            const pages = await getRwkvUmPlusModelPages(
-                model,
-                samples.revlogIds,
-                signal,
-                (progress) => {
-                    if (!signal.aborted)
-                        variants = { ...variants, [model]: { phase: "loading", progress } }
-                }
-            )
-            const parsed = await runStatsTask("calibrationPredictions", [samples, pages], signal)
-            if (!signal.aborted)
-                variants = {
-                    ...variants,
-                    [model]: {
-                        phase: "ready",
-                        predictions: parsed.predictions,
-                        warnings: parsed.warnings,
-                    },
-                }
-        } catch (error) {
-            if (!signal.aborted)
-                variants = {
-                    ...variants,
-                    [model]: {
-                        phase: "failed",
-                        error: error instanceof Error ? error.message : String(error),
-                    },
-                }
-        }
-    }
-
-    function retryVariant(model: RwkvUmPlusModel) {
-        const next = { ...variants }
-        delete next[model]
-        variants = next
-        ensureVariants(samples, first, second)
-    }
-
     function calculate(
         samples: CalibrationSamples | null,
         first: string,
@@ -147,7 +58,7 @@
         rwkv: RwkvCalibrationStats | null,
         comparison: ReturnType<Tasks["comparison"]> | null,
         generating: boolean,
-        variants: Partial<Record<RwkvUmPlusModel, VariantState>>
+        variants: ModelPredictionStates
     ) {
         const next = [
             samples,
@@ -158,8 +69,8 @@
             rwkv?.predictions,
             comparison,
             generating,
-            isVariant(first) ? variants[first]?.predictions : null,
-            isVariant(second) ? variants[second]?.predictions : null,
+            isRwkvModel(first) ? variants[first]?.predictions : null,
+            isRwkvModel(second) ? variants[second]?.predictions : null,
         ]
         if (inputs && next.every((value, index) => value === inputs![index])) return
         inputs = next
@@ -177,7 +88,7 @@
                 ? fsrsPredictions
                 : model === "rwkv"
                   ? rwkv?.predictions
-                  : isVariant(model)
+                  : isRwkvModel(model)
                     ? variants[model]?.predictions
                     : undefined
         const firstPredictions = source(first)
@@ -190,25 +101,22 @@
         )
     }
 
-    onDestroy(() => {
-        cancel?.()
-        sourceController.abort()
-    })
+    onDestroy(() => cancel?.())
 </script>
 
-<UMPlusModelSelector {models} bind:first bind:second />
+<ModelSelector {models} bind:first bind:second />
 {#if warnings.length > 0}
     <Warning always>{warnings.join(" ")}</Warning>
 {/if}
 {#if variantError}
     <div class="calibration-message">
-        {i18n("um-plus-model-failed", {
+        {i18n("model-failed", {
             model: models.find((model) => model.id === variantError)?.label ?? variantError,
             error: variants[variantError]?.error ?? "",
         })}
     </div>
-    <button type="button" on:click={() => retryVariant(variantError)}>
-        {i18n("um-plus-retry")}
+    <button type="button" on:click={() => modelPredictions.retry(variantError)}>
+        {i18n("model-retry")}
     </button>
 {:else if variantPending}
     {#each selectedVariants as model}
@@ -217,8 +125,8 @@
             {@const label = models.find((item) => item.id === model)?.label ?? model}
             <div class="calibration-message">
                 {progress?.phase === "waiting"
-                    ? i18n("um-plus-model-waiting", { model: label })
-                    : i18n("um-plus-preparing-model", {
+                    ? i18n("model-waiting", { model: label })
+                    : i18n("model-preparing", {
                           model: label,
                           current: progress?.current ?? 0,
                           total: progress?.total ?? 0,

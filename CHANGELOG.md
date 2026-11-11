@@ -4,6 +4,8 @@
 
 ### User facing changes
 
+- Show Model Calibration for any one or two FSRS or RWKV models, including the Big, Small Curve, Small Instant and Tiny Instant variants. Calibration and UM+ reuse the same prepared model predictions.
+
 - Compare any pair of FSRS, current RWKV, RWKV Big, Small Curve, Small Instant and Tiny Instant in the Model UM+ Comparison. Model-specific history is prepared on demand with progress and reused on later visits.
 
 - Show RWKV in Stability Over Time with an FSRS / RWKV / Both selector. RWKV S90 is the delay until RWKV-Instant predicts 90% recall after a card's last answer of the day, corrected downward for RWKV's typical optimism when no further reviews are assumed. Median/Mean, the moving average, and the young/mature tooltip follow the selected source; the background replay shows its progress and can be cancelled.
@@ -75,6 +77,8 @@
 - Identify unloaded data in troubleshooting exports instead of reporting misleading zero counts. Cancelling export writes no file.
 
 ### Technical details
+
+- Share aligned RWKV model predictions and calibration bins between the Calibration and UM+ panels. Compute a model's card-bootstrap confidence intervals only when Calibration requests them, and discard obsolete results when the selected history changes.
 
 - Replay each explicit RWKV model in an isolated native runtime and save model-specific predictions in add-on-owned files. Validate the model, runtime, replay settings and review-history fingerprint before reuse; preserve a verified prefix when new reviews are appended. FSRS comparisons continue to use held-out FSRS predictions.
 

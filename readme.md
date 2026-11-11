@@ -73,7 +73,7 @@ Like the new anki stats screen? Want more? This is the addon for you.
 - Learn Reviews per Card
 - Memorised
 - Review Recall and Gain (with or without each answer at a chosen horizon)
-- FSRS Calibration
+- Model Calibration (one or two selected FSRS/RWKV models)
 - Model UM+ Comparison (FSRS, current RWKV, and individual RWKV models)
 - Stability Time Machine
 - Difficulty Time Machine

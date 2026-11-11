@@ -1,4 +1,4 @@
-# FSRS Calibration Graph Data Path
+# Model Calibration Graph Data Path
 
 This document describes how calibration graph data is read for graph computations,
 including Anki's add-on preset overlay data and the optional RWKV calibration
@@ -23,7 +23,7 @@ The page loads a `StatsHistory` handle containing the review count and last-forg
   `/_anki/rwkvReviewRetrievability` endpoint in
   [`__init__.py`](/Users/jschoreels/workspace/Anki-Search-Stats-Extended/__init__.py).
     - The endpoint is called automatically for the default FSRS and current-RWKV UM+ comparison.
-      The calibration source selector controls the ordinary calibration graph's
+      The calibration model selectors control the calibration graph's
       display and does not gate UM+ data loading.
     - The frontend sends the exact `revlog.id` values used by the calibration
       samples, so RWKV persisted-value checks are limited to reviews that can
@@ -106,11 +106,20 @@ calculations continue to accept only finite probabilities within `[0, 1]`.
 
 Once history and both calibration stores load, the `comparison` worker task
 builds UM+, ROC, and both models' daily results, with replay-only FSRS predictions
-replaced by `NaN` (see the ROC section). The page displays loading until this
-result is ready and cancels obsolete computations through `latestResult`.
+replaced by `NaN` (see the ROC section). The default UM+, ROC, and daily panels
+display loading until this result is ready and cancel obsolete computations
+through `latestResult`.
 Warnings remain logged on the main thread and displayed by the existing panels.
 Automatic preparation, revision triggers, cohort selection, provenance counts,
 warning totals, and the `refresh_after_fsrs` handshake are unchanged.
+
+Model Calibration and UM+ share one on-demand store for the explicit RWKV model
+prediction arrays and their calibration bins. Selecting a model in either
+graph loads its aligned predictions once for the current sample. Calibration
+requests that model's bootstrap intervals when needed; UM+ alone does not start
+the bootstrap. When the search or date range changes, the old requests are
+cancelled and their results cannot replace the new sample. The existing
+profile-local model replay files remain the source for subsequent page loads.
 
 ### Streamed prediction transport
 
@@ -350,15 +359,25 @@ parameters and a different eligible review sample, so it does not reproduce
 fold-trained validation predictions. There is no user-facing source override.
 
 
-## Calibration Source Toggle
+## Model Calibration Selectors
 
-FSRS is the default calibration source. FSRS mode first uses role-aware cached
+Model Calibration has independent first and second model selectors. The first
+defaults to FSRS, and the second defaults to None so one model is shown. Either
+selector can choose FSRS, RWKV (current), RWKV Big, RWKV Small Curve, RWKV Small
+Instant, or RWKV Tiny Instant; selecting a second model overlays its curve.
+The first series is blue, the second green, and the perfect-calibration reference
+line is orange. Review-count volume bars use the series colors and overlap.
+Each model uses its own eligible reviews rather than a paired intersection, so
+counts can differ between series. This preserves the original calibration
+behavior; UM+ instead compares only reviews with predictions from both models.
+
+FSRS first uses role-aware cached
 FSRS retrievability for each eligible review, preferring historical validation
 and post-optimization samples over replayed in-sample values. If no cached FSRS
 calibration rows exist yet, it falls back to the existing replayed FSRS
 retrievability value for each eligible review.
 
-RWKV mode reuses the same eligible review samples identified by
+RWKV (current) reuses the same eligible review samples identified by
 [`getMemorisedDays()`](/Users/jschoreels/workspace/Anki-Search-Stats-Extended/src/ts/MemorisedBar.ts),
 then requests RWKV probabilities for those sample `revlog.id` values from
 `/_anki/rwkvReviewRetrievability`. With a role-aware RWKV cache table, the graph
@@ -366,12 +385,9 @@ uses the sparse held-out rows returned by that endpoint; train/final-fit rows
 are intentionally excluded. On the first cache miss, adapted Anki builds may
 run one calibration-only RWKV replay through the public ensure API. Later graph
 loads reuse the persisted result, and active reviewer state is restored after
-generation.
-
-Both mode overlays the FSRS and RWKV calibration lines on the same graph. The
-FSRS line is blue, the RWKV line is green, and the perfect-calibration reference
-line remains orange. Review-count volume bars use the same source colors and
-overlap in combined mode.
+generation. The four explicit RWKV models use the same isolated, model-specific
+history replays and persistent add-on caches as UM+, described below. Their
+bins and confidence intervals use the existing calibration computations.
 
 ## FSRS vs RWKV current Disagreement
 
@@ -497,7 +513,7 @@ selectors default to FSRS and RWKV (current), and also offer RWKV Big, RWKV
 Small Curve, RWKV Small Instant and RWKV Tiny Instant in either order. The
 current choice uses the existing RWKV calibration stream, which represents the
 configured runtime and may coincide with one of the explicit models. The selector
-is independent of the ordinary calibration graph's FSRS/RWKV/Both control.
+is independent of the Model Calibration selectors.
 The default comparison can trigger the existing current-RWKV calibration-data
 generation path described above.
 
