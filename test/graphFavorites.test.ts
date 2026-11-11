@@ -27,7 +27,7 @@ test("saved graph IDs are unique, namespaced, and independent of localized title
             null,
             2,
             "",
-            "Daily Surprise",
+            "Daily Log Loss",
             "fsrs:daily-logLoss",
             "rating:ratings",
         ])

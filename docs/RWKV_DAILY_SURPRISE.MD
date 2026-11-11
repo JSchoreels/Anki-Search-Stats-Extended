@@ -1,11 +1,11 @@
-# Daily FSRS and RWKV recall gap and surprise
+# Daily FSRS and RWKV recall gap and log loss
 
 Two graphs follow **FSRS vs RWKV Card Retrievability** (which immediately follows
 current Disagreement), in this order:
 
 1. **Daily Recall Gap**: a choice of the signed standardized difference between
    actual and expected recalls or the raw difference in percentage points.
-2. **Daily Surprise**: mean binary log loss in bits per eligible review.
+2. **Daily Log Loss**: mean binary log loss in bits per eligible review.
 
 Both respect the statistics search and review date range. Each panel has its own
 **FSRS / RWKV / Both** selector, initially **Both**, independently of the ordinary
@@ -78,7 +78,7 @@ it as an exact significance test. When the predicted variance is zero (all
 predictions are 0 or 1), Z is undefined: omit the point and explain this in the
 tooltip while retaining the day's recall rates, count, and log loss.
 
-## Daily surprise
+## Daily log loss
 
 `L = mean(-log2(p))` for remembered reviews and `mean(-log2(1-p))`
 for forgotten reviews, with both outcome types averaged together over the day.

@@ -267,7 +267,7 @@ test("undefined gaps stay available in tooltips without inventing a point at zer
     expect(svg.innerHTML).not.toMatch(/NaN|Infinity/)
 })
 
-test("average surprise supports a single day, zero loss, redraws and empty searches", () => {
+test("average log loss supports a single day, zero loss, redraws and empty searches", () => {
     const svg = svgElement()
     renderDailyPredictionGraph(svg, [{ ...point(20000), logLoss: 0 }], "logLoss")
     expect(svg.querySelectorAll(".daily-prediction-point")).toHaveLength(1)

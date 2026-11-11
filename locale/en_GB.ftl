@@ -554,13 +554,13 @@ predicted = Predicted
 actual = Actual
 
 daily-prediction-standardizedGap = Daily Recall Gap
-daily-prediction-logLoss = Daily Surprise
+daily-prediction-logLoss = Daily Log Loss
 daily-prediction-standardizedGap-axis = Standardized gap
 daily-prediction-rawGap-axis = Recall difference (percentage points)
 daily-prediction-logLoss-axis = Bits per review
 daily-prediction-standardizedGap-value = Standardized gap: {$value}
 daily-prediction-rawGap-value = Recall difference: {$value} pp
-daily-prediction-logLoss-value = Average surprise: {$value} bits per review
+daily-prediction-logLoss-value = Average log loss: {$value} bits per review
 daily-prediction-actual = Actual R: {$value}%
 daily-prediction-predicted = Predicted R: {$value}%
 daily-prediction-count = Eligible reviews: {$count}

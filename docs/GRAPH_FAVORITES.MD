@@ -71,7 +71,7 @@ shared `graphPreferences` helper, with independent saved lists.
 
 IDs identify graph cards, independent of translated headings, selected models,
 category order, search, and date range. Each ID has a category namespace followed
-by a stable graph key. For example, both FSRS and RWKV views of Daily Surprise
+by a stable graph key. For example, both FSRS and RWKV views of Daily Log Loss
 share `fsrs:daily-logLoss`; the two daily metrics have separate IDs. Graph IDs
 are persisted contracts and should stay stable when headings or layouts change.
 New standalone graph cards need a unique `graphId`, forwarded through calculation

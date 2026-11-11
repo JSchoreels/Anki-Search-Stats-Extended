@@ -4,6 +4,8 @@
 
 ### User facing changes
 
+- Rename Daily Surprise to Daily Log Loss to better describe the metric.
+
 - Show Model Calibration for any one or two FSRS or RWKV models, including the Big, Small Curve, Small Instant and Tiny Instant variants. Calibration and UM+ reuse the same prepared model predictions.
 
 - Compare any pair of FSRS, current RWKV, RWKV Big, Small Curve, Small Instant and Tiny Instant in the Model UM+ Comparison. Model-specific history is prepared on demand with progress and reused on later visits.
@@ -22,7 +24,7 @@
 
 - View Stability Over Time and Review Speed Trend as line charts with compact moving-average controls, date zoom, and trend selection. Stability retains its mean/median choice and young/mature shares in the tooltip; Review Speed can average over calendar or study days.
 
-- Use compact moving-average controls on Daily Recall Gap, Daily Surprise, and Review Recall and Gain. Choose calendar days, the latest study days with eligible results, or the latest N eligible reviews. Optional dotted connectors bridge missing days without inventing daily values.
+- Use compact moving-average controls on Daily Recall Gap, Daily Log Loss, and Review Recall and Gain. Choose calendar days, the latest study days with eligible results, or the latest N eligible reviews. Optional dotted connectors bridge missing days without inventing daily values.
 
 - Switch Daily Recall Gap between the standardized score and the raw difference in percentage points. The moving average follows the selected view, and the raw-gap axis focuses on typical daily values or the visible moving averages while keeping outliers in the tooltips.
 
@@ -40,7 +42,7 @@
 
 - Star favorite add-on graphs to keep them above Anki's built-in charts, below the search controls. Favorites remember their order, retain their current controls when moved, and remain accessible when their original category is collapsed or hidden.
 
-- Add FSRS to Daily Recall Gap and Daily Surprise, with independent FSRS / RWKV / Both controls. Show a configurable 7-day moving average by default and fade the daily lines and dots to grey; disable smoothing to restore the colored daily values.
+- Add FSRS to Daily Recall Gap and Daily Log Loss, with independent FSRS / RWKV / Both controls. Show a configurable 7-day moving average by default and fade the daily lines and dots to grey; disable smoothing to restore the colored daily values.
 
 - Restore FSRS preset loading and the stability/retrievability heatmap on older fork builds, including portable build 88, without the missing `card_memory_metrics` error. Newer builds retain batch loading; older builds use slower native Card Info reads.
 

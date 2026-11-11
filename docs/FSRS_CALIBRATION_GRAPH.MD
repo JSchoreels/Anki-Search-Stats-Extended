@@ -497,14 +497,14 @@ positions. Both controls are local to this chart; they do not persist settings
 or request new predictions.
 
 The Card Retrievability comparison is followed by **Daily Recall Gap** and
-**Daily Surprise**. Each has an independent FSRS / RWKV / Both selector and an
+**Daily Log Loss**. Each has an independent FSRS / RWKV / Both selector and an
 editable moving average, enabled initially for 7 days, with raw daily values in
 grey. Daily Recall Gap can also show the raw actual-minus-predicted difference in
 percentage points, with the same moving-average controls. The graphs reuse each
 model's eligible predictions independently; FSRS uses held-out cached predictions,
 without the calibration replay fallback. Their
 calculations, daily grouping, and interpretation are documented in
-[Daily FSRS and RWKV surprise](RWKV_DAILY_SURPRISE.MD).
+[Daily FSRS and RWKV recall gap and log loss](RWKV_DAILY_SURPRISE.MD).
 
 ## Model UM+ Comparison
 
