@@ -36,6 +36,8 @@ type UmPlusSegment = {
 
 type UmPlusGraphOptions = {
     showSmallBuckets?: boolean
+    firstModel?: string
+    secondModel?: string
 }
 
 function signedPercent(value: number, digits = 0) {
@@ -63,7 +65,11 @@ function formatSlope(slope: number | undefined) {
 export function renderUmPlusGraph(
     svg: SVGElement,
     data: UmPlusData,
-    { showSmallBuckets = false }: UmPlusGraphOptions = {}
+    {
+        showSmallBuckets = false,
+        firstModel = i18n("calibration-source-fsrs"),
+        secondModel = i18n("calibration-source-rwkv"),
+    }: UmPlusGraphOptions = {}
 ) {
     clearChart(svg)
 
@@ -86,8 +92,6 @@ export function renderUmPlusGraph(
             Math.min(xDomain[1], center + halfBin),
         ] as const
     }
-    const fsrsModel = i18n("calibration-source-fsrs")
-    const rwkvModel = i18n("calibration-source-rwkv")
     const segments: UmPlusSegment[] = d3.pairs(visibleBins).map(([from, to]) => ({
         from,
         to,
@@ -95,18 +99,18 @@ export function renderUmPlusGraph(
     }))
     const series: UmPlusSeries[] = [
         {
-            model: fsrsModel,
+            model: firstModel,
             color: FSRS_COMPARISON_COLOUR,
-            score: data.fsrsScore,
-            slope: weightedRegressionSlope(visibleBins, (bin) => bin.fsrsError),
-            error: (bin) => bin.fsrsError,
+            score: data.firstScore,
+            slope: weightedRegressionSlope(visibleBins, (bin) => bin.firstError),
+            error: (bin) => bin.firstError,
         },
         {
-            model: rwkvModel,
+            model: secondModel,
             color: RWKV_COMPARISON_COLOUR,
-            score: data.rwkvScore,
-            slope: weightedRegressionSlope(visibleBins, (bin) => bin.rwkvError),
-            error: (bin) => bin.rwkvError,
+            score: data.secondScore,
+            slope: weightedRegressionSlope(visibleBins, (bin) => bin.secondError),
+            error: (bin) => bin.secondError,
         },
     ]
 
@@ -147,7 +151,7 @@ export function renderUmPlusGraph(
         .attr("y", 34)
         .attr("text-anchor", "middle")
         .style("stroke", "currentColor")
-        .text(i18n("um-plus-x-axis"))
+        .text(i18n("um-plus-x-axis", { first: firstModel, second: secondModel }))
 
     axis.append("g")
         .attr("class", "um-plus-volume-axis")
@@ -275,15 +279,17 @@ export function renderUmPlusGraph(
                 y: event.pageY,
                 text: [
                     i18n("um-plus-tooltip-disagreement", {
+                        first: firstModel,
+                        second: secondModel,
                         value: signedPercent(bin.disagreement, 1),
                     }),
                     i18n("um-plus-tooltip-error", {
-                        model: fsrsModel,
-                        value: signedPercent(bin.fsrsError, 1),
+                        model: firstModel,
+                        value: signedPercent(bin.firstError, 1),
                     }),
                     i18n("um-plus-tooltip-error", {
-                        model: rwkvModel,
-                        value: signedPercent(bin.rwkvError, 1),
+                        model: secondModel,
+                        value: signedPercent(bin.secondError, 1),
                     }),
                     i18n("um-plus-tooltip-volume", {
                         count: bin.count,

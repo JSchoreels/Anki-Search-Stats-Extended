@@ -4,6 +4,8 @@
 
 ### User facing changes
 
+- Compare any pair of FSRS, current RWKV, RWKV Big, Small Curve, Small Instant and Tiny Instant in the Model UM+ Comparison. Model-specific history is prepared on demand with progress and reused on later visits.
+
 - Show RWKV in Stability Over Time with an FSRS / RWKV / Both selector. RWKV S90 is the delay until RWKV-Instant predicts 90% recall after a card's last answer of the day, corrected downward for RWKV's typical optimism when no further reviews are assumed. Median/Mean, the moving average, and the young/mature tooltip follow the selected source; the background replay shows its progress and can be cancelled.
 
 - Switch the workload forecast to three simulated futures for a quicker, approximate range while retaining the configured queue refreshes and limits. Larger samples remain available for percentile bands.
@@ -73,6 +75,8 @@
 - Identify unloaded data in troubleshooting exports instead of reporting misleading zero counts. Cancelling export writes no file.
 
 ### Technical details
+
+- Replay each explicit RWKV model in an isolated native runtime and save model-specific predictions in add-on-owned files. Validate the model, runtime, replay settings and review-history fingerprint before reuse; preserve a verified prefix when new reviews are appended. FSRS comparisons continue to use held-out FSRS predictions.
 
 - Remove the vendored FSRS-7 preview and use the published `ts-fsrs` package for supported FSRS-4/5/6 and FSRS-7 models.
 

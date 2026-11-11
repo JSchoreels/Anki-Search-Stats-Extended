@@ -22,7 +22,7 @@ The page loads a `StatsHistory` handle containing the review count and last-forg
 - Optional RWKV review retrievability data is read from Anki through the
   `/_anki/rwkvReviewRetrievability` endpoint in
   [`__init__.py`](/Users/jschoreels/workspace/Anki-Search-Stats-Extended/__init__.py).
-    - The endpoint is called automatically for the FSRS-vs-RWKV UM+ comparison.
+    - The endpoint is called automatically for the default FSRS and current-RWKV UM+ comparison.
       The calibration source selector controls the ordinary calibration graph's
       display and does not gate UM+ data loading.
     - The frontend sends the exact `revlog.id` values used by the calibration
@@ -490,19 +490,49 @@ without the calibration replay fallback. Their
 calculations, daily grouping, and interpretation are documented in
 [Daily FSRS and RWKV surprise](RWKV_DAILY_SURPRISE.MD).
 
-## FSRS vs RWKV UM+
+## Model UM+ Comparison
 
-The UM+ graph follows the calibration graph and automatically loads the same raw,
-review-time FSRS and RWKV predictions. It is independent of the calibration
-source selector, so it can load while the ordinary calibration graph displays
-FSRS, RWKV, or Both. When current RWKV calibration data is absent, opening the
-statistics page may therefore trigger the supported RWKV calibration-data
+The UM+ graph follows the calibration graph. Its two independent model
+selectors default to FSRS and RWKV (current), and also offer RWKV Big, RWKV
+Small Curve, RWKV Small Instant and RWKV Tiny Instant in either order. The
+current choice uses the existing RWKV calibration stream, which represents the
+configured runtime and may coincide with one of the explicit models. The selector
+is independent of the ordinary calibration graph's FSRS/RWKV/Both control.
+The default comparison can trigger the existing current-RWKV calibration-data
 generation path described above.
+
+The explicit model choices replay the complete collection's historical RWKV
+inputs in a separate native runtime, without replacing the live reviewer's
+state. Big uses the `legacy` model's Instant prediction; Small Curve uses the
+`sm72e25` model's Curve probability; Small Instant uses `sm98`; and Tiny Instant
+uses `sm101`. They are generated only when selected. The graph shows progress;
+the initial Curve replay makes a native pre-answer query per review and can take
+longer than the bulk Instant replays. The independently replayed models score
+all eligible calibration review samples, while current RWKV retains its
+role-aware cache selection. A pair involving FSRS also requires a held-out FSRS
+prediction, so its sample can differ from an RWKV-only pair. These pretrained
+RWKV predictions are not a claim that every review was held out from the
+models' original training data.
+
+The add-on saves each completed model replay as
+`user_files/um-plus-<collection-path-hash>-<model>.json`. These private files
+contain review IDs and predictions plus the model/head, weights and native
+runtime hashes, Anki build, state precision, replay settings and complete-history
+fingerprint. A validated unchanged history reuses its file; if the old history
+is still a valid prefix, its predictions are retained and only new reviews are
+scored after reconstructing the recurrent state. Edited history, changed
+settings, model weights, native runtime or build cause a full replay. Writes use
+an atomic file replacement; failed or obsolete replays do not publish a partial
+result. The data is add-on-owned, not stored in the collection database.
+The `startRwkvUmPlusModel` and `rwkvUmPlusModelProgress` endpoints start and
+track a serialized model job; `rwkvUmPlusModelPredictions` returns the requested
+review IDs through the existing prediction-page transport. Missing bundled
+models and replay failures are displayed with a retry action.
 
 Only review ids with eligible predictions from both models are included. Reviews
 are grouped into 41 fixed bins by signed prediction disagreement:
 
-`FSRS p(recall) - RWKV p(recall)`
+`first model p(recall) - second model p(recall)`
 
 Buckets with fewer than 200 paired reviews are hidden by default. The **Show
 Small Buckets (<200 reviews)** toggle reveals them. Any line segment touching a
@@ -515,7 +545,7 @@ The x-axis is limited to the remaining visible disagreement range. Its lower
 bound is rounded down and its upper bound rounded up to the next 10 percentage
 points. When all visible bins have the same rounded disagreement, the domain
 expands by one 10-point step so the graph remains readable.
-The y-axis similarly covers only the currently visible FSRS and RWKV prediction
+The y-axis similarly covers only the currently visible selected-model prediction
 errors, rounded outward to 10-percentage-point boundaries. Zero always remains
 inside the plot as the perfect-prediction reference. Both axes use tick
 increments of 10 percentage points.
@@ -531,13 +561,13 @@ bins' mean prediction errors.
 
 The legend also shows a linear-regression slope for each model. It is fitted to
 the currently visible bucket means using paired-review counts as weights. A
-slope closer to zero means the model's prediction error changes less as FSRS and
-RWKV disagree, while a slope near `+1` or `-1` indicates that the model tends to
+slope closer to zero means the model's prediction error changes less as the two
+models disagree, while a slope near `+1` or `-1` indicates that the model tends to
 absorb the disagreement as prediction error. The slope is shown as `n/a` when
 the visible buckets do not contain enough disagreement variation for a fit.
 
 Below the plot, the absolute-disagreement summary shows P68, P95 and P99.7 of
-`abs(FSRS p(recall) - RWKV p(recall))`. These are nearest-rank empirical
+`abs(first model p(recall) - second model p(recall))`. These are nearest-rank empirical
 percentiles of the individual eligible paired reviews, before binning. A P95
 threshold means at least 95% of paired reviews have an absolute prediction gap
 at or below that value. Thresholds are rounded upward to 0.1 percentage points
@@ -548,12 +578,13 @@ coverage levels and do not assume a normal distribution or represent standard
 deviations. Empty paired populations have no percentile summary.
 
 Because both models use the same reviews in every bin, their plotted errors obey
-`FSRS error - RWKV error = disagreement`, apart from floating-point rounding.
+`first model error - second model error = disagreement`, apart from floating-point rounding.
 
 ## FSRS vs RWKV ROC and AUC
 
-The **FSRS vs RWKV ROC** graph follows UM+ and uses the same paired, eligible
-review-time predictions. A review is positive when its answer was Hard, Good,
+The **FSRS vs RWKV ROC** graph follows UM+ and always uses paired, eligible
+FSRS and current-RWKV review-time predictions, independent of the UM+ selectors.
+A review is positive when its answer was Hard, Good,
 or Easy and negative when its answer was Again. Reviews missing either model's
 valid probability are excluded, which keeps the comparison on an identical
 sample for FSRS and RWKV.
@@ -570,7 +601,7 @@ AUC is calculated with trapezoidal integration over the complete threshold
 curve as thresholds are processed; the complete point list is not retained. `1.0` means every remembered review is ranked above every forgotten
 review; `0.5` matches chance ranking. The orange dashed diagonal shows this
 chance baseline. FSRS uses the same steel-blue color and RWKV the same sea-green
-color as the Calibration and UM+ comparisons. Hover targets are sampled only
+color as Calibration and the default UM+ comparison. Hover targets are sampled only
 for responsiveness on large histories. The plotted curve retains the existing
 points whenever either axis advances by at least 0.001 and always retains the
 final endpoint. AUC and confidence placements still use all distinct thresholds,
@@ -593,7 +624,8 @@ FSRS calibration graph, but the comparison receives `NaN` FSRS predictions:
 replaying current parameters, usually optimised on these same reviews, would
 favour FSRS against held-out RWKV predictions. Both panels show loading while
 FSRS calibration generation is queued or running, then a held-out-unavailable
-message if the cache stays empty. Daily RWKV scores remain available independently; daily FSRS scores use the
+message if the cache stays empty. An RWKV-only UM+ pair does not wait for FSRS
+predictions. Daily RWKV scores remain available independently; daily FSRS scores use the
 same held-out cache boundary.
 
 ## Calibration Confidence Intervals

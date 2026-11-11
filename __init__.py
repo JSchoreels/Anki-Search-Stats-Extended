@@ -18,6 +18,7 @@ from .fsrs_calibration import CalibrationService, missing_rwkv_validation_review
 from .graph_controls import add_hidden_graphs_button, handle_graph_visibility_command
 from . import rwkv_review_gain
 from . import rwkv_stability
+from . import rwkv_um_comparison
 from .troubleshooting import add_export_button, handle_export_command
 
 addon_dir = Path(os.path.dirname(__file__))
@@ -1671,6 +1672,38 @@ def cancel_rwkv_stability_history() -> bytes:
 post_handlers["startRwkvStabilityHistory"] = start_rwkv_stability_history
 post_handlers["rwkvStabilityHistoryProgress"] = rwkv_stability_history_progress
 post_handlers["cancelRwkvStabilityHistory"] = cancel_rwkv_stability_history
+
+
+def start_rwkv_um_plus_model() -> bytes:
+    req = orjson.loads(request.data)
+    try:
+        from aqt import rwkv_scheduler
+    except ImportError:
+        return Response(orjson.dumps({
+            "phase": "failed", "done": True,
+            "error": "This Anki build does not provide RWKV historical replay.",
+        }))
+    return Response(orjson.dumps(rwkv_um_comparison.start(
+        mw, rwkv_scheduler, addon_dir / "user_files", req.get("model")
+    )))
+
+
+def rwkv_um_plus_model_progress() -> bytes:
+    req = orjson.loads(request.data)
+    return Response(orjson.dumps(rwkv_um_comparison.progress(mw, req.get("job_id"))))
+
+
+def rwkv_um_plus_model_predictions() -> bytes:
+    req = orjson.loads(request.data)
+    result = rwkv_um_comparison.predictions(
+        mw, req.get("job_id"), _positive_ints(req.get("revlog_ids", []))
+    )
+    return prediction_response(result, req.get("stream_pages") is True)
+
+
+post_handlers["startRwkvUmPlusModel"] = start_rwkv_um_plus_model
+post_handlers["rwkvUmPlusModelProgress"] = rwkv_um_plus_model_progress
+post_handlers["rwkvUmPlusModelPredictions"] = rwkv_um_plus_model_predictions
 
 
 def _workload_forecast_json(value):

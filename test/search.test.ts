@@ -390,6 +390,77 @@ test("an older running Python endpoint retains the existing full JSON transport 
     }
 })
 
+test("model-specific prediction requests poll preparation and stream only requested review IDs", async () => {
+    const original = global.fetch
+    const states: string[] = []
+    const stream = new ReadableStream<Uint8Array>({ start: (controller) => controller.close() })
+    jest.useFakeTimers()
+    global.fetch = jest.fn(async (url: string) => {
+        if (url.endsWith("startRwkvUmPlusModel"))
+            return new Response(
+                JSON.stringify({ jobId: 7, phase: "replaying", current: 1, total: 2, done: false })
+            )
+        if (url.endsWith("rwkvUmPlusModelProgress"))
+            return new Response(JSON.stringify({ jobId: 7, phase: "complete", done: true }))
+        return new Response(stream, { headers: { "Content-Type": "application/x-ndjson" } })
+    }) as any
+    jest.resetModules()
+    try {
+        const { getRwkvUmPlusModelPages } = await import("../src/ts/search")
+        const promise = getRwkvUmPlusModelPages(
+            "rwkv-small-curve",
+            new Float64Array([100, 100, 200, NaN, 0]),
+            new AbortController().signal,
+            (state) => states.push(state.phase)
+        )
+        await jest.advanceTimersByTimeAsync(1000)
+        expect(await promise).toBe(stream)
+        expect(states).toEqual(["replaying", "complete"])
+        const calls = (global.fetch as jest.Mock).mock.calls
+        expect(JSON.parse(calls[0][1].body)).toEqual({ model: "rwkv-small-curve" })
+        expect(JSON.parse(calls[1][1].body)).toEqual({ job_id: 7 })
+        expect(JSON.parse(calls[2][1].body)).toEqual({
+            job_id: 7,
+            revlog_ids: [100, 200],
+            stream_pages: true,
+        })
+    } finally {
+        global.fetch = original
+        jest.useRealTimers()
+        jest.resetModules()
+    }
+})
+
+test("model preparation failures report the native error without requesting predictions", async () => {
+    const original = global.fetch
+    global.fetch = jest.fn(
+        async () =>
+            new Response(
+                JSON.stringify({
+                    phase: "failed",
+                    done: true,
+                    error: "model missing",
+                })
+            )
+    ) as any
+    jest.resetModules()
+    try {
+        const { getRwkvUmPlusModelPages } = await import("../src/ts/search")
+        await expect(
+            getRwkvUmPlusModelPages(
+                "rwkv-big",
+                new Float64Array([1]),
+                new AbortController().signal,
+                () => {}
+            )
+        ).rejects.toThrow("model missing")
+        expect(global.fetch).toHaveBeenCalledTimes(1)
+    } finally {
+        global.fetch = original
+        jest.resetModules()
+    }
+})
+
 test("legacy history loading keeps the restart alert and null result for old Python responses", async () => {
     const originalFetch = global.fetch
     const alertMock = jest.spyOn(global, "alert").mockImplementation(() => undefined)

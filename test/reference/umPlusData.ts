@@ -8,15 +8,15 @@ export const UM_PLUS_SMALL_BUCKET_THRESHOLD = 200
 export type UmPlusBin = {
     index: number
     disagreement: number
-    fsrsError: number
-    rwkvError: number
+    firstError: number
+    secondError: number
     count: number
 }
 
 export type UmPlusData = {
     bins: UmPlusBin[]
-    fsrsScore: number
-    rwkvScore: number
+    firstScore: number
+    secondScore: number
     count: number
 }
 
@@ -74,8 +74,8 @@ export function buildUmPlusData(
                   {
                       index,
                       disagreement: sumDisagreement[index] / count,
-                      fsrsError: sumFsrsError[index] / count,
-                      rwkvError: sumRwkvError[index] / count,
+                      firstError: sumFsrsError[index] / count,
+                      secondError: sumRwkvError[index] / count,
                       count,
                   },
               ]
@@ -84,8 +84,8 @@ export function buildUmPlusData(
 
     return {
         bins,
-        fsrsScore: weightedRmse(bins, (bin) => bin.fsrsError, count),
-        rwkvScore: weightedRmse(bins, (bin) => bin.rwkvError, count),
+        firstScore: weightedRmse(bins, (bin) => bin.firstError, count),
+        secondScore: weightedRmse(bins, (bin) => bin.secondError, count),
         count,
     }
 }

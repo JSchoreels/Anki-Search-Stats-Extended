@@ -11,7 +11,7 @@
     import MemorisedSourceControls from "../MemorisedSourceControls.svelte"
     import FsrsCalibration from "../FSRSCalibration.svelte"
     import FsrsCalibrationStatus from "../FsrsCalibrationStatus.svelte"
-    import UMPlus from "../UMPlus.svelte"
+    import UMPlusComparison from "../UMPlusComparison.svelte"
     import ROC from "../ROC.svelte"
     import CurrentDisagreement from "../CurrentDisagreement.svelte"
     import WorkloadForecast from "../WorkloadForecast.svelte"
@@ -25,6 +25,7 @@
     import {
         calibrationMode,
         calibrationComparison,
+        calibration_samples,
         cancelRwkvStabilityComputation,
         fsrsCalibrationGeneration,
         fsrsCalibrationStats,
@@ -206,7 +207,6 @@
             : $calibrationMode === "rwkv"
               ? ($rwkvCalibrationStats?.warnings ?? [])
               : ($fsrsCalibrationStats?.warnings ?? [])
-    $: umPlusData = $calibrationComparison?.umPlus
     $: rocData = $calibrationComparison?.roc
     // Comparisons and daily FSRS scores use held-out cached predictions, never replay.
     $: fsrsHeldOutMissing =
@@ -306,20 +306,13 @@
     <CalibrationGraphContainer graphId="fsrs:um-plus">
         <h1 slot="title">{i18n("um-plus")}</h1>
         <div slot="graph" class="calibration-panel">
-            {#if umPlusWarnings.length > 0}
-                <Warning always>{umPlusWarnings.join(" ")}</Warning>
-            {/if}
-            {#if umPlusLoading}
-                <div class="calibration-message">{i18n("loading")}</div>
-            {:else if fsrsHeldOutMissing}
-                <div class="calibration-message">
-                    {i18n("comparison-fsrs-held-out-unavailable")}
-                </div>
-            {:else if umPlusData && umPlusData.count > 0}
-                <UMPlus data={umPlusData} />
-            {:else}
-                <div class="calibration-message">{i18n("um-plus-no-data")}</div>
-            {/if}
+            <UMPlusComparison
+                samples={$calibration_samples}
+                fsrs={$fsrsCalibrationStats}
+                rwkv={$rwkvCalibrationStats}
+                comparison={$calibrationComparison}
+                fsrsGenerating={fsrsHeldOutGenerating}
+            />
         </div>
         <ul class="um-plus-help">
             <li>{i18n("um-plus-help-error")}</li>
@@ -328,6 +321,7 @@
             <li>{i18n("um-plus-help-scores")}</li>
             <li>{i18n("um-plus-help-percentiles")}</li>
             <li>{i18n("um-plus-help-small-buckets")}</li>
+            <li>{i18n("um-plus-help-sample")}</li>
         </ul>
     </CalibrationGraphContainer>
     <CalibrationGraphContainer graphId="fsrs:roc">

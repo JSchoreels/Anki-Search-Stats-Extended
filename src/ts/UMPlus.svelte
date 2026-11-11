@@ -7,8 +7,10 @@
     let showSmallBuckets = false
 
     export let data: UmPlusData
+    export let firstModel = i18n("calibration-source-fsrs")
+    export let secondModel = i18n("calibration-source-rwkv")
 
-    $: if (svg) renderUmPlusGraph(svg, data, { showSmallBuckets })
+    $: if (svg) renderUmPlusGraph(svg, data, { showSmallBuckets, firstModel, secondModel })
 </script>
 
 <label class="small-bucket-toggle">

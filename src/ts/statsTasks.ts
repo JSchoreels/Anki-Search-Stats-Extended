@@ -65,6 +65,7 @@ const tasks = {
     calibrationPredictions,
     calibrationReplay: buildCalibrationBins,
     comparison,
+    umPlus: buildUmPlusData,
     dailyPredictionReviewWindows,
     fsrsReviewWindow: calculateFsrsReviewWindow,
 }

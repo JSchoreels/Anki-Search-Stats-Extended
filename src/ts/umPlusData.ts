@@ -7,15 +7,15 @@ export const UM_PLUS_SMALL_BUCKET_THRESHOLD = 200
 export type UmPlusBin = {
     index: number
     disagreement: number
-    fsrsError: number
-    rwkvError: number
+    firstError: number
+    secondError: number
     count: number
 }
 
 export type UmPlusData = {
     bins: UmPlusBin[]
-    fsrsScore: number
-    rwkvScore: number
+    firstScore: number
+    secondScore: number
     count: number
     disagreementPercentiles: { percentile: number; absoluteDisagreement: number }[]
 }
@@ -58,7 +58,7 @@ export function umPlusErrorDomain(bins: UmPlusBin[]): [number, number] {
     }
 
     let [lower, upper] = roundedTenthDomain(
-        [0, ...bins.flatMap((bin) => [bin.fsrsError, bin.rwkvError])],
+        [0, ...bins.flatMap((bin) => [bin.firstError, bin.secondError])],
         [-0.1, 0.1]
     )
     if (lower === 0) {
@@ -102,30 +102,30 @@ export function weightedRegressionSlope(
 }
 
 /**
- * Groups paired predictions by their signed disagreement (FSRS minus RWKV), then
+ * Groups paired predictions by their signed disagreement (first minus second), then
  * measures each model's mean prediction error inside the shared bins.
  */
 export function buildUmPlusData(
     samples: CalibrationSamples,
-    fsrsPredictions: Float64Array,
-    rwkvPredictions: Float64Array
+    firstPredictions: Float64Array,
+    secondPredictions: Float64Array
 ): UmPlusData {
     const sumDisagreement = Array<number>(UM_PLUS_BIN_COUNT).fill(0)
-    const sumFsrsError = Array<number>(UM_PLUS_BIN_COUNT).fill(0)
-    const sumRwkvError = Array<number>(UM_PLUS_BIN_COUNT).fill(0)
+    const sumFirstError = Array<number>(UM_PLUS_BIN_COUNT).fill(0)
+    const sumSecondError = Array<number>(UM_PLUS_BIN_COUNT).fill(0)
     const counts = Array<number>(UM_PLUS_BIN_COUNT).fill(0)
     const absoluteDisagreements = new Float64Array(sampleCount(samples))
     let pairedCount = 0
     const offset = UM_PLUS_BINS_PER_UNIT
 
     for (let i = 0; i < sampleCount(samples); i++) {
-        const fsrs = fsrsPredictions[i]
-        const rwkv = rwkvPredictions[i]
-        if (!isProbability(fsrs) || !isProbability(rwkv) || !isProbability(samples.actual[i])) {
+        const first = firstPredictions[i]
+        const second = secondPredictions[i]
+        if (!isProbability(first) || !isProbability(second) || !isProbability(samples.actual[i])) {
             continue
         }
 
-        const disagreement = fsrs - rwkv
+        const disagreement = first - second
         absoluteDisagreements[pairedCount++] = Math.abs(disagreement)
         const index = Math.max(
             0,
@@ -135,8 +135,8 @@ export function buildUmPlusData(
             )
         )
         sumDisagreement[index] += disagreement
-        sumFsrsError[index] += fsrs - samples.actual[i]
-        sumRwkvError[index] += rwkv - samples.actual[i]
+        sumFirstError[index] += first - samples.actual[i]
+        sumSecondError[index] += second - samples.actual[i]
         counts[index] += 1
     }
 
@@ -147,8 +147,8 @@ export function buildUmPlusData(
                   {
                       index,
                       disagreement: sumDisagreement[index] / count,
-                      fsrsError: sumFsrsError[index] / count,
-                      rwkvError: sumRwkvError[index] / count,
+                      firstError: sumFirstError[index] / count,
+                      secondError: sumSecondError[index] / count,
                       count,
                   },
               ]
@@ -158,8 +158,8 @@ export function buildUmPlusData(
 
     return {
         bins,
-        fsrsScore: weightedRmse(bins, (bin) => bin.fsrsError, count),
-        rwkvScore: weightedRmse(bins, (bin) => bin.rwkvError, count),
+        firstScore: weightedRmse(bins, (bin) => bin.firstError, count),
+        secondScore: weightedRmse(bins, (bin) => bin.secondError, count),
         count,
         // Nearest-rank thresholds include at least the named share of reviews.
         disagreementPercentiles:

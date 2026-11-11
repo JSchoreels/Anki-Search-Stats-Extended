@@ -375,6 +375,58 @@ function calibrationPollDelay(signal: AbortSignal) {
     })
 }
 
+export type RwkvUmPlusModel =
+    | "rwkv-big"
+    | "rwkv-small-curve"
+    | "rwkv-small-instant"
+    | "rwkv-tiny-instant"
+
+export type RwkvUmPlusProgress = {
+    jobId?: number
+    phase: string
+    current?: number
+    total?: number
+    done: boolean
+    error?: string | null
+    warnings?: string[]
+}
+
+export async function getRwkvUmPlusModelPages(
+    model: RwkvUmPlusModel,
+    reviewIds: Float64Array,
+    signal: AbortSignal,
+    onProgress: (progress: RwkvUmPlusProgress) => void
+): Promise<string | ReadableStream<Uint8Array>> {
+    async function status(endpoint: string, body: object) {
+        const response = await fetchEndpoint(endpoint, JSON.stringify(body), false, signal)
+        return JSON.parse(await response.text()) as RwkvUmPlusProgress
+    }
+    let state = await status("startRwkvUmPlusModel", { model })
+    onProgress(state)
+    while (!state.done) {
+        if (state.jobId === undefined) throw new Error("RWKV model preparation has no job ID")
+        await calibrationPollDelay(signal)
+        state = await status("rwkvUmPlusModelProgress", { job_id: state.jobId })
+        onProgress(state)
+    }
+    if (state.phase !== "complete" || state.jobId === undefined)
+        throw new Error(state.error || "RWKV model preparation failed")
+    const response = await fetchEndpoint(
+        "rwkvUmPlusModelPredictions",
+        JSON.stringify({
+            job_id: state.jobId,
+            revlog_ids: [...new Set(reviewIds)].filter((id) => Number.isInteger(id) && id > 0),
+            stream_pages: true,
+        }),
+        false,
+        signal
+    )
+    if (!response.headers?.get("Content-Type")?.startsWith("application/x-ndjson"))
+        return response.text()
+    if (!response.body) throw new Error("Missing prediction page stream")
+    return response.body
+}
+
 export async function ensureFsrsCalibration(
     cids: number[],
     signal: AbortSignal,

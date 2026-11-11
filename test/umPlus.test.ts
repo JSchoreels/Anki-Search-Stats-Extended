@@ -39,13 +39,13 @@ test("UM+ groups paired reviews by model disagreement", () => {
     expect(data.bins).toHaveLength(2)
     expect(data.bins[0]).toMatchObject({ count: 10 })
     expect(data.bins[0].disagreement).toBeCloseTo(-0.2)
-    expect(data.bins[0].fsrsError).toBeCloseTo(0)
-    expect(data.bins[0].rwkvError).toBeCloseTo(0.2)
+    expect(data.bins[0].firstError).toBeCloseTo(0)
+    expect(data.bins[0].secondError).toBeCloseTo(0.2)
     expect(data.bins[1].disagreement).toBeCloseTo(0.2)
-    expect(data.bins[1].fsrsError).toBeCloseTo(0)
-    expect(data.bins[1].rwkvError).toBeCloseTo(-0.2)
-    expect(data.fsrsScore).toBeCloseTo(0)
-    expect(data.rwkvScore).toBeCloseTo(0.2)
+    expect(data.bins[1].firstError).toBeCloseTo(0)
+    expect(data.bins[1].secondError).toBeCloseTo(-0.2)
+    expect(data.firstScore).toBeCloseTo(0)
+    expect(data.secondScore).toBeCloseTo(0.2)
 })
 
 test("UM+ includes only reviews with valid paired predictions", () => {
@@ -67,6 +67,18 @@ test("UM+ includes only reviews with valid paired predictions", () => {
     for (const item of data.disagreementPercentiles) {
         expect(item.absoluteDisagreement).toBeCloseTo(0.2)
     }
+})
+
+test("UM+ preserves model order when comparing either pair of predictions", () => {
+    const samples = [{ revlogId: 1, cardId: 1, actual: 1 }]
+    const [input, big, small] = calibrationInputs(samples, { 1: 0.8 }, { 1: 0.6 })
+    const forward = buildUmPlusData(input, big, small)
+    const reversed = buildUmPlusData(input, small, big)
+
+    expect(forward.bins[0].disagreement).toBeCloseTo(0.2)
+    expect(reversed.bins[0].disagreement).toBeCloseTo(-0.2)
+    expect(forward.firstScore).toBeCloseTo(reversed.secondScore)
+    expect(forward.secondScore).toBeCloseTo(reversed.firstScore)
 })
 
 test("UM+ measures absolute disagreement percentiles per review before binning", () => {
@@ -130,14 +142,14 @@ test("paired UM+ bin errors differ by the bin disagreement", () => {
 
     expect(data.bins).toHaveLength(1)
     const bin = data.bins[0]
-    expect(bin.fsrsError - bin.rwkvError).toBeCloseTo(bin.disagreement)
+    expect(bin.firstError - bin.secondError).toBeCloseTo(bin.disagreement)
 })
 
 test("UM+ disagreement domain rounds observed values outward to 10%", () => {
     expect(
         umPlusDisagreementDomain([
-            { index: 15, disagreement: -0.23, fsrsError: 0, rwkvError: 0, count: 1 },
-            { index: 23, disagreement: 0.17, fsrsError: 0, rwkvError: 0, count: 1 },
+            { index: 15, disagreement: -0.23, firstError: 0, secondError: 0, count: 1 },
+            { index: 23, disagreement: 0.17, firstError: 0, secondError: 0, count: 1 },
         ])
     ).toEqual([-0.3, 0.2])
 })
@@ -145,7 +157,7 @@ test("UM+ disagreement domain rounds observed values outward to 10%", () => {
 test("UM+ disagreement domain expands a single rounded value", () => {
     expect(
         umPlusDisagreementDomain([
-            { index: 24, disagreement: 0.2, fsrsError: 0, rwkvError: 0, count: 1 },
+            { index: 24, disagreement: 0.2, firstError: 0, secondError: 0, count: 1 },
         ])
     ).toEqual([0.1, 0.3])
 })
@@ -153,8 +165,8 @@ test("UM+ disagreement domain expands a single rounded value", () => {
 test("UM+ error domain covers both models and rounds outward to 10%", () => {
     expect(
         umPlusErrorDomain([
-            { index: 16, disagreement: -0.2, fsrsError: -0.12, rwkvError: 0.08, count: 200 },
-            { index: 24, disagreement: 0.2, fsrsError: 0.16, rwkvError: -0.04, count: 200 },
+            { index: 16, disagreement: -0.2, firstError: -0.12, secondError: 0.08, count: 200 },
+            { index: 24, disagreement: 0.2, firstError: 0.16, secondError: -0.04, count: 200 },
         ])
     ).toEqual([-0.2, 0.2])
 })
@@ -162,13 +174,13 @@ test("UM+ error domain covers both models and rounds outward to 10%", () => {
 test("UM+ error domain keeps zero inside the plot when errors share a sign", () => {
     expect(
         umPlusErrorDomain([
-            { index: 20, disagreement: 0, fsrsError: 0.04, rwkvError: 0.16, count: 200 },
+            { index: 20, disagreement: 0, firstError: 0.04, secondError: 0.16, count: 200 },
         ])
     ).toEqual([-0.1, 0.2])
 })
 
 function volumeBin(index: number, count: number): UmPlusBin {
-    return { index, disagreement: (index - 20) / 20, fsrsError: 0, rwkvError: 0, count }
+    return { index, disagreement: (index - 20) / 20, firstError: 0, secondError: 0, count }
 }
 
 test("UM+ hides buckets with fewer than 200 reviews by default", () => {
@@ -188,27 +200,27 @@ test("UM+ calculates review-weighted regression slopes from visible buckets", ()
         {
             ...volumeBin(16, 200),
             disagreement: -0.2,
-            fsrsError: -0.05,
-            rwkvError: 0.15,
+            firstError: -0.05,
+            secondError: 0.15,
         },
         {
             ...volumeBin(20, 400),
             disagreement: 0,
-            fsrsError: 0,
-            rwkvError: 0,
+            firstError: 0,
+            secondError: 0,
         },
         {
             ...volumeBin(24, 200),
             disagreement: 0.2,
-            fsrsError: 0.05,
-            rwkvError: -0.15,
+            firstError: 0.05,
+            secondError: -0.15,
         },
     ]
 
-    expect(weightedRegressionSlope(bins, (bin) => bin.fsrsError)).toBeCloseTo(0.25)
-    expect(weightedRegressionSlope(bins, (bin) => bin.rwkvError)).toBeCloseTo(-0.75)
+    expect(weightedRegressionSlope(bins, (bin) => bin.firstError)).toBeCloseTo(0.25)
+    expect(weightedRegressionSlope(bins, (bin) => bin.secondError)).toBeCloseTo(-0.75)
 })
 
 test("UM+ regression slope is unavailable without disagreement variation", () => {
-    expect(weightedRegressionSlope([volumeBin(20, 200)], (bin) => bin.fsrsError)).toBeUndefined()
+    expect(weightedRegressionSlope([volumeBin(20, 200)], (bin) => bin.firstError)).toBeUndefined()
 })
