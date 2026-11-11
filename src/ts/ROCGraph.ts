@@ -17,6 +17,11 @@ type DrawnRocSeries = RocSeries & {
     color: string
 }
 
+type RocGraphOptions = {
+    firstModel?: string
+    secondModel?: string
+}
+
 const percent = (value: d3.NumberValue) => `${(+value * 100).toFixed(0)}%`
 
 function sampledThresholds(points: RocPoint[], maximum = 200) {
@@ -32,7 +37,14 @@ function sampledThresholds(points: RocPoint[], maximum = 200) {
     )
 }
 
-export function renderRocGraph(svg: SVGElement, data: RocData) {
+export function renderRocGraph(
+    svg: SVGElement,
+    data: RocData,
+    {
+        firstModel = i18n("calibration-source-fsrs"),
+        secondModel = i18n("calibration-source-rwkv"),
+    }: RocGraphOptions = {}
+) {
     clearChart(svg)
 
     const { width, height } = comparisonGraphBounds()
@@ -41,13 +53,13 @@ export function renderRocGraph(svg: SVGElement, data: RocData) {
     const ticks = d3.range(0, 1.01, 0.1)
     const series: DrawnRocSeries[] = [
         {
-            ...data.fsrs,
-            model: i18n("calibration-source-fsrs"),
+            ...data.first,
+            model: firstModel,
             color: FSRS_COMPARISON_COLOUR,
         },
         {
-            ...data.rwkv,
-            model: i18n("calibration-source-rwkv"),
+            ...data.second,
+            model: secondModel,
             color: RWKV_COMPARISON_COLOUR,
         },
     ]

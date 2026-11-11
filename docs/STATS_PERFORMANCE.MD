@@ -106,8 +106,9 @@ summation order and card-cluster weighting are unchanged.
 Historical FSRS calibration preparation starts automatically once eligible
 history loads. Ordinary Statistics loads read caches immediately while preparation
 runs. FSRS and RWKV cache reads are independent, so RWKV is available while FSRS
-training is pending. Comparison graphs show loading until both cache results and
-their comparison worker result are ready; RWKV daily calculations still use all
+training is pending. The default FSRS/current-RWKV comparisons show loading until
+both cache results and their worker result are ready; other model pairings wait
+only for their selected sources. RWKV daily calculations still use all
 eligible RWKV predictions, without requiring paired FSRS predictions.
 The generation job runs as a serialized Anki background operation with native
 cancellable progress. Ordinary presets resolve once per home deck and use short

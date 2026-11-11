@@ -14,10 +14,10 @@ import { buildRwkvDailyData as referenceDaily } from "./reference/rwkvDailyData"
 import { buildUmPlusData as referenceUmPlus } from "./reference/umPlusData"
 
 function withoutRocUncertainty(data: RocData) {
-    const { difference, fsrs, rwkv, ...counts } = data
-    const { interval: fsrsInterval, ...fsrsSeries } = fsrs
-    const { interval: rwkvInterval, ...rwkvSeries } = rwkv
-    return { ...counts, fsrs: fsrsSeries, rwkv: rwkvSeries }
+    const { difference, first, second, ...counts } = data
+    const { interval: firstInterval, ...firstSeries } = first
+    const { interval: secondInterval, ...secondSeries } = second
+    return { ...counts, first: firstSeries, second: secondSeries }
 }
 
 function withoutDisagreementPercentiles(data: UmPlusData) {

@@ -480,7 +480,7 @@ um-plus-tooltip-disagreement = {$first} − {$second} disagreement: {$value}
 um-plus-tooltip-error = {$model} prediction error: {$value}
 um-plus-tooltip-volume = Paired reviews: {$count} ({$percent}% of paired reviews)
 um-plus-no-data = No reviews have eligible predictions from both selected models in this search and date range.
-um-plus-fsrs-held-out-unavailable = This comparison needs held-out FSRS predictions from the FSRS calibration cache, and none are available for this search. Replaying your current parameters would score FSRS on reviews it was usually optimised on. See the FSRS calibration status above.
+model-fsrs-held-out-unavailable = This comparison needs held-out FSRS predictions from the FSRS calibration cache, and none are available for this search. Replaying your current parameters would score FSRS on reviews it was usually optimised on. See the FSRS calibration status above.
 um-plus-help-error = Closer to 0% is better: above zero means a model overestimated recall, while below zero means it underestimated it.
 um-plus-help-direction = Right of center, the first model predicted higher recall than the second; left of center, the second predicted higher.
 um-plus-help-volume = Larger bubbles and bars mean more reviews.
@@ -489,14 +489,13 @@ um-plus-disagreement-summary = Absolute disagreement:
 um-plus-disagreement-percentile = P{$percentile} ≤ {$value} pp
 um-plus-help-percentiles = P95 ≤ X pp means at least 95% of paired reviews have an absolute prediction difference of at most X percentage points, regardless of which model predicts higher recall. P68 and P99.7 work the same way. These are measured percentiles, including hidden small buckets; each review counts, so a card can appear more than once.
 um-plus-help-small-buckets = Buckets under 200 reviews are hidden unless “Show Small Buckets” is enabled.
-um-plus-help-sample = Only reviews with valid predictions from both selected models are compared. FSRS uses held-out calibration predictions; RWKV (current) uses the existing calibration cache. Individual RWKV models use replayed review predictions, so their paired review count can differ.
-comparison-fsrs-held-out-unavailable = ROC needs held-out FSRS predictions from the FSRS calibration cache, and none are available for this search. Replaying your current parameters would score FSRS on reviews it was usually optimised on, so it is not compared with RWKV. See the FSRS calibration status above.
-roc = FSRS vs RWKV ROC
+model-comparison-help-sources = Only reviews with valid predictions from both selected models are compared. FSRS uses held-out calibration predictions; RWKV (current) uses the existing calibration cache. Individual RWKV models use replayed review predictions, so their paired review count can differ.
+roc = Model ROC Comparison
 roc-x-axis = False positive rate
 roc-y-axis = True positive rate
 roc-legend = {$model}, AUC={$auc}
 roc-legend-interval = {$model}, AUC={$auc} (95% CI {$lower}–{$upper})
-roc-auc-difference = AUC difference (FSRS − RWKV): {$difference} (95% CI {$lower} to {$upper})
+roc-auc-difference = AUC difference ({$first} − {$second}): {$difference} (95% CI {$lower} to {$upper})
 roc-chance-legend = Chance, AUC=0.5000
 roc-auc-unavailable = n/a
 roc-tooltip-threshold = {$model} threshold ≥ {$threshold}%
@@ -505,7 +504,7 @@ roc-tooltip-fpr = False positive rate: {$value}%
 roc-no-data = ROC requires paired predictions containing at least one remembered review and one forgotten review.
 roc-help-curve = Each curve plots true positive rate against false positive rate across all prediction thresholds. The orange diagonal is chance performance.
 roc-help-auc = Higher AUC is better: 1.0 perfectly ranks remembered reviews above forgotten reviews, while 0.5 is chance. Intervals are 95% confidence intervals clustered by card. When the difference interval includes 0, the two models are not distinguishable on this sample.
-roc-help-sample = Uses paired eligible FSRS and current RWKV reviews: Hard, Good, and Easy are positive; Again is negative.
+roc-help-sample = Uses reviews with eligible predictions from both selected models: Hard, Good, and Easy are positive; Again is negative.
 forgetting-curve = First Long-term Forgetting Curve
 forgetting-curve-help =
     Compares the observed rate of recall against fitted FSRS forgetting curves which are grouped by the card's first rating.

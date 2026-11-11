@@ -17,14 +17,14 @@ test("ROC compares FSRS and RWKV on the same paired reviews", () => {
     )
 
     expect(data).toMatchObject({ count: 4, positiveCount: 2, negativeCount: 2 })
-    expect(data.fsrs.auc).toBeCloseTo(1)
-    expect(data.rwkv.auc).toBeCloseTo(0)
-    expect(data.fsrs.points[0]).toEqual({
+    expect(data.first.auc).toBeCloseTo(1)
+    expect(data.second.auc).toBeCloseTo(0)
+    expect(data.first.points[0]).toEqual({
         falsePositiveRate: 0,
         truePositiveRate: 0,
         threshold: Number.POSITIVE_INFINITY,
     })
-    expect(data.fsrs.points.at(-1)).toMatchObject({
+    expect(data.first.points.at(-1)).toMatchObject({
         falsePositiveRate: 1,
         truePositiveRate: 1,
     })
@@ -42,14 +42,14 @@ test("ROC processes tied predictions together and gives them half AUC credit", (
         )
     )
 
-    expect(data.fsrs.points).toHaveLength(2)
-    expect(data.fsrs.points[1]).toEqual({
+    expect(data.first.points).toHaveLength(2)
+    expect(data.first.points[1]).toEqual({
         falsePositiveRate: 1,
         truePositiveRate: 1,
         threshold: 0.5,
     })
-    expect(data.fsrs.auc).toBeCloseTo(0.5)
-    expect(data.rwkv.auc).toBeCloseTo(0.5)
+    expect(data.first.auc).toBeCloseTo(0.5)
+    expect(data.second.auc).toBeCloseTo(0.5)
 })
 
 test("ROC excludes reviews without two valid predictions", () => {
@@ -67,7 +67,7 @@ test("ROC excludes reviews without two valid predictions", () => {
     )
 
     expect(data).toMatchObject({ count: 2, positiveCount: 1, negativeCount: 1 })
-    expect(data.fsrs.auc).toBeCloseTo(1)
+    expect(data.first.auc).toBeCloseTo(1)
 })
 
 test("ROC AUC is unavailable when the paired sample has only one outcome class", () => {
@@ -76,8 +76,8 @@ test("ROC AUC is unavailable when the paired sample has only one outcome class",
     )
 
     expect(data).toMatchObject({ count: 1, positiveCount: 1, negativeCount: 0 })
-    expect(data.fsrs).toEqual({ points: [], auc: undefined, interval: undefined })
-    expect(data.rwkv).toEqual({ points: [], auc: undefined, interval: undefined })
+    expect(data.first).toEqual({ points: [], auc: undefined, interval: undefined })
+    expect(data.second).toEqual({ points: [], auc: undefined, interval: undefined })
 })
 
 test("large ROC curves are downsampled without changing full-curve AUC", () => {
@@ -98,7 +98,7 @@ test("large ROC curves are downsampled without changing full-curve AUC", () => {
     expect(data.count).toBe(samples.length)
     expect(data.positiveCount).toBe(samples.filter((sample) => sample.actual === 1).length)
     expect(data.negativeCount).toBe(samples.filter((sample) => sample.actual === 0).length)
-    for (const series of [data.fsrs, data.rwkv]) {
+    for (const series of [data.first, data.second]) {
         expect(series.points.length).toBeLessThanOrEqual(2_003)
         expect(series.points[0]).toMatchObject({ falsePositiveRate: 0, truePositiveRate: 0 })
         expect(series.points.at(-1)).toMatchObject({ falsePositiveRate: 1, truePositiveRate: 1 })
@@ -143,6 +143,26 @@ function randomInputs(count: number, cards: number) {
     return calibrationInputs(samples, fsrs, rwkv)
 }
 
+test("reversing either model pair preserves the paired sample and reverses the AUC difference", () => {
+    const [samples, first, second] = randomInputs(400, 60)
+    first[0] = NaN
+    second[1] = NaN
+    const forward = buildRocData(samples, first, second)
+    const reversed = buildRocData(samples, second, first)
+
+    expect(forward.count).toBe(398)
+    expect([reversed.count, reversed.positiveCount, reversed.negativeCount]).toEqual([
+        forward.count,
+        forward.positiveCount,
+        forward.negativeCount,
+    ])
+    expect(reversed.first).toEqual(forward.second)
+    expect(reversed.second).toEqual(forward.first)
+    expect(reversed.difference!.value).toBeCloseTo(-forward.difference!.value, 12)
+    expect(reversed.difference!.interval.lower).toBeCloseTo(-forward.difference!.interval.upper, 12)
+    expect(reversed.difference!.interval.upper).toBeCloseTo(-forward.difference!.interval.lower, 12)
+})
+
 const z = 1.959963984540054
 const referenceInterval = (value: number, variance: number, minimum = 0) => ({
     lower: Math.max(minimum, value - z * Math.sqrt(Math.max(0, variance))),
@@ -162,8 +182,8 @@ test("AUC matches an independent pairwise Mann–Whitney count with ties", () =>
     const inputs = randomInputs(3_000, 600)
     const data = buildRocData(...inputs)
     for (const [series, predictions] of [
-        [data.fsrs, inputs[1]],
-        [data.rwkv, inputs[2]],
+        [data.first, inputs[1]],
+        [data.second, inputs[2]],
     ] as const) {
         const reference = pairwisePlacements(inputs[0].actual, predictions)
         expect(Math.abs(series.auc! - reference.auc)).toBeLessThanOrEqual(1e-12)
@@ -220,8 +240,8 @@ test("card-clustered DeLong intervals match a brute-force Obuchowski reference",
         )
     const cov = (k: number, l: number) =>
         S10(k, l) / M + S01(k, l) / N + (S11(k, l) + S11(l, k)) / (M * N)
-    expectInterval(data.fsrs.interval, referenceInterval(models[0].auc, cov(0, 0)))
-    expectInterval(data.rwkv.interval, referenceInterval(models[1].auc, cov(1, 1)))
+    expectInterval(data.first.interval, referenceInterval(models[0].auc, cov(0, 0)))
+    expectInterval(data.second.interval, referenceInterval(models[1].auc, cov(1, 1)))
     const difference = models[0].auc - models[1].auc
     expect(Math.abs(data.difference!.value - difference)).toBeLessThanOrEqual(1e-12)
     expectInterval(
@@ -238,8 +258,8 @@ test("one review per card matches classic unclustered DeLong variance", () => {
         return values.reduce((sum, value) => sum + (value - mean) ** 2, 0) / (values.length - 1)
     }
     for (const [series, scores] of [
-        [data.fsrs, inputs[1]],
-        [data.rwkv, inputs[2]],
+        [data.first, inputs[1]],
+        [data.second, inputs[2]],
     ] as const) {
         const reference = pairwisePlacements(inputs[0].actual, scores)
         const positive = reference.placements.filter((_, i) => inputs[0].actual[i] === 1)
@@ -266,7 +286,7 @@ test("duplicated reviews on the same card have wider intervals than independent 
         duplicateScores(fsrs),
         duplicateScores(rwkv)
     )
-    for (const model of ["fsrs", "rwkv"] as const) {
+    for (const model of ["first", "second"] as const) {
         expect(clustered[model].auc).toBe(independent[model].auc)
         const width = (interval: { lower: number; upper: number } | undefined) =>
             interval!.upper - interval!.lower
@@ -286,11 +306,11 @@ test.each([0, 1])("intervals are unavailable with only one cluster for class %i"
         { 1: 0.6, 2: 0.5, 3: 0.2, 4: 0.8 }
     )
     const data = buildRocData(...inputs)
-    expect(data.fsrs.auc).toBeDefined()
-    expect(data.rwkv.auc).toBeDefined()
-    expect(data.fsrs.points.length).toBeGreaterThan(0)
-    expect(data.fsrs.interval).toBeUndefined()
-    expect(data.rwkv.interval).toBeUndefined()
+    expect(data.first.auc).toBeDefined()
+    expect(data.second.auc).toBeDefined()
+    expect(data.first.points.length).toBeGreaterThan(0)
+    expect(data.first.interval).toBeUndefined()
+    expect(data.second.interval).toBeUndefined()
     expect(data.difference).toBeUndefined()
 })
 
@@ -312,7 +332,7 @@ test("repeated reviews allocate confidence accumulators per card instead of per 
     })
     try {
         const result = buildRocData(samples, predictions, predictions)
-        expect(result.fsrs.auc).toBe(1)
+        expect(result.first.auc).toBe(1)
         expect(result.difference?.value).toBe(0)
         expect(allocations.filter((size) => size === count)).toHaveLength(5)
         expect(allocations.filter((size) => size === 2)).toHaveLength(6)
@@ -346,7 +366,7 @@ test.each(["distinct", "ties", "final small step"])(
         }
         const reference = referenceRoc(samples, fsrs, rwkv)
         const result = buildRocData(...calibrationInputs(samples, fsrs, rwkv))
-        for (const model of ["fsrs", "rwkv"] as const) {
+        for (const model of ["first", "second"] as const) {
             expect(result[model].points).toEqual(reference[model].points)
             expect(result[model].auc).toBe(reference[model].auc)
             expect(result[model].points.at(-1)).toMatchObject({

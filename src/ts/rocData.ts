@@ -20,8 +20,8 @@ export type RocSeries = {
 
 export type RocData = {
     difference: AucDifference | undefined
-    fsrs: RocSeries
-    rwkv: RocSeries
+    first: RocSeries
+    second: RocSeries
     count: number
     positiveCount: number
     negativeCount: number
@@ -96,17 +96,17 @@ function buildRocSeries(
 }
 
 /**
- * Builds both ROC curves from the same eligible reviews so FSRS and RWKV are
+ * Builds both ROC curves from the same eligible reviews so both models are
  * compared on an identical positive/negative sample.
  */
 export function buildRocData(
     samples: CalibrationSamples,
-    fsrsPredictions: Float64Array,
-    rwkvPredictions: Float64Array
+    firstPredictions: Float64Array,
+    secondPredictions: Float64Array
 ): RocData {
     const capacity = sampleCount(samples)
-    const fsrsScores = new Float64Array(capacity)
-    const rwkvScores = new Float64Array(capacity)
+    const firstScores = new Float64Array(capacity)
+    const secondScores = new Float64Array(capacity)
     const actuals = new Uint8Array(capacity)
     const cardIds = new Float64Array(capacity)
     let count = 0
@@ -114,19 +114,19 @@ export function buildRocData(
     let negativeCount = 0
 
     for (let i = 0; i < sampleCount(samples); i++) {
-        const fsrs = fsrsPredictions[i]
-        const rwkv = rwkvPredictions[i]
+        const first = firstPredictions[i]
+        const second = secondPredictions[i]
         if (
-            !isProbability(fsrs) ||
-            !isProbability(rwkv) ||
+            !isProbability(first) ||
+            !isProbability(second) ||
             (samples.actual[i] !== 0 && samples.actual[i] !== 1)
         ) {
             continue
         }
 
         const actual = samples.actual[i] as 0 | 1
-        fsrsScores[count] = fsrs
-        rwkvScores[count] = rwkv
+        firstScores[count] = first
+        secondScores[count] = second
         actuals[count] = actual
         cardIds[count] = samples.cardIds[i]
         count++
@@ -137,34 +137,34 @@ export function buildRocData(
         }
     }
 
-    const fsrsPlacements = new Float64Array(count)
-    const rwkvPlacements = new Float64Array(count)
-    const fsrs = buildRocSeries(
-        fsrsScores.subarray(0, count),
+    const firstPlacements = new Float64Array(count)
+    const secondPlacements = new Float64Array(count)
+    const first = buildRocSeries(
+        firstScores.subarray(0, count),
         actuals,
-        fsrsPlacements,
+        firstPlacements,
         positiveCount,
         negativeCount
     )
-    const rwkv = buildRocSeries(
-        rwkvScores.subarray(0, count),
+    const second = buildRocSeries(
+        secondScores.subarray(0, count),
         actuals,
-        rwkvPlacements,
+        secondPlacements,
         positiveCount,
         negativeCount
     )
     const difference = clusteredIntervals(
-        fsrs,
-        rwkv,
+        first,
+        second,
         actuals,
         cardIds,
-        fsrsPlacements,
-        rwkvPlacements,
+        firstPlacements,
+        secondPlacements,
         positiveCount,
         negativeCount
     )
 
-    return { fsrs, rwkv, difference, count, positiveCount, negativeCount }
+    return { first, second, difference, count, positiveCount, negativeCount }
 }
 
 function aucInterval(value: number, variance: number, minimum: number): AucInterval {
@@ -173,38 +173,38 @@ function aucInterval(value: number, variance: number, minimum: number): AucInter
 }
 
 function clusteredIntervals(
-    fsrs: RocSeries,
-    rwkv: RocSeries,
+    first: RocSeries,
+    second: RocSeries,
     actual: Uint8Array,
     cardIds: Float64Array,
-    fsrsPlacements: Float64Array,
-    rwkvPlacements: Float64Array,
+    firstPlacements: Float64Array,
+    secondPlacements: Float64Array,
     M: number,
     N: number
 ): AucDifference | undefined {
-    if (fsrs.auc === undefined || rwkv.auc === undefined) return undefined
+    if (first.auc === undefined || second.auc === undefined) return undefined
 
     // Card-clustered DeLong (Obuchowski 1997): reviews of one card are correlated,
     // matching the card-level bootstrap used for calibration bands.
     const clusters = new Map<number, number>()
-    for (const cardId of cardIds.subarray(0, fsrsPlacements.length)) {
+    for (const cardId of cardIds.subarray(0, firstPlacements.length)) {
         if (!clusters.has(cardId)) clusters.set(cardId, clusters.size)
     }
     const m = new Float64Array(clusters.size)
     const n = new Float64Array(clusters.size)
     const x = [new Float64Array(m.length), new Float64Array(m.length)]
     const y = [new Float64Array(m.length), new Float64Array(m.length)]
-    for (let review = 0; review < fsrsPlacements.length; review++) {
+    for (let review = 0; review < firstPlacements.length; review++) {
         const cardId = cardIds[review]
         const cluster = clusters.get(cardId)!
         if (actual[review] === 1) {
             m[cluster]++
-            x[0][cluster] += fsrsPlacements[review]
-            x[1][cluster] += rwkvPlacements[review]
+            x[0][cluster] += firstPlacements[review]
+            x[1][cluster] += secondPlacements[review]
         } else {
             n[cluster]++
-            y[0][cluster] += fsrsPlacements[review]
-            y[1][cluster] += rwkvPlacements[review]
+            y[0][cluster] += firstPlacements[review]
+            y[1][cluster] += secondPlacements[review]
         }
     }
     const I = clusters.size
@@ -216,7 +216,7 @@ function clusteredIntervals(
     }
     if (I10 < 2 || I01 < 2 || I < 2) return undefined
 
-    const aucs = [fsrs.auc, rwkv.auc]
+    const aucs = [first.auc, second.auc]
     const covariance = (k: number, l: number) => {
         let sum10 = 0
         let sum01 = 0
@@ -236,13 +236,13 @@ function clusteredIntervals(
             (I * sum11) / ((I - 1) * M * N)
         )
     }
-    const fsrsVariance = Math.max(0, covariance(0, 0))
-    const rwkvVariance = Math.max(0, covariance(1, 1))
-    fsrs.interval = aucInterval(fsrs.auc, fsrsVariance, 0)
-    rwkv.interval = aucInterval(rwkv.auc, rwkvVariance, 0)
-    const value = fsrs.auc - rwkv.auc
+    const firstVariance = Math.max(0, covariance(0, 0))
+    const secondVariance = Math.max(0, covariance(1, 1))
+    first.interval = aucInterval(first.auc, firstVariance, 0)
+    second.interval = aucInterval(second.auc, secondVariance, 0)
+    const value = first.auc - second.auc
     return {
         value,
-        interval: aucInterval(value, fsrsVariance + rwkvVariance - 2 * covariance(0, 1), -1),
+        interval: aucInterval(value, firstVariance + secondVariance - 2 * covariance(0, 1), -1),
     }
 }

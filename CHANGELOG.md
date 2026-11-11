@@ -4,6 +4,8 @@
 
 ### User facing changes
 
+- Compare any two FSRS or RWKV models in Model ROC Comparison, with paired-review AUC and confidence intervals.
+
 - Rename Daily Surprise to Daily Log Loss to better describe the metric.
 
 - Show Model Calibration for any one or two FSRS or RWKV models, including the Big, Small Curve, Small Instant and Tiny Instant variants. Calibration and UM+ reuse the same prepared model predictions.
@@ -79,6 +81,8 @@
 - Identify unloaded data in troubleshooting exports instead of reporting misleading zero counts. Cancelling export writes no file.
 
 ### Technical details
+
+- Reuse the shared model prediction store for ROC; run model-neutral paired ROC and card-clustered DeLong calculations for the selected models.
 
 - Share aligned RWKV model predictions and calibration bins between the Calibration and UM+ panels. Compute a model's card-bootstrap confidence intervals only when Calibration requests them, and discard obsolete results when the selected history changes.
 

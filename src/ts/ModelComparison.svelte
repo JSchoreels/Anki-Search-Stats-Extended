@@ -1,6 +1,7 @@
 <script lang="ts">
     import { onDestroy } from "svelte"
     import UMPlus from "./UMPlus.svelte"
+    import ROC from "./ROC.svelte"
     import ModelSelector from "./ModelSelector.svelte"
     import Warning from "./Warning.svelte"
     import { heldOutFsrsPredictions, type CalibrationSamples } from "./calibrationSamples"
@@ -15,8 +16,10 @@
     import type { FsrsCalibrationStats, RwkvCalibrationStats } from "./stores"
     import type { Tasks } from "./statsTasks"
     import { runStatsTask } from "./statsWorkerClient"
+    import type { RocData } from "./rocData"
     import type { UmPlusData } from "./umPlusData"
 
+    export let kind: "umPlus" | "roc"
     export let samples: CalibrationSamples | null
     export let fsrs: FsrsCalibrationStats | null
     export let rwkv: RwkvCalibrationStats | null
@@ -26,7 +29,8 @@
 
     let first = "fsrs"
     let second = "rwkv"
-    let data: UmPlusData | null = null
+    let umPlusData: UmPlusData | null = null
+    let rocData: RocData | null = null
     let inputs: unknown[] | undefined
     let cancel: (() => void) | undefined
     $: models = modelOptions()
@@ -48,9 +52,10 @@
             ...selectedVariants.flatMap((model) => variants[model]?.warnings ?? []),
         ])
     )
-    $: calculate(samples, first, second, fsrs, rwkv, comparison, fsrsGenerating, variants)
+    $: calculate(kind, samples, first, second, fsrs, rwkv, comparison, fsrsGenerating, variants)
 
     function calculate(
+        kind: "umPlus" | "roc",
         samples: CalibrationSamples | null,
         first: string,
         second: string,
@@ -61,6 +66,7 @@
         variants: ModelPredictionStates
     ) {
         const next = [
+            kind,
             samples,
             first,
             second,
@@ -76,12 +82,21 @@
         inputs = next
         cancel?.()
         cancel = undefined
-        data = null
+        umPlusData = null
+        rocData = null
         if (!samples) return
         if (first === "fsrs" && second === "rwkv") {
-            data = comparison?.umPlus ?? null
+            if (kind === "umPlus") umPlusData = comparison?.umPlus ?? null
+            else rocData = comparison?.roc ?? null
             return
         }
+        if (
+            (first === "fsrs" || second === "fsrs") &&
+            fsrs &&
+            fsrs.cachedPredictionCount === 0 &&
+            fsrs.predictions.length > 0
+        )
+            return
         const fsrsPredictions = fsrs && heldOutFsrsPredictions(fsrs)
         const source = (model: string) =>
             model === "fsrs"
@@ -94,11 +109,19 @@
         const firstPredictions = source(first)
         const secondPredictions = source(second)
         if (!firstPredictions || !secondPredictions) return
-        cancel = latestResult(
-            (result) => (data = result),
-            (signal) =>
-                runStatsTask("umPlus", [samples, firstPredictions, secondPredictions], signal)
-        )
+        if (kind === "umPlus") {
+            cancel = latestResult(
+                (result) => (umPlusData = result),
+                (signal) =>
+                    runStatsTask("umPlus", [samples, firstPredictions, secondPredictions], signal)
+            )
+        } else {
+            cancel = latestResult(
+                (result) => (rocData = result),
+                (signal) =>
+                    runStatsTask("roc", [samples, firstPredictions, secondPredictions], signal)
+            )
+        }
     }
 
     onDestroy(() => cancel?.())
@@ -137,11 +160,15 @@
 {:else if missingSource || (usesFsrs && missingFsrs && fsrsGenerating)}
     <div class="calibration-message">{i18n("loading")}</div>
 {:else if usesFsrs && missingFsrs}
-    <div class="calibration-message">{i18n("um-plus-fsrs-held-out-unavailable")}</div>
-{:else if !data}
+    <div class="calibration-message">{i18n("model-fsrs-held-out-unavailable")}</div>
+{:else if (kind === "umPlus" && !umPlusData) || (kind === "roc" && !rocData)}
     <div class="calibration-message">{i18n("loading")}</div>
-{:else if data.count > 0}
-    <UMPlus {data} firstModel={firstLabel} secondModel={secondLabel} />
+{:else if kind === "umPlus" && umPlusData && umPlusData.count > 0}
+    <UMPlus data={umPlusData} firstModel={firstLabel} secondModel={secondLabel} />
+{:else if kind === "roc" && rocData && rocData.positiveCount > 0 && rocData.negativeCount > 0}
+    <ROC data={rocData} firstModel={firstLabel} secondModel={secondLabel} />
 {:else}
-    <div class="calibration-message">{i18n("um-plus-no-data")}</div>
+    <div class="calibration-message">
+        {i18n(kind === "umPlus" ? "um-plus-no-data" : "roc-no-data")}
+    </div>
 {/if}

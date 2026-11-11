@@ -18,7 +18,7 @@ axis fits both visible daily and averaged values.
 
 The shared comparison worker reuses the calibration samples and each model's
 index-aligned prediction array. FSRS uses the same held-out cached predictions
-as the default UM+ pair and ROC; the calibration graph's replay fallback is excluded. RWKV uses
+as the default UM+ and ROC pairs; the calibration graph's replay fallback is excluded. RWKV uses
 its existing eligible historical predictions. Each model includes its own available
 predictions, without requiring a matching prediction from the other model. This
 means daily review counts and actual recall rates can differ between models.

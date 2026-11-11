@@ -71,7 +71,7 @@ export function calibrationDiagnosticReport(
         `RWKV cached post-optimization reviews: ${rwkv.roleCounts?.post_optimization ?? 0}; post-optimization replay reviews: ${rwkv.roleCounts?.post_optimization_replay ?? 0}`,
         `RWKV selected review dates (UTC): ${rwkvSelected.range}`,
         `Paired FSRS + RWKV reviews: ${paired.count}${usesCache ? "" : " (replay predictions are not compared with RWKV)"}`,
-        `ROC AUC (card-clustered DeLong): FSRS ${aucSummary(roc.fsrs)}; RWKV ${aucSummary(roc.rwkv)}`,
+        `ROC AUC (card-clustered DeLong): FSRS ${aucSummary(roc.first)}; RWKV ${aucSummary(roc.second)}`,
         `AUC difference (FSRS − RWKV): ${roc.difference ? `${signed(roc.difference.value)} (${interval(roc.difference.interval, signed)})` : "unavailable"}`,
         `UM+ populated buckets: ${paired.bins.length}; buckets visible with default >=200 filter: ${visibleUmPlusBins(paired.bins, false).length}`,
         ...((rwkv.roleCounts?.post_optimization_replay ?? 0) > 0

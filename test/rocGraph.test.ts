@@ -9,6 +9,7 @@ jest.mock("../src/ts/i18n", () => ({
             return `${args?.model}, AUC=${args?.auc} (95% CI ${args?.lower}–${args?.upper})`
         }
         if (key === "roc-chance-legend") return "Chance, AUC=0.5000"
+        if (key === "roc-tooltip-threshold") return `${args?.model} threshold ≥ ${args?.threshold}%`
         return key
     },
 }))
@@ -18,12 +19,13 @@ jest.mock("../src/ts/stores", () => ({
 }))
 
 import { renderRocGraph } from "../src/ts/ROCGraph"
+import { tooltip } from "../src/ts/stores"
 
 test("ROC graph renders both model curves, chance baseline, axes, and AUC", () => {
     const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg")
 
     renderRocGraph(svg, {
-        fsrs: {
+        first: {
             points: [
                 { falsePositiveRate: 0, truePositiveRate: 0, threshold: Infinity },
                 { falsePositiveRate: 0, truePositiveRate: 1, threshold: 0.8 },
@@ -32,7 +34,7 @@ test("ROC graph renders both model curves, chance baseline, axes, and AUC", () =
             auc: 1,
             interval: { lower: 0.9, upper: 1 },
         },
-        rwkv: {
+        second: {
             points: [
                 { falsePositiveRate: 0, truePositiveRate: 0, threshold: Infinity },
                 { falsePositiveRate: 1, truePositiveRate: 0, threshold: 0.8 },
@@ -66,4 +68,41 @@ test("ROC graph renders both model curves, chance baseline, axes, and AUC", () =
     expect(svg.querySelector(".roc-legend")?.getAttribute("transform")).toBe("translate(260, 281)")
     expect(svg.querySelector(".grid-lines-x line")?.getAttribute("y2")).toBe("325")
     expect(svg.querySelector(".grid-lines-y line")?.getAttribute("x2")).toBe("600")
+})
+
+test("ROC graph labels selected models in curves, legends, and threshold tooltips", () => {
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg")
+    renderRocGraph(
+        svg,
+        {
+            first: {
+                points: [{ falsePositiveRate: 0, truePositiveRate: 1, threshold: 0.7 }],
+                auc: 0.9,
+                interval: undefined,
+            },
+            second: {
+                points: [{ falsePositiveRate: 1, truePositiveRate: 1, threshold: 0.4 }],
+                auc: 0.8,
+                interval: undefined,
+            },
+            difference: undefined,
+            count: 2,
+            positiveCount: 1,
+            negativeCount: 1,
+        },
+        { firstModel: "RWKV Big", secondModel: "RWKV Small Instant" }
+    )
+    const curves = [...svg.querySelectorAll(".roc-series")]
+    expect(curves.map((curve) => curve.getAttribute("data-model"))).toEqual([
+        "RWKV Big",
+        "RWKV Small Instant",
+    ])
+    expect(svg.textContent).toContain("RWKV Big, AUC=0.9000")
+    expect(svg.textContent).toContain("RWKV Small Instant, AUC=0.8000")
+    svg.querySelector(".roc-thresholds circle")!.dispatchEvent(
+        new MouseEvent("mouseover", { bubbles: true })
+    )
+    expect(tooltip.set).toHaveBeenLastCalledWith(
+        expect.objectContaining({ text: expect.arrayContaining(["RWKV Big threshold ≥ 70.0%"]) })
+    )
 })

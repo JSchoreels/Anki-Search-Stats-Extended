@@ -91,7 +91,7 @@ export function alignPredictions(
 }
 
 // Replay predictions come from parameters usually fitted on these reviews, so
-// FSRS vs RWKV comparisons only use held-out cached FSRS predictions.
+// Comparisons involving FSRS only use held-out cached FSRS predictions.
 export function heldOutFsrsPredictions(fsrs: {
     cachedPredictionCount: number
     predictions: Float64Array

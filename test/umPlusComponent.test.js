@@ -18,6 +18,7 @@ const plugin = {
             if (
                 [
                     "./UMPlus.svelte",
+                    "./ROCGraph",
                     "./FSRSCalibration.svelte",
                     "./FsrsCalibrationStatus.svelte",
                     "./Warning.svelte",
@@ -32,7 +33,7 @@ const plugin = {
             let contents
             if (args.path === "entry") {
                 contents = `import { mount, unmount, flushSync } from "svelte";
-                    import App from "${project}/src/ts/UMPlusComparison.svelte";
+                    import App from "${project}/src/ts/ModelComparison.svelte";
                     import Calibration from "${project}/src/ts/ModelCalibration.svelte";
                     import { createModelPredictionSources } from "${project}/src/ts/modelPredictionSources";
                     export const sources = samples => {
@@ -41,7 +42,9 @@ const plugin = {
                         return modelPredictions;
                     };
                     export const start = (target, props, modelPredictions = sources(props.samples)) =>
-                        mount(App, { target, props: { ...props, modelPredictions } });
+                        mount(App, { target, props: { ...props, kind: "umPlus", modelPredictions } });
+                    export const startROC = (target, props, modelPredictions = sources(props.samples)) =>
+                        mount(App, { target, props: { ...props, kind: "roc", modelPredictions } });
                     export const startCalibration = (target, props, modelPredictions) =>
                         mount(Calibration, { target, props: { ...props, modelPredictions } });
                     export { unmount, flushSync };`
@@ -54,6 +57,10 @@ const plugin = {
             } else if (args.path === "./Warning.svelte") {
                 contents = compile("<slot />", { filename: "Warning.svelte", generate: "client" })
                     .js.code
+            } else if (args.path === "./ROCGraph") {
+                contents = `export function renderRocGraph(svg, data, options) {
+                    svg.dataset.first = options.firstModel; svg.dataset.second = options.secondModel;
+                }`
             } else if (args.path === "./FSRSCalibration.svelte") {
                 contents = compile(
                     `<script>export let data; export let series;</script>
@@ -68,7 +75,10 @@ const plugin = {
                     generate: "client",
                 }).js.code
             } else if (args.path === "./i18n") {
-                contents = `export function i18n(key, args) { return key + (args?.error ? ": " + args.error : ""); }`
+                contents = `export function i18n(key, args) {
+                    if (key === "roc-auc-difference") return "AUC (" + args.first + " − " + args.second + "): " + args.difference;
+                    return key + (args?.error ? ": " + args.error : "");
+                }`
             } else if (args.path === "./search") {
                 contents = `export async function getRwkvUmPlusModelPages(model, ids, signal, progress) {
                     globalThis.modelLoads.push(model);
@@ -84,6 +94,11 @@ const plugin = {
                         return { predictions: new Float64Array([value]), bins: [{real:1, predicted:value, count:1}], warnings: [] };
                     }
                     if (task === "calibrationBands") { globalThis.bandCalls++; return [[0.2, 0.8]]; }
+                    if (task === "roc") {
+                        globalThis.rocPairs.push([Array.from(args[1]), Array.from(args[2])]);
+                        return {count:2, positiveCount:globalThis.rocPositiveCount, negativeCount:1,
+                            difference:{value:0.25,interval:{lower:-0.1,upper:0.6}}};
+                    }
                     globalThis.modelPairs.push([Array.from(args[1]), Array.from(args[2])]);
                     return { count: 1, bins: [], disagreementPercentiles: [] };
                 }`
@@ -115,6 +130,8 @@ test("model selectors load and compare each requested model on the chosen side",
         requestAnimationFrame: window.requestAnimationFrame.bind(window),
         modelLoads: [],
         modelPairs: [],
+        rocPairs: [],
+        rocPositiveCount: 1,
         bandCalls: 0,
         failNextModel: null,
         holdModel: null,
@@ -170,7 +187,7 @@ test("model selectors load and compare each requested model on the chosen side",
         "rwkv-small-instant",
         "rwkv-tiny-instant",
     ])
-    expect(document.body.textContent).toContain("um-plus-fsrs-held-out-unavailable")
+    expect(document.body.textContent).toContain("model-fsrs-held-out-unavailable")
 
     first.value = "rwkv-big"
     first.dispatchEvent(new window.Event("change", { bubbles: true }))
@@ -341,6 +358,59 @@ test("model selectors load and compare each requested model on the chosen side",
     flush()
     await settle()
     expect(global.modelLoads.sort()).toEqual(Object.keys(global.modelValues).sort())
+    const rocTarget = document.createElement("div")
+    document.body.append(rocTarget)
+    const defaultRoc = {
+        count: 2,
+        positiveCount: 1,
+        negativeCount: 1,
+        difference: { value: 0.1, interval: { lower: -0.2, upper: 0.3 } },
+    }
+    const rocApp = bundle.exports.startROC(
+        rocTarget,
+        {
+            samples,
+            fsrs,
+            rwkv,
+            comparison: { roc: defaultRoc },
+            fsrsGenerating: false,
+        },
+        shared
+    )
+    flush()
+    const [rocFirst, rocSecond] = rocTarget.querySelectorAll("select")
+    expect(rocTarget.querySelector("svg").dataset.first).toBe(labels.fsrs)
+    expect(rocTarget.querySelector("svg").dataset.second).toBe(labels.rwkv)
+    for (const left of Object.keys(values)) {
+        for (const right of Object.keys(values)) {
+            rocFirst.value = left
+            rocFirst.dispatchEvent(new window.Event("change", { bubbles: true }))
+            rocSecond.value = right
+            rocSecond.dispatchEvent(new window.Event("change", { bubbles: true }))
+            flush()
+            await settle()
+            const graph = rocTarget.querySelector("svg")
+            expect(graph.dataset.first).toBe(labels[left])
+            expect(graph.dataset.second).toBe(labels[right])
+            expect(rocTarget.querySelector(".roc-difference").textContent).toContain(
+                `AUC (${labels[left]} − ${labels[right]})`
+            )
+            if (left !== "fsrs" || right !== "rwkv") {
+                expect(global.rocPairs.at(-1)).toEqual([[values[left]], [values[right]]])
+            }
+        }
+    }
+    expect(global.modelLoads.sort()).toEqual(Object.keys(global.modelValues).sort())
+    expect(global.bandCalls).toBe(4)
+    global.rocPositiveCount = 0
+    rocFirst.value = "rwkv-big"
+    rocFirst.dispatchEvent(new window.Event("change", { bubbles: true }))
+    flush()
+    await settle()
+    expect(rocTarget.querySelector("svg")).toBeNull()
+    expect(rocTarget.textContent).toContain("roc-no-data")
+    global.rocPositiveCount = 1
+    bundle.exports.unmount(rocApp)
     bundle.exports.unmount(umApp)
     bundle.exports.unmount(calibrationApp)
     shared.destroy()
@@ -401,5 +471,31 @@ test("model selectors load and compare each requested model on the chosen side",
     expect(calibrationTarget.querySelector('[data-model="model-rwkv-big"]')).not.toBeNull()
     bundle.exports.unmount(pendingApp)
     pendingSources.destroy()
+
+    const missingSource = bundle.exports.sources(samples)
+    const missingApp = bundle.exports.startROC(
+        rocTarget,
+        {
+            samples,
+            fsrs: { ...fsrs, cachedPredictionCount: 0 },
+            rwkv,
+            comparison: { roc: defaultRoc },
+            fsrsGenerating: false,
+        },
+        missingSource
+    )
+    flush()
+    expect(rocTarget.textContent).toContain("model-fsrs-held-out-unavailable")
+    const [missingFirst, missingSecond] = rocTarget.querySelectorAll("select")
+    missingFirst.value = "rwkv-big"
+    missingFirst.dispatchEvent(new window.Event("change", { bubbles: true }))
+    missingSecond.value = "rwkv-small-instant"
+    missingSecond.dispatchEvent(new window.Event("change", { bubbles: true }))
+    flush()
+    await settle()
+    expect(rocTarget.querySelector("svg").dataset.first).toBe(labels["rwkv-big"])
+    expect(rocTarget.querySelector("svg").dataset.second).toBe(labels["rwkv-small-instant"])
+    bundle.exports.unmount(missingApp)
+    missingSource.destroy()
     dom.window.close()
 })

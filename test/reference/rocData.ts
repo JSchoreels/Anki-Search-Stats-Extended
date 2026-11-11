@@ -15,8 +15,8 @@ export type RocSeries = {
 }
 
 export type RocData = {
-    fsrs: RocSeries
-    rwkv: RocSeries
+    first: RocSeries
+    second: RocSeries
     count: number
     positiveCount: number
     negativeCount: number
@@ -124,8 +124,8 @@ export function buildRocData(
     }
 
     return {
-        fsrs: buildRocSeries(fsrsOutcomes, positiveCount, negativeCount),
-        rwkv: buildRocSeries(rwkvOutcomes, positiveCount, negativeCount),
+        first: buildRocSeries(fsrsOutcomes, positiveCount, negativeCount),
+        second: buildRocSeries(rwkvOutcomes, positiveCount, negativeCount),
         count: fsrsOutcomes.length,
         positiveCount,
         negativeCount,

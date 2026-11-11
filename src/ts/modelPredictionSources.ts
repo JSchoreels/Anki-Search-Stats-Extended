@@ -37,8 +37,8 @@ export function modelOptions() {
     ]
 }
 
-// A Statistics page shares these aligned arrays between Calibration and UM+.
-// Loading a model for UM+ alone does not start the expensive confidence bootstrap.
+// A Statistics page shares these aligned arrays between Calibration, UM+, and ROC.
+// Loading a model for a comparison alone does not start the expensive confidence bootstrap.
 export function createModelPredictionSources() {
     let samples: CalibrationSamples | null = null
     let controller = new AbortController()

@@ -113,10 +113,10 @@ Warnings remain logged on the main thread and displayed by the existing panels.
 Automatic preparation, revision triggers, cohort selection, provenance counts,
 warning totals, and the `refresh_after_fsrs` handshake are unchanged.
 
-Model Calibration and UM+ share one on-demand store for the explicit RWKV model
-prediction arrays and their calibration bins. Selecting a model in either
+Model Calibration, UM+, and ROC share one on-demand store for the explicit RWKV model
+prediction arrays and their calibration bins. Selecting a model in any
 graph loads its aligned predictions once for the current sample. Calibration
-requests that model's bootstrap intervals when needed; UM+ alone does not start
+requests that model's bootstrap intervals when needed; UM+ or ROC alone do not start
 the bootstrap. When the search or date range changes, the old requests are
 cancelled and their results cannot replace the new sample. The existing
 profile-local model replay files remain the source for subsequent page loads.
@@ -596,14 +596,14 @@ deviations. Empty paired populations have no percentile summary.
 Because both models use the same reviews in every bin, their plotted errors obey
 `first model error - second model error = disagreement`, apart from floating-point rounding.
 
-## FSRS vs RWKV ROC and AUC
+## Model ROC Comparison and AUC
 
-The **FSRS vs RWKV ROC** graph follows UM+ and always uses paired, eligible
-FSRS and current-RWKV review-time predictions, independent of the UM+ selectors.
-A review is positive when its answer was Hard, Good,
-or Easy and negative when its answer was Again. Reviews missing either model's
-valid probability are excluded, which keeps the comparison on an identical
-sample for FSRS and RWKV.
+The **Model ROC Comparison** graph follows UM+. Its independent selectors default
+to FSRS and RWKV (current) and offer the same individual RWKV models as UM+.
+It reuses their model-specific predictions and computes ROC for the selected
+pair in a statistics worker. A review is positive when its answer was Hard,
+Good, or Easy and negative when its answer was Again. Reviews missing either
+model's valid probability are excluded, so both curves use an identical sample.
 
 For each model, reviews are sorted from highest to lowest predicted recall.
 Each distinct prediction defines a threshold whose x-coordinate is the false
@@ -616,14 +616,14 @@ no forgotten review.
 AUC is calculated with trapezoidal integration over the complete threshold
 curve as thresholds are processed; the complete point list is not retained. `1.0` means every remembered review is ranked above every forgotten
 review; `0.5` matches chance ranking. The orange dashed diagonal shows this
-chance baseline. FSRS uses the same steel-blue color and RWKV the same sea-green
-color as Calibration and the default UM+ comparison. Hover targets are sampled only
+chance baseline. The first selected model uses steel blue and the second uses
+sea green, as in UM+. Hover targets are sampled only
 for responsiveness on large histories. The plotted curve retains the existing
 points whenever either axis advances by at least 0.001 and always retains the
 final endpoint. AUC and confidence placements still use all distinct thresholds,
 so display sampling does not change the metrics.
 
-Each model's AUC and the paired AUC difference (`FSRS − RWKV`) include 95%
+Each model's AUC and the paired AUC difference (`first model − second model`) include 95%
 card-clustered DeLong confidence intervals (Obuchowski 1997). Clustering by card
 accounts for correlated reviews of the same card, matching the card-level
 bootstrap used for calibration bands. When the difference interval includes
@@ -634,15 +634,14 @@ available when both outcome classes are present. The six confidence-interval
 accumulators are sized to eligible card clusters, rather than the number of
 paired reviews; their accumulation order and covariance calculation are unchanged.
 
-UM+ and ROC compare only held-out FSRS predictions from Anki's calibration
-cache. When that cache returns nothing, the in-browser replay still feeds the
-FSRS calibration graph, but the comparison receives `NaN` FSRS predictions:
-replaying current parameters, usually optimised on these same reviews, would
-favour FSRS against held-out RWKV predictions. Both panels show loading while
-FSRS calibration generation is queued or running, then a held-out-unavailable
-message if the cache stays empty. An RWKV-only UM+ pair does not wait for FSRS
-predictions. Daily RWKV scores remain available independently; daily FSRS scores use the
-same held-out cache boundary.
+When FSRS is selected, UM+ and ROC use only held-out FSRS predictions from
+Anki's calibration cache. If that cache returns nothing, browser replay still
+feeds Model Calibration, but the comparison does not use those replay predictions:
+current parameters were usually optimised on the same reviews. A comparison
+involving FSRS shows loading while calibration generation is queued or running,
+then a held-out-unavailable message if the cache stays empty. RWKV-only UM+ and
+ROC pairs do not wait for FSRS predictions. Daily RWKV scores remain available
+independently; daily FSRS scores use the same held-out cache boundary.
 
 ## Calibration Confidence Intervals
 

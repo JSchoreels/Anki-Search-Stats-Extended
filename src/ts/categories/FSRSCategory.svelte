@@ -11,8 +11,7 @@
     import MemorisedGraphContainer from "../MemorisedGraphContainer.svelte"
     import MemorisedSourceControls from "../MemorisedSourceControls.svelte"
     import ModelCalibration from "../ModelCalibration.svelte"
-    import UMPlusComparison from "../UMPlusComparison.svelte"
-    import ROC from "../ROC.svelte"
+    import ModelComparison from "../ModelComparison.svelte"
     import CurrentDisagreement from "../CurrentDisagreement.svelte"
     import WorkloadForecast from "../WorkloadForecast.svelte"
     import DailyPredictionGraph from "../DailyPredictionGraph.svelte"
@@ -153,18 +152,11 @@
 
     $: review_leftmost = minIndex($revlogStats?.intervals ?? {}) - today
     $: time_machine_min = review_leftmost
-    $: rocData = $calibrationComparison?.roc
     // Comparisons and daily FSRS scores use held-out cached predictions, never replay.
-    $: fsrsHeldOutMissing =
-        !!$fsrsCalibrationStats &&
-        $fsrsCalibrationStats.cachedPredictionCount === 0 &&
-        $fsrsCalibrationStats.predictions.length > 0
     $: fsrsHeldOutGenerating =
         $fsrsCalibrationGeneration?.phase === "queued" ||
         $fsrsCalibrationGeneration?.phase === "running"
-    $: umPlusLoading =
-        $calibrationComparison === null || (fsrsHeldOutMissing && fsrsHeldOutGenerating)
-    $: umPlusWarnings = Array.from(
+    $: comparisonWarnings = Array.from(
         new Set([
             ...($fsrsCalibrationStats?.warnings ?? []),
             ...($rwkvCalibrationStats?.warnings ?? []),
@@ -212,7 +204,8 @@
     <CalibrationGraphContainer graphId="fsrs:um-plus">
         <h1 slot="title">{i18n("um-plus")}</h1>
         <div slot="graph" class="calibration-panel">
-            <UMPlusComparison
+            <ModelComparison
+                kind="umPlus"
                 samples={$calibration_samples}
                 fsrs={$fsrsCalibrationStats}
                 rwkv={$rwkvCalibrationStats}
@@ -228,31 +221,27 @@
             <li>{i18n("um-plus-help-scores")}</li>
             <li>{i18n("um-plus-help-percentiles")}</li>
             <li>{i18n("um-plus-help-small-buckets")}</li>
-            <li>{i18n("um-plus-help-sample")}</li>
+            <li>{i18n("model-comparison-help-sources")}</li>
         </ul>
     </CalibrationGraphContainer>
     <CalibrationGraphContainer graphId="fsrs:roc">
         <h1 slot="title">{i18n("roc")}</h1>
         <div slot="graph" class="calibration-panel">
-            {#if umPlusWarnings.length > 0}
-                <Warning always>{umPlusWarnings.join(" ")}</Warning>
-            {/if}
-            {#if umPlusLoading}
-                <div class="calibration-message">{i18n("loading")}</div>
-            {:else if fsrsHeldOutMissing}
-                <div class="calibration-message">
-                    {i18n("comparison-fsrs-held-out-unavailable")}
-                </div>
-            {:else if rocData && rocData.positiveCount > 0 && rocData.negativeCount > 0}
-                <ROC data={rocData} />
-            {:else}
-                <div class="calibration-message">{i18n("roc-no-data")}</div>
-            {/if}
+            <ModelComparison
+                kind="roc"
+                samples={$calibration_samples}
+                fsrs={$fsrsCalibrationStats}
+                rwkv={$rwkvCalibrationStats}
+                comparison={$calibrationComparison}
+                fsrsGenerating={fsrsHeldOutGenerating}
+                {modelPredictions}
+            />
         </div>
         <ul class="um-plus-help">
             <li>{i18n("roc-help-curve")}</li>
             <li>{i18n("roc-help-auc")}</li>
             <li>{i18n("roc-help-sample")}</li>
+            <li>{i18n("model-comparison-help-sources")}</li>
         </ul>
     </CalibrationGraphContainer>
     <CurrentDisagreement />
@@ -261,8 +250,8 @@
         <CalibrationGraphContainer graphId={`fsrs:daily-${metric}`}>
             <h1 slot="title">{i18n(`daily-prediction-${metric}`)}</h1>
             <div slot="graph" class="calibration-panel">
-                {#if umPlusWarnings.length}
-                    <Warning always>{umPlusWarnings.join(" ")}</Warning>
+                {#if comparisonWarnings.length}
+                    <Warning always>{comparisonWarnings.join(" ")}</Warning>
                 {/if}
                 {#if $calibrationComparison === null}
                     <div class="calibration-message">{i18n("loading")}</div>
