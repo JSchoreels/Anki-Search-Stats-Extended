@@ -107,13 +107,13 @@ calculations continue to accept only finite probabilities within `[0, 1]`.
 Once history and both calibration stores load, the `comparison` worker task
 builds UM+, ROC, and both models' daily results, with replay-only FSRS predictions
 replaced by `NaN` (see the ROC section). The default UM+, ROC, and daily panels
-display loading until this result is ready and cancel obsolete computations
-through `latestResult`.
+reuse its results when available. Daily panels can also show each selected source
+as soon as its predictions are ready; obsolete computations are cancelled.
 Warnings remain logged on the main thread and displayed by the existing panels.
 Automatic preparation, revision triggers, cohort selection, provenance counts,
 warning totals, and the `refresh_after_fsrs` handshake are unchanged.
 
-Model Calibration, UM+, ROC, and Daily Recall Gap share one on-demand store for the explicit RWKV model
+Model Calibration, UM+, ROC, Daily Recall Gap, and Daily Log Loss share one on-demand store for the explicit RWKV model
 prediction arrays and their calibration bins. Selecting a model in any
 graph loads its aligned predictions once for the current sample. Calibration
 requests that model's bootstrap intervals when needed; the comparison graphs alone do not start
@@ -524,9 +524,9 @@ or request new predictions.
 The Card Retrievability comparison is followed by **Daily Recall Gap** and
 **Daily Log Loss**, each with editable moving averages and date zoom. Daily
 Recall Gap compares any one or two models' eligible predictions with the actual
-recall rate across all graded reviews that day. Daily Log Loss retains its
-FSRS / RWKV / Both selector and uses each model's eligible predictions and matching
-outcomes. FSRS uses held-out cached predictions, without the calibration replay
+recall rate across all graded reviews that day. Daily Log Loss also compares any
+one or two models and uses each model's eligible predictions and matching
+outcomes. Both default to FSRS and current RWKV. FSRS uses held-out cached predictions, without the calibration replay
 fallback. Their calculations and grouping are documented in
 [Daily recall gap and log loss](RWKV_DAILY_SURPRISE.MD).
 

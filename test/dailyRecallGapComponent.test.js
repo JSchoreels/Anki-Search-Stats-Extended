@@ -38,13 +38,15 @@ const plugin = {
             let contents
             if (args.path === "entry") {
                 contents = `import {mount, unmount, flushSync} from "svelte";
-                    import Gap from "${project}/src/ts/DailyRecallGapComparison.svelte";
+                    import Gap from "${project}/src/ts/DailyModelComparison.svelte";
                     import {createModelPredictionSources} from "${project}/src/ts/modelPredictionSources";
+                    import {createDailyModelSources} from "${project}/src/ts/dailyModelSources";
                     import {calibration_samples, fsrsCalibrationStats, rwkvCalibrationStats} from "./stores";
                     export function start(target, props) {
                         calibration_samples.set(props.samples); fsrsCalibrationStats.set(props.fsrs); rwkvCalibrationStats.set(props.rwkv);
                         const modelPredictions = createModelPredictionSources(); modelPredictions.setSamples(props.samples);
-                        return {app:mount(Gap,{target,props:{...props,modelPredictions}}),modelPredictions};
+                        const dailyModels = createDailyModelSources(); dailyModels.setSamples(props.samples);
+                        return {app:mount(Gap,{target,props:{metric:"standardizedGap",...props,modelPredictions,dailyModels}}),modelPredictions,dailyModels};
                     }
                     export {unmount,flushSync};`
             } else if (args.path === "./stores") {
@@ -67,6 +69,7 @@ const plugin = {
                     if(task === "calibrationPredictions") return {predictions:new Float64Array([globalThis.modelValues[args[1]]]),bins:[],warnings:[]};
                     if(task === "dailyPredictionData") return [{day:20000,count:1,actualRecall:1,predictedRecall:args[1][0],standardizedGap:0,logLoss:0}];
                     if(task === "dailyRecallModelReviewWindows") return Object.fromEntries(args[2].map(item => [item.model,[{day:20000,value:(0.75-item.predictions[0])*100}]]));
+                    if(task === "dailyPredictionModelReviewWindows") return Object.fromEntries(args[1].map(item => [item.model,[{day:20000,value:-Math.log2(item.predictions[0])}]]));
                     throw new Error("Unexpected task "+task);
                 }`
             } else if (args.path === "./MemorisedBar") {
@@ -218,6 +221,7 @@ test("daily gap compares any selected models against all-day recall", async () =
     expect(global.lastGraph.series.map((item) => item.model)).toEqual(["rwkv-big"])
     bundle.exports.unmount(run.app)
     run.modelPredictions.destroy()
+    run.dailyModels.destroy()
 
     const missingFsrs = {
         predictions: new Float64Array([0.8]),
@@ -254,5 +258,58 @@ test("daily gap compares any selected models against all-day recall", async () =
     ])
     bundle.exports.unmount(secondRun.app)
     secondRun.modelPredictions.destroy()
+    secondRun.dailyModels.destroy()
+
+    global.tasks = []
+    global.modelLoads = []
+    const lossRun = bundle.exports.start(document.body, {
+        metric: "logLoss",
+        samples,
+        fsrs,
+        rwkv,
+        comparison,
+    })
+    await settle()
+    const lossSelects = [...document.querySelectorAll("select")]
+    expect(lossSelects.map((select) => select.value)).toEqual(["fsrs", "rwkv"])
+    expect(global.lastGraph.metric).toBe("logLoss")
+    expect(global.lastGraph.series.map((item) => item.data[0].actualRecall)).toEqual([1, 1])
+    expect(global.tasks.some((item) => item.task === "dailyActualRecall")).toBe(false)
+    for (const first of models) {
+        lossSelects[0].value = first
+        lossSelects[0].dispatchEvent(new window.Event("change", { bubbles: true }))
+        await settle()
+        for (const second of models) {
+            lossSelects[1].value = second
+            lossSelects[1].dispatchEvent(new window.Event("change", { bubbles: true }))
+            await settle()
+            expect(global.lastGraph.series.map((item) => item.model)).toEqual([first, second])
+            expect(global.lastGraph.series.map((item) => item.color)).toEqual([
+                "steelblue",
+                "seagreen",
+            ])
+            expect(global.lastGraph.series.map((item) => item.dashed)).toEqual([false, true])
+        }
+    }
+    lossSelects[0].value = "rwkv-big"
+    lossSelects[0].dispatchEvent(new window.Event("change", { bubbles: true }))
+    lossSelects[1].value = "rwkv-tiny-instant"
+    lossSelects[1].dispatchEvent(new window.Event("change", { bubbles: true }))
+    await settle()
+    document.querySelector("[data-review-window]").click()
+    await settle()
+    const lossRequest = global.tasks
+        .filter((item) => item.task === "dailyPredictionModelReviewWindows")
+        .at(-1)
+    expect(lossRequest.args[1].map((item) => item.model)).toEqual(["rwkv-big", "rwkv-tiny-instant"])
+    expect(lossRequest.args[2]).toBe("logLoss")
+    expect(global.lastGraph.options.reviewValues["rwkv-big"][0].value).toBeCloseTo(-Math.log2(0.3))
+    lossSelects[1].value = "none"
+    lossSelects[1].dispatchEvent(new window.Event("change", { bubbles: true }))
+    await settle()
+    expect(global.lastGraph.series.map((item) => item.model)).toEqual(["rwkv-big"])
+    bundle.exports.unmount(lossRun.app)
+    lossRun.modelPredictions.destroy()
+    lossRun.dailyModels.destroy()
     dom.window.close()
 })

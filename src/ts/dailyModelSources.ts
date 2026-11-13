@@ -15,6 +15,7 @@ export function createDailyModelSources() {
     let samples: CalibrationSamples | null = null
     let states: DailyModelStates = {}
     const controllers = new Map<string, AbortController>()
+    const selections = new Map<symbol, Set<string>>()
     const store = writable<DailyModelStates>(states)
 
     function update(model: string, state: DailyModelState) {
@@ -72,8 +73,8 @@ export function createDailyModelSources() {
             })
     }
 
-    function select(models: string[]) {
-        const selected = new Set(models)
+    function cancelUnselected() {
+        const selected = new Set([...selections.values()].flatMap((models) => [...models]))
         for (const [model, controller] of controllers) {
             if (!selected.has(model) && states[model]?.phase === "loading") {
                 controller.abort()
@@ -83,6 +84,16 @@ export function createDailyModelSources() {
                 store.set(states)
             }
         }
+    }
+
+    function select(owner: symbol, models: string[]) {
+        selections.set(owner, new Set(models))
+        cancelUnselected()
+    }
+
+    function release(owner: symbol) {
+        selections.delete(owner)
+        cancelUnselected()
     }
 
     function retry(model: string) {
@@ -98,8 +109,11 @@ export function createDailyModelSources() {
         subscribe: store.subscribe,
         setSamples,
         select,
+        release,
         ensure,
         retry,
         destroy: () => setSamples(null),
     }
 }
+
+export type DailyModelSources = ReturnType<typeof createDailyModelSources>

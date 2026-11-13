@@ -117,15 +117,15 @@ history loads. Ordinary Statistics loads read caches immediately while preparati
 runs. FSRS and RWKV cache reads are independent, so RWKV is available while FSRS
 training is pending. The default UM+ and ROC FSRS/current-RWKV comparisons show
 loading until both cache results and their worker result are ready; other model
-pairings wait only for their selected sources. Daily Recall Gap can show each
-available model independently and uses a separate compact
+pairings wait only for their selected sources. Both daily graphs show each
+available model independently; Daily Recall Gap uses a separate compact
 per-day count of all graded reviews from the existing history worker. Each
-selected model's daily predictions are aggregated once per sample and joined to
-those counts; the default pair reuses already calculated daily aggregates when
+selected model's daily predictions are aggregated once per sample and shared
+between the daily graphs; the gap graph joins them to those counts. The default pair reuses already calculated daily aggregates when
 available. Review-count windows run in the history worker over all graded
 reviews, matching available selected-model predictions by review ID. They retain
 bounded rolling buffers and discard obsolete results when the search or selection
-changes. Daily Log Loss still uses each model's eligible predictions independently.
+changes. Daily Log Loss uses each model's eligible predictions and review windows independently.
 The generation job runs as a serialized Anki background operation with native
 cancellable progress. Ordinary presets resolve once per home deck and use short
 native preset searches. Overlay routing retains exact per-card settings, with

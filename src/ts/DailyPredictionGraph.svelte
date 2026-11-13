@@ -82,31 +82,39 @@
         reviewValues = undefined
         reviewError = ""
         if (!needed || !samples) return
-        if (selected ? !history || !unique.size : !fsrsStats || !rwkvStats) return
+        if (
+            selected
+                ? !unique.size || (selectedMetric === "rawGap" && !history)
+                : !fsrsStats || !rwkvStats
+        )
+            return
         const request = new AbortController()
         reviewRequest = request
-        const task = selected
-            ? runStatsTask(
-                  "dailyRecallModelReviewWindows",
-                  [
-                      history!,
-                      samples,
-                      [...unique].map(([model, predictions]) => ({ model, predictions })),
-                      windowReviews,
-                  ],
-                  request.signal
-              )
-            : runStatsTask(
-                  "dailyPredictionReviewWindows",
-                  [
-                      samples,
-                      heldOutFsrsPredictions(fsrsStats!),
-                      rwkvStats!.predictions,
-                      selectedMetric,
-                      windowReviews,
-                  ],
-                  request.signal
-              )
+        const selectedModels = [...unique].map(([model, predictions]) => ({ model, predictions }))
+        const task =
+            selected && selectedMetric === "rawGap"
+                ? runStatsTask(
+                      "dailyRecallModelReviewWindows",
+                      [history!, samples, selectedModels, windowReviews],
+                      request.signal
+                  )
+                : selected
+                  ? runStatsTask(
+                        "dailyPredictionModelReviewWindows",
+                        [samples, selectedModels, selectedMetric, windowReviews],
+                        request.signal
+                    )
+                  : runStatsTask(
+                        "dailyPredictionReviewWindows",
+                        [
+                            samples,
+                            heldOutFsrsPredictions(fsrsStats!),
+                            rwkvStats!.predictions,
+                            selectedMetric,
+                            windowReviews,
+                        ],
+                        request.signal
+                    )
         void task.then(
             (result) => {
                 if (!request.signal.aborted) reviewValues = result
@@ -214,7 +222,9 @@
         <p class="average-help">
             {i18n(
                 selectedSeries
-                    ? "daily-prediction-model-average-help"
+                    ? metric === "logLoss"
+                        ? "daily-prediction-log-loss-model-average-help"
+                        : "daily-prediction-model-average-help"
                     : "daily-prediction-average-help"
             )}
         </p>

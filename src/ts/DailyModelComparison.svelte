@@ -4,8 +4,8 @@
     import ModelSelector from "./ModelSelector.svelte"
     import Warning from "./Warning.svelte"
     import type { CalibrationSamples } from "./calibrationSamples"
-    import { createDailyModelSources } from "./dailyModelSources"
-    import type { DailyPredictionPoint } from "./dailyPredictionData"
+    import type { DailyModelSources } from "./dailyModelSources"
+    import type { DailyPredictionMetric, DailyPredictionPoint } from "./dailyPredictionData"
     import { applyDailyActualRecall, type DailyActualRecall } from "./dailyRecallGap"
     import { FSRS_COMPARISON_COLOUR, RWKV_COMPARISON_COLOUR } from "./graph"
     import { i18n } from "./i18n"
@@ -25,6 +25,8 @@
     export let rwkv: RwkvCalibrationStats | null
     export let comparison: ReturnType<Tasks["comparison"]> | null
     export let modelPredictions: ModelPredictionSources
+    export let dailyModels: DailyModelSources
+    export let metric: DailyPredictionMetric
 
     type Source = {
         id: string
@@ -45,7 +47,7 @@
     let actualError = ""
     let actualHistory: StatsHistory | null | undefined
     let actualRequest: AbortController | undefined
-    const dailyModels = createDailyModelSources()
+    const owner = Symbol("daily-model-comparison")
 
     function loadActual(history: StatsHistory | null) {
         if (history === actualHistory) return
@@ -120,8 +122,7 @@
         else dailyModels.retry(item.id)
     }
 
-    $: dailyModels.setSamples(samples)
-    $: loadActual($revlogs)
+    $: if (metric === "standardizedGap") loadActual($revlogs)
     $: models = modelOptions()
     $: variants = $modelPredictions
     $: selected = second === "none" ? [first] : [first, second]
@@ -130,7 +131,7 @@
     $: sources = selected.map((model, index) =>
         source(model, index, variants, fsrs, rwkv, comparison, models)
     )
-    $: dailyModels.select(selected)
+    $: dailyModels.select(owner, selected)
     $: if (samples)
         sources.forEach((item) => {
             if (item.phase === "ready" && item.predictions !== undefined)
@@ -146,25 +147,29 @@
         (item, index) => statuses.findIndex((other) => other.id === item.id) === index
     )
     $: warnings = Array.from(new Set(sources.flatMap((item) => item.warnings)))
-    $: available = actual
-        ? statuses.flatMap((item) => {
-              const state = daily[item.id]
-              return item.phase === "ready" && item.dataPhase === "ready" && state?.data
-                  ? [
-                        {
-                            model: item.id,
-                            label: item.label,
-                            color: item.color,
-                            dashed: item.dashed,
-                            predictions: item.predictions ?? null,
-                            data: applyDailyActualRecall(state.data, actual!),
-                        },
-                    ]
-                  : []
-          })
-        : []
+    $: available =
+        metric !== "standardizedGap" || actual
+            ? statuses.flatMap((item) => {
+                  const state = daily[item.id]
+                  return item.phase === "ready" && item.dataPhase === "ready" && state?.data
+                      ? [
+                            {
+                                model: item.id,
+                                label: item.label,
+                                color: item.color,
+                                dashed: item.dashed,
+                                predictions: item.predictions ?? null,
+                                data:
+                                    metric === "standardizedGap"
+                                        ? applyDailyActualRecall(state.data, actual!)
+                                        : state.data,
+                            },
+                        ]
+                      : []
+              })
+            : []
     $: pending =
-        !actual ||
+        (metric === "standardizedGap" && !actual) ||
         statuses.some(
             (item) =>
                 item.phase === "loading" ||
@@ -172,7 +177,7 @@
         )
     onDestroy(() => {
         actualRequest?.abort()
-        dailyModels.destroy()
+        dailyModels.release(owner)
     })
 </script>
 
@@ -214,7 +219,18 @@
     {/if}
 {/each}
 {#if available.length}
-    <DailyPredictionGraph fsrs={[]} rwkv={[]} metric="standardizedGap" selectedSeries={available} />
+    <DailyPredictionGraph fsrs={[]} rwkv={[]} {metric} selectedSeries={available} />
 {:else if pending && !actualError && !uniqueStatuses.some((item) => item.phase === "loading" && isRwkvModel(item.id))}
     <div class="calibration-message">{i18n("loading")}</div>
 {/if}
+
+<style>
+    .calibration-message {
+        display: flex;
+        flex: 1;
+        align-items: center;
+        justify-content: center;
+        color: var(--fg-faint);
+        text-align: center;
+    }
+</style>

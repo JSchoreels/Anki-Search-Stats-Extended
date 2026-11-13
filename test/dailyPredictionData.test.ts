@@ -5,6 +5,7 @@ import {
     dailyPredictionValue,
 } from "../src/ts/dailyPredictionData"
 import { dayToMs } from "../src/ts/revlogGraphs"
+import { runStatsTaskLocally } from "../src/ts/statsTasks"
 import { calibrationInputs } from "./calibrationInputs"
 
 const firstDay = 20000
@@ -256,6 +257,35 @@ test("review windows sort samples and omit unavailable predictions", () => {
     expect(() => dailyPredictionReviewWindow(...inputs, "rawGap", 0)).toThrow(
         "Invalid review window"
     )
+})
+
+test("selected models use their own eligible reviews in log-loss windows", () => {
+    const reviews = [review(firstDay, 0, 1), review(firstDay + 1, 0, 0), review(firstDay + 2, 0, 1)]
+    const [samples, first] = calibrationInputs(reviews, {
+        [reviews[0].revlogId]: 0.5,
+        [reviews[2].revlogId]: 0.25,
+    })
+    const [, second] = calibrationInputs(reviews, {
+        [reviews[1].revlogId]: 0.75,
+        [reviews[2].revlogId]: 0.5,
+    })
+    const windows = runStatsTaskLocally("dailyPredictionModelReviewWindows", [
+        samples,
+        [
+            { model: "a", predictions: first },
+            { model: "b", predictions: second },
+        ],
+        "logLoss",
+        2,
+    ])
+    expect(windows.a).toEqual([
+        { day: firstDay, value: 1 },
+        { day: firstDay + 2, value: 1.5 },
+    ])
+    expect(windows.b).toEqual([
+        { day: firstDay + 1, value: 2 },
+        { day: firstDay + 2, value: 1.5 },
+    ])
 })
 
 test("a deterministic-only review window has an undefined standardized gap", () => {

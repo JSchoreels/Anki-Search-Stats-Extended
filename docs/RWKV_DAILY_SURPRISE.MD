@@ -7,22 +7,21 @@ Two graphs follow **FSRS vs RWKV Card Retrievability**, in this order:
 2. **Daily Log Loss** shows mean binary log loss in bits per eligible review.
 
 Both respect the Statistics search and review date range, and offer independent
-moving-average and [drag-to-zoom](TIME_AXIS_ZOOM.MD) controls. The gap graph
-offers FSRS, RWKV (current), RWKV Big, RWKV Small Curve, RWKV Small Instant and
-RWKV Tiny Instant in either position; the second model can be set to None. Its
-default is FSRS and RWKV (current). The first model uses blue and the second uses
-green. Daily Log Loss retains its separate FSRS / RWKV / Both control.
+moving-average and [drag-to-zoom](TIME_AXIS_ZOOM.MD) controls. Both graphs
+offer FSRS, RWKV (current), RWKV Big, RWKV Small Curve, RWKV Small Instant and
+RWKV Tiny Instant in either position; the second model can be set to None. Each
+defaults to FSRS and RWKV (current). The first model uses blue and the second
+uses green.
 
-The gap graph shares the model prediction store with Model Calibration, UM+ and
+Both graphs share the model prediction store with Model Calibration, UM+ and
 ROC. Explicit RWKV models are prepared on selection and their predictions are
-reused. Daily aggregates are computed in the statistics worker and reused for
-the current sample; selecting a model does not start calibration bootstrap.
+reused. Daily aggregates are computed in the statistics worker and shared by
+the two daily graphs for the current sample; selecting a model does not start calibration bootstrap.
 Preparation progress, source warnings, failures and retry remain visible. A
 model without predictions shows a no-data message while another available model
 can still be displayed. FSRS uses held-out cached predictions, not the calibration
-graph's replay fallback. Daily Log Loss continues to use the existing FSRS and
-current-RWKV comparison results. No new persisted data or database operations
-are introduced.
+graph's replay fallback. The default pair reuses existing daily comparison
+results when available. No new persisted data or database operations are introduced.
 
 ## Daily recall gap
 
@@ -86,8 +85,8 @@ their mean individual log loss. At the beginning of history, windows use all
 available reviews until full.
 
 With smoothing enabled, colored lines show the selected average and daily lines
-and points are faint grey; the first gap model's grey line is solid and the
-second is dashed. For Daily Log Loss, FSRS is solid and RWKV dashed. Disable
+and points are faint grey; the first model's grey line is solid and the
+second is dashed in both graphs. Disable
 smoothing to restore colored daily values. Averages are computed before zoom
 crops the visible dates. Each panel's controls are local to the mounted view.
 
@@ -95,9 +94,9 @@ crops the visible dates. Each panel's controls are local to the mounted view.
 
 `test/dailyRecallGap.test.ts` covers all-review daily recall, independent model
 predictions and review-count windows. `test/dailyRecallGapComponent.test.js`
-exercises model selection and reuse. `test/dailyPredictionData.test.ts` and
+exercises model selection and reuse for both graphs. `test/dailyPredictionData.test.ts` and
 `test/dailyPredictionGraph.test.ts` cover scoring, smoothing, labels, tooltips,
-gaps, zoom and the retained Daily Log Loss behavior.
+gaps, zoom and Daily Log Loss scoring.
 
 Build with `npm run build`, package with `./package.sh`, and synchronize with
 `./copy_to_anki.sh`. Python bridge changes require a full Anki restart.

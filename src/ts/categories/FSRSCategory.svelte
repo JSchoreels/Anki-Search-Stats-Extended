@@ -14,8 +14,7 @@
     import ModelComparison from "../ModelComparison.svelte"
     import CurrentDisagreement from "../CurrentDisagreement.svelte"
     import WorkloadForecast from "../WorkloadForecast.svelte"
-    import DailyPredictionGraph from "../DailyPredictionGraph.svelte"
-    import DailyRecallGapComparison from "../DailyRecallGapComparison.svelte"
+    import DailyModelComparison from "../DailyModelComparison.svelte"
     import DailyLineGraph from "../DailyLineGraph.svelte"
     import ForgettingCurve from "../ForgettingCurve.svelte"
     import TimeMachineScroll from "../TimeMachineScroll.svelte"
@@ -44,11 +43,17 @@
     import * as d3 from "d3"
     import type { DailyPredictionMetric } from "../dailyPredictionData"
     import { createModelPredictionSources } from "../modelPredictionSources"
+    import { createDailyModelSources } from "../dailyModelSources"
 
     const dailyMetrics: DailyPredictionMetric[] = ["standardizedGap", "logLoss"]
     const modelPredictions = createModelPredictionSources()
+    const dailyModels = createDailyModelSources()
     $: modelPredictions.setSamples($calibration_samples)
-    onDestroy(() => modelPredictions.destroy())
+    $: dailyModels.setSamples($calibration_samples)
+    onDestroy(() => {
+        modelPredictions.destroy()
+        dailyModels.destroy()
+    })
 
     $: truncated = $searchLimit !== 0
     $: realScroll = -Math.abs($scroll)
@@ -157,12 +162,6 @@
     $: fsrsHeldOutGenerating =
         $fsrsCalibrationGeneration?.phase === "queued" ||
         $fsrsCalibrationGeneration?.phase === "running"
-    $: comparisonWarnings = Array.from(
-        new Set([
-            ...($fsrsCalibrationStats?.warnings ?? []),
-            ...($rwkvCalibrationStats?.warnings ?? []),
-        ])
-    )
 </script>
 
 <GraphCategory hidden_title="FSRS" config_name="fsrs">
@@ -251,28 +250,15 @@
         <CalibrationGraphContainer graphId={`fsrs:daily-${metric}`}>
             <h1 slot="title">{i18n(`daily-prediction-${metric}`)}</h1>
             <div slot="graph" class="calibration-panel">
-                {#if metric === "standardizedGap"}
-                    <DailyRecallGapComparison
-                        samples={$calibration_samples}
-                        fsrs={$fsrsCalibrationStats}
-                        rwkv={$rwkvCalibrationStats}
-                        comparison={$calibrationComparison}
-                        {modelPredictions}
-                    />
-                {:else}
-                    {#if comparisonWarnings.length}
-                        <Warning always>{comparisonWarnings.join(" ")}</Warning>
-                    {/if}
-                    {#if $calibrationComparison === null}
-                        <div class="calibration-message">{i18n("loading")}</div>
-                    {:else}
-                        <DailyPredictionGraph
-                            fsrs={$calibrationComparison.fsrsDaily}
-                            rwkv={$calibrationComparison.rwkvDaily}
-                            {metric}
-                        />
-                    {/if}
-                {/if}
+                <DailyModelComparison
+                    samples={$calibration_samples}
+                    fsrs={$fsrsCalibrationStats}
+                    rwkv={$rwkvCalibrationStats}
+                    comparison={$calibrationComparison}
+                    {modelPredictions}
+                    {dailyModels}
+                    {metric}
+                />
             </div>
             <p>{i18n(`daily-prediction-${metric}-help`)}</p>
             <p>
@@ -402,15 +388,6 @@
         min-height: 16rem;
         flex-direction: column;
         gap: 0.5rem;
-    }
-
-    .calibration-message {
-        display: flex;
-        flex: 1;
-        align-items: center;
-        justify-content: center;
-        color: var(--fg-faint);
-        text-align: center;
     }
 
     .um-plus-help {

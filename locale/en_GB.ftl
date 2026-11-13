@@ -579,6 +579,7 @@ daily-prediction-rawGap-average-value = {$days}-day average: {$value} pp
 daily-prediction-average-series = {$label} ({$days}-day average)
 daily-prediction-average-help = Colored lines show the selected window; grey lines and dots show daily values (FSRS solid, RWKV dashed). Calendar-day and study-day windows weight available days equally; review windows include each eligible review once.
 daily-prediction-model-average-help = Colored lines show the selected window; grey lines and dots show daily values (first model solid, second dashed). Calendar-day and study-day windows weight available days equally. Review windows use the last N reviews; the predicted average uses those with predictions.
+daily-prediction-log-loss-model-average-help = Colored lines show the selected window; grey lines and dots show daily values (first model solid, second dashed). Calendar-day and study-day windows weight available days equally. Review windows use each model's last N eligible predicted reviews.
 daily-prediction-recall-error = Could not calculate daily recall: {$error}
 averaging-moving-average = Moving average
 averaging-window-size = Moving average window size
@@ -607,7 +608,7 @@ daily-prediction-logLoss-help =
     This also reflects the uncertainty of the cards reviewed; it is not a pure calibration score.
 daily-prediction-sample-help =
     Uses each model's eligible held-out review predictions, grouped by Anki day. Again counts as forgotten; Hard, Good and Easy count as remembered.
-    Same-day repetitions and excluded calibration reviews are omitted. FSRS and RWKV use their available predictions independently, so their review counts can differ. Days without eligible predictions remain gaps. FSRS replay estimates are excluded.
+    Same-day repetitions and excluded calibration reviews are omitted. Each model uses its available predictions independently, so review counts can differ. Days without eligible predictions remain gaps. FSRS replay estimates are excluded.
 
 show-question = Show?
 increase-date-range = Increase date range

@@ -49,7 +49,7 @@ test("unselected or obsolete calculations cannot publish, and failures can be re
     store.setSamples(samples)
     store.ensure("rwkv-big", new Float64Array([0.6]))
     const oldSignal = worker.mock.calls[0][2]
-    store.select([])
+    store.select(Symbol(), [])
     expect(oldSignal.aborted).toBe(true)
     resolve([point])
     await flush()
@@ -64,6 +64,28 @@ test("unselected or obsolete calculations cannot publish, and failures can be re
     expect(get(store)["rwkv-big"]?.phase).toBe("ready")
     store.setSamples(calibrationSamplesFrom([{ revlogId: 200, cardId: 2, actual: 0 }]))
     expect(get(store)).toEqual({})
+    store.destroy()
+})
+
+test("a daily calculation remains active while either graph still selects the model", async () => {
+    let resolve!: (value: (typeof point)[]) => void
+    worker.mockReturnValueOnce(new Promise((done) => (resolve = done)) as never)
+    const store = createDailyModelSources()
+    const gap = Symbol("gap")
+    const loss = Symbol("loss")
+    store.setSamples(samples)
+    store.select(gap, ["rwkv-big"])
+    store.select(loss, ["rwkv-big"])
+    store.ensure("rwkv-big", new Float64Array([0.6]))
+    const signal = worker.mock.calls[0][2]
+    store.select(gap, ["fsrs"])
+    expect(signal.aborted).toBe(false)
+    store.release(gap)
+    expect(signal.aborted).toBe(false)
+    resolve([point])
+    await flush()
+    expect(get(store)["rwkv-big"]?.phase).toBe("ready")
+    store.release(loss)
     store.destroy()
 })
 

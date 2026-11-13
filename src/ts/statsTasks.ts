@@ -56,6 +56,20 @@ function dailyPredictionReviewWindows(
     }
 }
 
+function dailyPredictionModelReviewWindows(
+    samples: CalibrationSamples,
+    models: { model: string; predictions: Float64Array }[],
+    metric: DailyPredictionDisplayMetric,
+    reviews: number
+) {
+    return Object.fromEntries(
+        models.map(({ model, predictions }) => [
+            model,
+            dailyPredictionReviewWindow(samples, predictions, metric, reviews),
+        ])
+    )
+}
+
 const tasks = {
     revlog: calculateRevlogStats,
     maturation: calculateMaturationHistory,
@@ -70,6 +84,7 @@ const tasks = {
     roc: buildRocData,
     dailyPredictionData: buildDailyPredictionData,
     dailyPredictionReviewWindows,
+    dailyPredictionModelReviewWindows,
     dailyActualRecall,
     dailyRecallModelReviewWindows,
     fsrsReviewWindow: calculateFsrsReviewWindow,
