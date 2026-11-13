@@ -15,6 +15,7 @@
     import CurrentDisagreement from "../CurrentDisagreement.svelte"
     import WorkloadForecast from "../WorkloadForecast.svelte"
     import DailyPredictionGraph from "../DailyPredictionGraph.svelte"
+    import DailyRecallGapComparison from "../DailyRecallGapComparison.svelte"
     import DailyLineGraph from "../DailyLineGraph.svelte"
     import ForgettingCurve from "../ForgettingCurve.svelte"
     import TimeMachineScroll from "../TimeMachineScroll.svelte"
@@ -250,21 +251,37 @@
         <CalibrationGraphContainer graphId={`fsrs:daily-${metric}`}>
             <h1 slot="title">{i18n(`daily-prediction-${metric}`)}</h1>
             <div slot="graph" class="calibration-panel">
-                {#if comparisonWarnings.length}
-                    <Warning always>{comparisonWarnings.join(" ")}</Warning>
-                {/if}
-                {#if $calibrationComparison === null}
-                    <div class="calibration-message">{i18n("loading")}</div>
-                {:else}
-                    <DailyPredictionGraph
-                        fsrs={$calibrationComparison.fsrsDaily}
-                        rwkv={$calibrationComparison.rwkvDaily}
-                        {metric}
+                {#if metric === "standardizedGap"}
+                    <DailyRecallGapComparison
+                        samples={$calibration_samples}
+                        fsrs={$fsrsCalibrationStats}
+                        rwkv={$rwkvCalibrationStats}
+                        comparison={$calibrationComparison}
+                        {modelPredictions}
                     />
+                {:else}
+                    {#if comparisonWarnings.length}
+                        <Warning always>{comparisonWarnings.join(" ")}</Warning>
+                    {/if}
+                    {#if $calibrationComparison === null}
+                        <div class="calibration-message">{i18n("loading")}</div>
+                    {:else}
+                        <DailyPredictionGraph
+                            fsrs={$calibrationComparison.fsrsDaily}
+                            rwkv={$calibrationComparison.rwkvDaily}
+                            {metric}
+                        />
+                    {/if}
                 {/if}
             </div>
             <p>{i18n(`daily-prediction-${metric}-help`)}</p>
-            <p>{i18n("daily-prediction-sample-help")}</p>
+            <p>
+                {i18n(
+                    metric === "standardizedGap"
+                        ? "daily-prediction-gap-sample-help"
+                        : "daily-prediction-sample-help"
+                )}
+            </p>
         </CalibrationGraphContainer>
     {/each}
     <MemorisedGraphContainer graphId="fsrs:stability-time-machine">

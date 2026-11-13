@@ -11,6 +11,8 @@ Its total can be lower than a native single-model histogram.
 - Keep histogram totals equal to the eligible input count, including exact
   boundaries and constant-value datasets.
 - Match a prediction sum with the count of cards that contributed predictions.
+- When comparing an all-review actual rate with a partial prediction sample,
+  calculate each mean with its own denominator and show both counts.
 - Calculate a displayed mean or median from its individual review samples.
   Normalize displayed percentages after combining the displayed range.
 - Treat zero-time rated answers as reviews and zero-rating scheduling entries
@@ -30,7 +32,8 @@ Its total can be lower than a native single-model histogram.
 | FSRS/RWKV current retrievability and disagreement | Supported backend FSRS memory metrics, paired eligibility, native float32 percentage boundaries, unique cards, selected model, shift ordering, tooltip local/search totals |
 | Memorised, average stability, young-card ratio, calibration, loss, lapse odds | Complete FSRS replay state, resolved presets, historical-retention bridge, UTC cutoff, reset/cram handling, review filters, end-of-day/current-time snapshots, calibration sample eligibility |
 | Review recall and gain | With-review and skipped-review predictions at the same selected horizon, no intervening answers, per-model matched prediction counts, first-learning and missing-history handling, model-specific time and scheduler-day rollover, non-monotonic RWKV predictions, answer-weighted calendar and study-day windows, exact last-N-review windows including partial days, display-only gap connectors |
-| ROC, UM+, daily recall gap and log loss | Paired predictions, tied ROC thresholds, AUC, shared error buckets, sample counts, exact review-level absolute-disagreement percentiles including hidden buckets, zero-variance and missing-day handling, independent model eligibility, calendar/study-day and exact review-count windows, pooled window Z-scores, display-only gap connectors |
+| ROC and UM+ | Paired predictions, tied ROC thresholds, AUC, shared error buckets, sample counts and exact review-level absolute-disagreement percentiles including hidden buckets |
+| Daily recall gap and log loss | All graded reviews in daily actual recall, selected-model prediction eligibility and counts, percentage-point gaps, independent log-loss samples, missing days, calendar/study-day and exact review-count windows, display-only gap connectors |
 | Future Due and Future Due Retention | Eligible card type/queue, original due field, timestamp units, full model state, matched pass/fail totals |
 | Interval, lapse, repetition, load | Current-card eligibility, suspended/zero settings, histogram/load totals, numeric interval boundaries |
 | Ratings and fatigue | Rated-answer counts, zero-time answers, manual entries, subgroup totals, normalized empty buckets, fixed retrievability axis |

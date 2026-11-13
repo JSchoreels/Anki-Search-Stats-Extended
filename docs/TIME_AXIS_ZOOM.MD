@@ -9,7 +9,7 @@ further drags can narrow the range again.
 This applies to all add-on calendar-axis line graphs (including Memorised,
 Memorised Gain per 100 Reviews, load history and daily maturation), their
 candlestick Trend views, the
-FSRS/RWKV Daily Recall Gap and Daily Log Loss, date-axis scrollable bars, Future Due, and
+Daily Recall Gap and Daily Log Loss, date-axis scrollable bars, Future Due, and
 the hourly intraday Due and daily hourly breakdown charts. Stability Over Time
 and Review Speed Trend use the same line-chart zoom and trend controls. Numeric distributions and Anki's built-in charts
 retain their existing interactions.

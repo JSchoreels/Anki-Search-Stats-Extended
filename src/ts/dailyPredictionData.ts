@@ -6,6 +6,7 @@ export type DailyPredictionPoint = {
     day: number
     count: number
     actualRecall: number
+    actualCount?: number
     predictedRecall: number
     standardizedGap: number | null
     logLoss: number

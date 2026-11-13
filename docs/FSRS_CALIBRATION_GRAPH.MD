@@ -113,10 +113,10 @@ Warnings remain logged on the main thread and displayed by the existing panels.
 Automatic preparation, revision triggers, cohort selection, provenance counts,
 warning totals, and the `refresh_after_fsrs` handshake are unchanged.
 
-Model Calibration, UM+, and ROC share one on-demand store for the explicit RWKV model
+Model Calibration, UM+, ROC, and Daily Recall Gap share one on-demand store for the explicit RWKV model
 prediction arrays and their calibration bins. Selecting a model in any
 graph loads its aligned predictions once for the current sample. Calibration
-requests that model's bootstrap intervals when needed; UM+ or ROC alone do not start
+requests that model's bootstrap intervals when needed; the comparison graphs alone do not start
 the bootstrap. When the search or date range changes, the old requests are
 cancelled and their results cannot replace the new sample. The existing
 profile-local model replay files remain the source for subsequent page loads.
@@ -522,14 +522,13 @@ positions. Both controls are local to this chart; they do not persist settings
 or request new predictions.
 
 The Card Retrievability comparison is followed by **Daily Recall Gap** and
-**Daily Log Loss**. Each has an independent FSRS / RWKV / Both selector and an
-editable moving average, enabled initially for 7 days, with raw daily values in
-grey. Daily Recall Gap can also show the raw actual-minus-predicted difference in
-percentage points, with the same moving-average controls. The graphs reuse each
-model's eligible predictions independently; FSRS uses held-out cached predictions,
-without the calibration replay fallback. Their
-calculations, daily grouping, and interpretation are documented in
-[Daily FSRS and RWKV recall gap and log loss](RWKV_DAILY_SURPRISE.MD).
+**Daily Log Loss**, each with editable moving averages and date zoom. Daily
+Recall Gap compares any one or two models' eligible predictions with the actual
+recall rate across all graded reviews that day. Daily Log Loss retains its
+FSRS / RWKV / Both selector and uses each model's eligible predictions and matching
+outcomes. FSRS uses held-out cached predictions, without the calibration replay
+fallback. Their calculations and grouping are documented in
+[Daily recall gap and log loss](RWKV_DAILY_SURPRISE.MD).
 
 ## Model UM+ Comparison
 

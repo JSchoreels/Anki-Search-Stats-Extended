@@ -10,6 +10,7 @@ import {
     dailyPredictionReviewWindow,
     type DailyPredictionDisplayMetric,
 } from "./dailyPredictionData"
+import { dailyActualRecall, dailyRecallModelReviewWindows } from "./dailyRecallGap"
 import { calculateMaturationHistory } from "./maturation"
 import {
     buildCalibrationBinCounts,
@@ -67,7 +68,10 @@ const tasks = {
     comparison,
     umPlus: buildUmPlusData,
     roc: buildRocData,
+    dailyPredictionData: buildDailyPredictionData,
     dailyPredictionReviewWindows,
+    dailyActualRecall,
+    dailyRecallModelReviewWindows,
     fsrsReviewWindow: calculateFsrsReviewWindow,
 }
 

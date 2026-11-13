@@ -77,6 +77,7 @@ Like the new anki stats screen? Want more? This is the addon for you.
 - Model UM+ Comparison (FSRS, current RWKV, and individual RWKV models)
 - Model ROC Comparison (any two FSRS/RWKV models)
 - Model Current Disagreement (any two models' current card predictions)
+- Daily Recall Gap (compare selected models with all-review daily recall)
 - Stability Time Machine
 - Difficulty Time Machine
 - Stability Over Time

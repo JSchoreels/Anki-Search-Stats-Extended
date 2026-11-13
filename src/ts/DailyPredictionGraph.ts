@@ -40,20 +40,47 @@ export function dailyPredictionTooltip(
         i18n(`daily-prediction-${metric}-value`, {
             value: formatMetricValue(value, metric),
         }),
-        i18n("daily-prediction-actual", { value: (point.actualRecall * 100).toFixed(1) }),
-        i18n("daily-prediction-predicted", { value: (point.predictedRecall * 100).toFixed(1) }),
-        i18n("daily-prediction-count", { count: point.count }),
+        i18n(
+            point.actualCount === undefined
+                ? "daily-prediction-actual"
+                : "daily-prediction-actual-all",
+            {
+                value: (point.actualRecall * 100).toFixed(1),
+                ...(point.actualCount === undefined ? {} : { count: point.actualCount }),
+            }
+        ),
+        i18n(
+            point.actualCount === undefined
+                ? "daily-prediction-predicted"
+                : "daily-prediction-average-predicted",
+            { value: (point.predictedRecall * 100).toFixed(1) }
+        ),
+        i18n(
+            point.actualCount === undefined
+                ? "daily-prediction-count"
+                : "daily-prediction-prediction-count",
+            {
+                count: point.count,
+            }
+        ),
     ]
 }
 
 export type DailyPredictionSeries = {
-    model: "fsrs" | "rwkv"
+    model: string
     data: DailyPredictionPoint[]
+    label?: string
+    color?: string
+    dashed?: boolean
+}
+
+export type SelectedDailyPredictionSeries = DailyPredictionSeries & {
+    predictions: Float64Array | null
 }
 
 type DailyPredictionAverageOptions = {
     mode?: AveragingMode
-    reviewValues?: Record<DailyPredictionSeries["model"], DailyPredictionWindowValue[]>
+    reviewValues?: Record<string, DailyPredictionWindowValue[]>
     connectGaps?: boolean
 }
 
@@ -94,7 +121,9 @@ export function renderDailyPredictionGraph(
             )
             return {
                 ...item,
-                color: item.model === "fsrs" ? FSRS_COMPARISON_COLOUR : RWKV_COMPARISON_COLOUR,
+                color:
+                    item.color ??
+                    (item.model === "fsrs" ? FSRS_COMPARISON_COLOUR : RWKV_COMPARISON_COLOUR),
                 average:
                     averageDays === null
                         ? null
@@ -194,7 +223,7 @@ export function renderDailyPredictionGraph(
             .append("g")
             .attr("data-model", item.model)
             .attr("clip-path", clipId ? `url(#${clipId})` : null)
-        const modelLabel = i18n(`calibration-source-${item.model}`)
+        const modelLabel = item.label ?? i18n(`calibration-source-${item.model}`)
         const line = d3
             .line<{ day: number; value: number | null }>()
             .defined((point) => point.value !== null)
@@ -235,7 +264,10 @@ export function renderDailyPredictionGraph(
             .attr("stroke", item.average ? "#888" : item.color)
             .attr("opacity", item.average ? 0.35 : 1)
             .attr("stroke-width", 1.5)
-            .attr("stroke-dasharray", item.model === "rwkv" && item.average ? "3 3" : null)
+            .attr(
+                "stroke-dasharray",
+                (item.dashed ?? item.model === "rwkv") && item.average ? "3 3" : null
+            )
             .attr("d", line(points))
         group
             .selectAll("circle.daily-prediction-point")
@@ -296,6 +328,7 @@ export function renderDailyPredictionGraph(
 
     const legend = chart.append("g").attr("class", "daily-prediction-legend")
     prepared.forEach((item, index) => {
+        const label = item.label ?? i18n(`calibration-source-${item.model}`)
         const entry = legend
             .append("g")
             .attr("transform", `translate(${(index * width) / prepared.length}, ${height + 55})`)
@@ -308,14 +341,14 @@ export function renderDailyPredictionGraph(
             .style("font-size", "11px")
             .text(
                 averageDays === null
-                    ? i18n(`calibration-source-${item.model}`)
+                    ? label
                     : mode === "calendar"
                       ? i18n("daily-prediction-average-series", {
-                            label: i18n(`calibration-source-${item.model}`),
+                            label,
                             days: averageDays,
                         })
                       : i18n("averaging-series", {
-                            label: i18n(`calibration-source-${item.model}`),
+                            label,
                             window: windowLabel,
                         })
             )

@@ -37,7 +37,7 @@ export function modelOptions() {
     ]
 }
 
-// A Statistics page shares these aligned arrays between Calibration, UM+, and ROC.
+// A Statistics page shares these aligned arrays between Calibration, UM+, ROC, and Daily Recall Gap.
 // Loading a model for a comparison alone does not start the expensive confidence bootstrap.
 export function createModelPredictionSources() {
     let samples: CalibrationSamples | null = null

@@ -565,17 +565,21 @@ daily-prediction-standardizedGap-value = Standardized gap: {$value}
 daily-prediction-rawGap-value = Recall difference: {$value} pp
 daily-prediction-logLoss-value = Average log loss: {$value} bits per review
 daily-prediction-actual = Actual R: {$value}%
+daily-prediction-actual-all = Actual recall: {$value}% ({$count} reviews)
 daily-prediction-predicted = Predicted R: {$value}%
+daily-prediction-average-predicted = Average predicted R: {$value}%
 daily-prediction-count = Eligible reviews: {$count}
+daily-prediction-prediction-count = Reviews with predictions: {$count}
 daily-prediction-gap-unavailable = unavailable (zero predicted variance)
 daily-prediction-no-data = No eligible {$model} review predictions are available for this search and date range.
-daily-prediction-show-raw-gap = Show raw difference (percentage points)
 daily-prediction-moving-average = Moving average
 daily-prediction-average-days = Moving average window in days
 daily-prediction-average-value = {$days}-day average: {$value}
 daily-prediction-rawGap-average-value = {$days}-day average: {$value} pp
 daily-prediction-average-series = {$label} ({$days}-day average)
 daily-prediction-average-help = Colored lines show the selected window; grey lines and dots show daily values (FSRS solid, RWKV dashed). Calendar-day and study-day windows weight available days equally; review windows include each eligible review once.
+daily-prediction-model-average-help = Colored lines show the selected window; grey lines and dots show daily values (first model solid, second dashed). Calendar-day and study-day windows weight available days equally. Review windows use the last N reviews; the predicted average uses those with predictions.
+daily-prediction-recall-error = Could not calculate daily recall: {$error}
 averaging-moving-average = Moving average
 averaging-window-size = Moving average window size
 averaging-window-type = Moving average window type
@@ -594,9 +598,9 @@ averaging-error = Could not calculate the selected average: {$error}
 averaging-review-loading = Calculating the review window…
 daily-line-average-help = The colored line averages available daily values in the selected window; the faint grey line shows the original daily values. Each available day has equal weight. The vertical scale follows the average; hover to see daily values outside it.
 daily-prediction-standardizedGap-help =
-    Show raw difference to plot actual R minus predicted R in percentage points. Otherwise the standardized gap is actual recalls minus expected recalls, divided by the expected standard deviation: sum(actual - predicted) / sqrt(sum(predicted × (1 - predicted))).
-    Positive values mean you remembered more than the model expected; negative values mean less. In the standardized view, further from zero means a more unexpected day, accounting for review count and prediction confidence.
-    The standardized gap assumes independent outcomes, so use it as a diagnostic score rather than an exact significance test. It is unavailable when predicted variance is zero; the raw difference remains available.
+    Actual daily recall minus the model's average predicted recall, in percentage points. Positive values mean the day's recall was higher than predicted; negative values mean it was lower.
+daily-prediction-gap-sample-help =
+    Actual recall includes all graded reviews on the day, including same-day and filtered reviews. The model average uses its available eligible review predictions, which may cover fewer reviews. Again counts as forgotten; Hard, Good and Easy count as remembered. FSRS uses held-out predictions.
 daily-prediction-logLoss-help =
     Average log loss in bits per review: -log2(predicted R) when remembered, or -log2(1 - predicted R) when forgotten.
     Higher means more surprise, especially for confident mistakes. Surprising successes and failures both contribute instead of cancelling out.

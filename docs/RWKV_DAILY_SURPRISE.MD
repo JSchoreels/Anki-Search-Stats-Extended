@@ -1,143 +1,103 @@
-# Daily FSRS and RWKV recall gap and log loss
+# Daily recall gap and log loss
 
-Two graphs follow **FSRS vs RWKV Card Retrievability** (which immediately follows
-current Disagreement), in this order:
+Two graphs follow **FSRS vs RWKV Card Retrievability**, in this order:
 
-1. **Daily Recall Gap**: a choice of the signed standardized difference between
-   actual and expected recalls or the raw difference in percentage points.
-2. **Daily Log Loss**: mean binary log loss in bits per eligible review.
+1. **Daily Recall Gap** compares actual daily recall with one or two selected
+   models' average predicted recall, in percentage points.
+2. **Daily Log Loss** shows mean binary log loss in bits per eligible review.
 
-Both respect the statistics search and review date range. Each panel has its own
-**FSRS / RWKV / Both** selector, initially **Both**, independently of the ordinary
-Model Calibration selectors. FSRS uses blue; RWKV uses green.
+Both respect the Statistics search and review date range, and offer independent
+moving-average and [drag-to-zoom](TIME_AXIS_ZOOM.MD) controls. The gap graph
+offers FSRS, RWKV (current), RWKV Big, RWKV Small Curve, RWKV Small Instant and
+RWKV Tiny Instant in either position; the second model can be set to None. Its
+default is FSRS and RWKV (current). The first model uses blue and the second uses
+green. Daily Log Loss retains its separate FSRS / RWKV / Both control.
 
-Both panels support [drag-to-zoom](TIME_AXIS_ZOOM.MD) with a local **Reset zoom**
-button. Both models share the selected dates, and smoothing uses full history
-before cropping. Except for the raw recall-gap view described below, the vertical
-axis fits both visible daily and averaged values.
-
-The shared comparison worker reuses the calibration samples and each model's
-index-aligned prediction array. FSRS uses the same held-out cached predictions
-as the default UM+ and ROC pairs; the calibration graph's replay fallback is excluded. RWKV uses
-its existing eligible historical predictions. Each model includes its own available
-predictions, without requiring a matching prediction from the other model. This
-means daily review counts and actual recall rates can differ between models.
-A model without eligible predictions shows an explicit no-data message while the
-other model remains visible. No additional requests, stored values, database
-operations, or runtime dependencies are introduced.
-
-## Sample and daily grouping
-
-Each model's sample contributes its pre-answer probability `p` and observed outcome
-`y`: Again is 0; Hard, Good, and Easy are 1. Only finite probabilities in `[0, 1]`
-and binary outcomes are accepted. Missing or invalid predictions are excluded
-from both scores, both recall rates, and the review count. Existing calibration
-eligibility excludes same-day repetitions and filtered-out calibration samples;
-the role-aware source additionally excludes training/final-fit rows. Prediction
-provenance follows [the calibration data path](FSRS_CALIBRATION_GRAPH.MD).
-
-Reviews are grouped with the existing `dayFromMs(revlogId)` helper, including
-Anki's rollover hour and each review date's local timezone offset.
-Calendar labels preserve these day indices. Days without eligible predictions
-have no daily value rather than being filled with zero. The optional gap
-connectors described below do not add data for those days.
-Tooltips show the date and, for each selected model with data on that day,
-the graph score, actual R (`sum(y)/n`), predicted R (`sum(p)/n`), and eligible
-review count. When smoothing is enabled, they also show the moving average. Hover and keyboard focus expose the
-same information. No eligible data shows an explicit no-data message; the
-existing prediction source's warnings are retained. The shared comparison worker
-computes daily scores once history and both prediction stores are ready; the
-panels show loading until the comparison result arrives. Daily scores use each model's eligible predictions independently, including
-reviews absent from the other model's predictions.
+The gap graph shares the model prediction store with Model Calibration, UM+ and
+ROC. Explicit RWKV models are prepared on selection and their predictions are
+reused. Daily aggregates are computed in the statistics worker and reused for
+the current sample; selecting a model does not start calibration bootstrap.
+Preparation progress, source warnings, failures and retry remain visible. A
+model without predictions shows a no-data message while another available model
+can still be displayed. FSRS uses held-out cached predictions, not the calibration
+graph's replay fallback. Daily Log Loss continues to use the existing FSRS and
+current-RWKV comparison results. No new persisted data or database operations
+are introduced.
 
 ## Daily recall gap
 
-The panel initially displays the standardized gap. Enable **Show raw difference
-(percentage points)** to switch to `100 * (actual R - predicted R)`. The raw
-view remains available when predicted variance is zero. The selector is local to
-the panel and does not change either model's data.
+For each Anki day, **actual recall** is the fraction remembered among all graded
+reviews in the search and date range. Again is forgotten; Hard, Good and Easy are
+remembered. Same-day repetitions and filtered reviews count. Ungraded manual
+entries do not count. Every selected model is compared with this same daily
+actual rate.
 
-The standardized gap is:
+For each model, **predicted recall** is the mean of its available eligible
+review-time predictions on that day. Model predictions can cover fewer reviews
+than the actual rate, and two models can cover different reviews. Calibration
+eligibility and prediction provenance are described in
+[the calibration data path](FSRS_CALIBRATION_GRAPH.MD). Missing or invalid
+probabilities are excluded from the predicted mean.
 
-`Z = sum(y - p) / sqrt(sum(p * (1 - p)))`
+The plotted value is `100 × (actual recall - average predicted recall)`.
+Positive values mean the day's actual recall was higher than predicted; negative
+values mean it was lower. Zero is the reference line. A day without any eligible
+prediction for a model has no value for that model. Tooltips show the actual
+rate and its total review count, the model's predicted rate and its prediction
+count, and the gap. Mouse hover and keyboard focus expose the same information.
 
-The variance uses each review's probability, not just the day's mean R.
-Positive means more recalls than predicted; negative means fewer. Zero is a
-dashed reference line. The vertical axis is symmetric around zero. In the raw
-view, when the moving average is disabled, its extent is the 95th percentile of
-the absolute visible daily gaps across the selected models (using linear
-interpolation). With the moving average enabled, its extent is 105% of the
-largest absolute visible moving average. A zero or unavailable extent falls
-back to one percentage point. Daily values outside the axis are clipped from
-the plot but remain available in the date tooltips. Zooming recalculates the
-extent from the visible days.
-
-The scale accounts for review count and predicted uncertainty. It assumes
-independent outcomes, so correlated reviews and small samples prevent treating
-it as an exact significance test. When the predicted variance is zero (all
-predictions are 0 or 1), Z is undefined: omit the point and explain this in the
-tooltip while retaining the day's recall rates, count, and log loss.
+The vertical axis is symmetric around zero. Without a moving average, its extent
+is the 95th percentile of the absolute visible daily gaps across selected models.
+With the moving average enabled, its extent is 105% of the largest absolute
+visible average. A zero or unavailable extent falls back to one percentage point.
+Daily outliers outside the axis are clipped from the plot but remain in the date
+tooltips. Zooming recalculates the extent from the visible days.
 
 ## Daily log loss
 
-`L = mean(-log2(p))` for remembered reviews and `mean(-log2(1-p))`
-for forgotten reviews, with both outcome types averaged together over the day.
-Equivalently, take the mean negative log2 probability of each observed outcome.
+Each model uses its own eligible predictions and matching outcomes, independently
+of the other model. A remembered review contributes `-log2(p)`; a forgotten
+review contributes `-log2(1-p)`. The daily score is their mean, in bits per
+eligible review. Its actual and predicted recall tooltip values describe those
+same eligible reviews, not the all-review population used by Daily Recall Gap.
 
-This is an average, not a sum, so review volume alone does not increase it.
-Unlikely successes and unlikely failures both contribute. Confident mistakes
-are penalized strongly, but even calibrated predictions have positive expected
-loss when outcomes are uncertain: the graph is not a pure calibration measure.
+The score penalizes confident mistakes strongly, but even calibrated predictions
+have positive expected loss when outcomes are uncertain; it is not a pure
+calibration measure. The observed-outcome probability is floored at `1e-15`
+only for the logarithm, capping a contribution at approximately 49.83 bits.
+Raw probabilities remain unchanged for the recall rates.
 
-The probability of the observed outcome is floored at `1e-15` solely for the
-logarithm, capping each contribution at approximately 49.83 bits. Certain correct
-predictions contribute exactly zero. Raw probabilities remain unchanged for
-the mean predicted R and variance calculation.
+## Moving averages
 
-## Moving average
+Each panel starts with a **7 calendar day** moving average and also offers study
+days or a review-count window (initially 1,000). Calendar-day windows average
+available daily values from the last N calendar days; study-day windows average
+the last N available daily values. Both weight days equally. Missing days stay
+empty. Optional dotted connectors interpolate across gaps without adding daily
+values or tooltips.
 
-Moving averages start enabled with a **7 calendar day** window in each panel.
-The compact control also offers a window measured in **study days** with an
-eligible score, or in **reviews** (initially 1,000). Calendar windows average
-available daily scores in the last N calendar days; study-day windows average
-the last N available daily scores, even when separated by missing dates. Both
-give each included day equal weight, independently of its review count. In
-the standardized view, a day whose predicted variance is zero is unavailable
-and is excluded from a study-day average.
+For Daily Recall Gap, a review-count window contains the last N graded reviews
+in the search, ending at the end of the plotted day. Actual recall uses all of
+those reviews; a model's predicted mean uses the subset in that window for which
+it has an eligible prediction. A model with no prediction in the window has no
+average for that point. The same total-review window applies to both models.
+Daily Log Loss instead uses each model's last N eligible predicted reviews and
+their mean individual log loss. At the beginning of history, windows use all
+available reviews until full.
 
-Review-count windows include each model's latest N eligible reviews, including
-the part of a day at the beginning of the window when necessary. Raw recall
-gap is `100 × sum(actual - predicted) / count`, and surprise is the mean of
-the individual review losses. The standardized view instead computes one
-window-level `sum(actual - predicted) / sqrt(sum(p × (1 - p)))`; it is not an
-average of daily Z-scores. A window with zero total variance has no standardized
-value. At the beginning of history, all available reviews are used until the
-window fills. Because the models can have different eligible predictions, their
-review-count windows can cover different dates. These windows are computed in
-the statistics worker from the existing predictions without requesting new ones.
-
-Disable **Moving average** to restore the colored daily lines. When enabled,
-colored lines show the selected window and daily lines and points become faint
-grey; FSRS's grey line is solid and RWKV's is dashed. **Connect missing days**
-starts enabled and draws a faint dotted interpolation between available
-averages; turning it off restores breaks. It never creates daily values or
-tooltips for missing dates. A calendar-window average may change as older days
-expire, so the connector between endpoints is an interpolation, not a
-calculated value for every missing day. The selected window is calculated
-before zoom crops the display. Controls are local to each panel and are not
-persisted. The existing maturation graphs retain their own calendar-day behavior.
+With smoothing enabled, colored lines show the selected average and daily lines
+and points are faint grey; the first gap model's grey line is solid and the
+second is dashed. For Daily Log Loss, FSRS is solid and RWKV dashed. Disable
+smoothing to restore colored daily values. Averages are computed before zoom
+crops the visible dates. Each panel's controls are local to the mounted view.
 
 ## Verification and runtime
 
-`test/dailyPredictionData.test.ts` covers the scores, review-count scaling,
-confidence, sparse/invalid data, boundary probabilities, and Anki day rollover.
-`test/dailyPredictionGraph.test.ts` covers rendering, signed values, gaps, unavailable
-scores, both gap views, review-count and study-day windows, both model series,
-grey daily values, gap connectors, smoothing, redraws, raw-gap axis ranges and
-clipping, and mouse/keyboard tooltip behavior. Calibration parity and loading tests verify each model's
-independent eligible sample and the FSRS held-out boundary. Maturation regression
-tests cover the reused averaging helper.
+`test/dailyRecallGap.test.ts` covers all-review daily recall, independent model
+predictions and review-count windows. `test/dailyRecallGapComponent.test.js`
+exercises model selection and reuse. `test/dailyPredictionData.test.ts` and
+`test/dailyPredictionGraph.test.ts` cover scoring, smoothing, labels, tooltips,
+gaps, zoom and the retained Daily Log Loss behavior.
 
 Build with `npm run build`, package with `./package.sh`, and synchronize with
-`./copy_to_anki.sh`. When the Python bridge changes, fully quit and reopen Anki
-before loading the updated graphs.
+`./copy_to_anki.sh`. Python bridge changes require a full Anki restart.

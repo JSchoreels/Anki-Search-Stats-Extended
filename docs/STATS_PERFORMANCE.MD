@@ -115,10 +115,17 @@ its obsolete job. They do not start calibration bootstrap or Memorised replay.
 Historical FSRS calibration preparation starts automatically once eligible
 history loads. Ordinary Statistics loads read caches immediately while preparation
 runs. FSRS and RWKV cache reads are independent, so RWKV is available while FSRS
-training is pending. The default FSRS/current-RWKV comparisons show loading until
-both cache results and their worker result are ready; other model pairings wait
-only for their selected sources. RWKV daily calculations still use all
-eligible RWKV predictions, without requiring paired FSRS predictions.
+training is pending. The default UM+ and ROC FSRS/current-RWKV comparisons show
+loading until both cache results and their worker result are ready; other model
+pairings wait only for their selected sources. Daily Recall Gap can show each
+available model independently and uses a separate compact
+per-day count of all graded reviews from the existing history worker. Each
+selected model's daily predictions are aggregated once per sample and joined to
+those counts; the default pair reuses already calculated daily aggregates when
+available. Review-count windows run in the history worker over all graded
+reviews, matching available selected-model predictions by review ID. They retain
+bounded rolling buffers and discard obsolete results when the search or selection
+changes. Daily Log Loss still uses each model's eligible predictions independently.
 The generation job runs as a serialized Anki background operation with native
 cancellable progress. Ordinary presets resolve once per home deck and use short
 native preset searches. Overlay routing retains exact per-card settings, with

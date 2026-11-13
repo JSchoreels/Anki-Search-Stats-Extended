@@ -1,6 +1,14 @@
 <script lang="ts">
-    import { renderDailyPredictionGraph, type DailyPredictionSeries } from "./DailyPredictionGraph"
-    import type { DailyPredictionMetric, DailyPredictionPoint } from "./dailyPredictionData"
+    import {
+        renderDailyPredictionGraph,
+        type DailyPredictionSeries,
+        type SelectedDailyPredictionSeries,
+    } from "./DailyPredictionGraph"
+    import type {
+        DailyPredictionMetric,
+        DailyPredictionPoint,
+        DailyPredictionWindowValue,
+    } from "./dailyPredictionData"
     import type { AveragingMode } from "./dailyMovingAverage"
     import { heldOutFsrsPredictions } from "./calibrationSamples"
     import AveragingControls from "./AveragingControls.svelte"
@@ -10,50 +18,96 @@
     import {
         calibration_samples,
         fsrsCalibrationStats,
+        revlogs,
         rwkvCalibrationStats,
         tooltipShown,
     } from "./stores"
     import { runStatsTask } from "./statsWorkerClient"
-    import type { Tasks } from "./statsTasks"
+    import type { StatsHistory } from "./statsHistory"
     import { dragZoom, type ZoomRange } from "./dragZoom"
     import ZoomControls from "./ZoomControls.svelte"
 
     export let fsrs: DailyPredictionPoint[]
     export let rwkv: DailyPredictionPoint[]
     export let metric: DailyPredictionMetric
+    export let selectedSeries: SelectedDailyPredictionSeries[] | undefined = undefined
     let svg: SVGElement | undefined
     let zoomRange: ZoomRange | undefined
     let mode: "fsrs" | "rwkv" | "both" = "both"
-    let showRawGap = false
     let smoothing = true
     let days = 7
     let reviews = 1000
     let averagingMode: AveragingMode = "calendar"
     let connectGaps = true
-    let reviewValues: ReturnType<Tasks["dailyPredictionReviewWindows"]> | undefined
+    let reviewValues: Record<string, DailyPredictionWindowValue[]> | undefined
     let reviewError = ""
     let reviewRequest: AbortController | undefined
+    let reviewInputs: unknown[] | undefined
 
-    function requestReviewValues(
-        samples: NonNullable<typeof $calibration_samples>,
-        fsrsStats: NonNullable<typeof $fsrsCalibrationStats>,
-        rwkvStats: NonNullable<typeof $rwkvCalibrationStats>,
+    function updateReviewValues(
+        needed: boolean,
+        samples: typeof $calibration_samples,
+        fsrsStats: typeof $fsrsCalibrationStats,
+        rwkvStats: typeof $rwkvCalibrationStats,
+        history: StatsHistory | null,
+        selected: SelectedDailyPredictionSeries[] | undefined,
         selectedMetric: typeof displayMetric,
         windowReviews: number
     ) {
+        const unique = new Map(
+            selected
+                ?.filter((item) => item.data.length && item.predictions)
+                .map((item) => [item.model, item.predictions!]) ?? []
+        )
+        const next = selected
+            ? [needed, samples, history, selectedMetric, windowReviews, ...unique.entries()].flat()
+            : [
+                  needed,
+                  samples,
+                  fsrsStats?.predictions,
+                  fsrsStats?.cachedPredictionCount,
+                  rwkvStats?.predictions,
+                  selectedMetric,
+                  windowReviews,
+              ]
+        if (
+            reviewInputs &&
+            next.length === reviewInputs.length &&
+            next.every((item, index) => item === reviewInputs![index])
+        )
+            return
+        reviewInputs = next
+        reviewRequest?.abort()
+        reviewRequest = undefined
+        reviewValues = undefined
+        reviewError = ""
+        if (!needed || !samples) return
+        if (selected ? !history || !unique.size : !fsrsStats || !rwkvStats) return
         const request = new AbortController()
         reviewRequest = request
-        void runStatsTask(
-            "dailyPredictionReviewWindows",
-            [
-                samples,
-                heldOutFsrsPredictions(fsrsStats),
-                rwkvStats.predictions,
-                selectedMetric,
-                windowReviews,
-            ],
-            request.signal
-        ).then(
+        const task = selected
+            ? runStatsTask(
+                  "dailyRecallModelReviewWindows",
+                  [
+                      history!,
+                      samples,
+                      [...unique].map(([model, predictions]) => ({ model, predictions })),
+                      windowReviews,
+                  ],
+                  request.signal
+              )
+            : runStatsTask(
+                  "dailyPredictionReviewWindows",
+                  [
+                      samples,
+                      heldOutFsrsPredictions(fsrsStats!),
+                      rwkvStats!.predictions,
+                      selectedMetric,
+                      windowReviews,
+                  ],
+                  request.signal
+              )
+        void task.then(
             (result) => {
                 if (!request.signal.aborted) reviewValues = result
             },
@@ -63,27 +117,30 @@
             }
         )
     }
-    $: series = [
-        { model: "fsrs", data: fsrs },
-        { model: "rwkv", data: rwkv },
-    ].filter((item) => mode === "both" || item.model === mode) as DailyPredictionSeries[]
+    $: series =
+        selectedSeries ??
+        ([
+            { model: "fsrs", data: fsrs },
+            { model: "rwkv", data: rwkv },
+        ].filter((item) => mode === "both" || item.model === mode) as DailyPredictionSeries[])
     $: hasData = series.some((item) => item.data.length)
-    $: displayMetric = metric === "standardizedGap" && showRawGap ? "rawGap" : metric
-    $: {
-        const samples = $calibration_samples
-        const fsrsStats = $fsrsCalibrationStats
-        const rwkvStats = $rwkvCalibrationStats
-        const needsReviews = smoothing && averagingMode === "reviews"
-        const selectedMetric = displayMetric
-        const windowReviews = reviews
-        reviewRequest?.abort()
-        reviewRequest = undefined
-        reviewValues = undefined
-        reviewError = ""
-        if (needsReviews && samples && fsrsStats && rwkvStats)
-            requestReviewValues(samples, fsrsStats, rwkvStats, selectedMetric, windowReviews)
-    }
-    $: loadingReviews = smoothing && averagingMode === "reviews" && !reviewValues && !reviewError
+    $: displayMetric = metric === "standardizedGap" ? "rawGap" : metric
+    $: updateReviewValues(
+        smoothing && averagingMode === "reviews",
+        $calibration_samples,
+        $fsrsCalibrationStats,
+        $rwkvCalibrationStats,
+        $revlogs,
+        selectedSeries,
+        displayMetric,
+        reviews
+    )
+    $: loadingReviews =
+        smoothing &&
+        averagingMode === "reviews" &&
+        (selectedSeries === undefined || hasData) &&
+        !reviewValues &&
+        !reviewError
     $: zoomOptions =
         svg && !loadingReviews
             ? renderDailyPredictionGraph(
@@ -104,28 +161,22 @@
     })
 </script>
 
-<div class="daily-controls" role="group" aria-label={i18n("calibration-source")}>
-    {#each ["fsrs", "rwkv", "both"] as source}
-        <label>
-            <input type="radio" value={source} bind:group={mode} />
-            {#if source !== "both"}
-                <span
-                    class="model-color"
-                    style:background-color={source === "fsrs"
-                        ? FSRS_COMPARISON_COLOUR
-                        : RWKV_COMPARISON_COLOUR}
-                ></span>
-            {/if}
-            {i18n(`calibration-source-${source}`)}
-        </label>
-    {/each}
-</div>
-{#if metric === "standardizedGap"}
-    <div class="daily-controls">
-        <label>
-            <input type="checkbox" bind:checked={showRawGap} />
-            {i18n("daily-prediction-show-raw-gap")}
-        </label>
+{#if selectedSeries === undefined}
+    <div class="daily-controls" role="group" aria-label={i18n("calibration-source")}>
+        {#each ["fsrs", "rwkv", "both"] as source}
+            <label>
+                <input type="radio" value={source} bind:group={mode} />
+                {#if source !== "both"}
+                    <span
+                        class="model-color"
+                        style:background-color={source === "fsrs"
+                            ? FSRS_COMPARISON_COLOUR
+                            : RWKV_COMPARISON_COLOUR}
+                    ></span>
+                {/if}
+                {i18n(`calibration-source-${source}`)}
+            </label>
+        {/each}
     </div>
 {/if}
 <AveragingControls
@@ -137,7 +188,9 @@
 />
 {#each series.filter((item) => !item.data.length) as item}
     <p role="status">
-        {i18n("daily-prediction-no-data", { model: i18n(`calibration-source-${item.model}`) })}
+        {i18n("daily-prediction-no-data", {
+            model: item.label ?? i18n(`calibration-source-${item.model}`),
+        })}
     </p>
 {/each}
 {#if reviewError && smoothing && averagingMode === "reviews"}
@@ -158,7 +211,13 @@
         aria-label={i18n(`daily-prediction-${metric}`)}
     ></svg>
     {#if smoothing}
-        <p class="average-help">{i18n("daily-prediction-average-help")}</p>
+        <p class="average-help">
+            {i18n(
+                selectedSeries
+                    ? "daily-prediction-model-average-help"
+                    : "daily-prediction-average-help"
+            )}
+        </p>
         {#if connectGaps}<p class="average-help">{i18n("averaging-gap-help")}</p>{/if}
     {/if}
 {/if}

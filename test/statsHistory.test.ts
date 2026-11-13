@@ -209,3 +209,25 @@ test("native history rotates all eight mixed-width buffers with no page-owned co
     expect(next.messages[0].values.ivl[0]).toBe(-60)
     expect(next.messages[0].values.time[0]).toBe(4294967295)
 })
+
+test.each(["dailyActualRecall", "dailyRecallModelReviewWindows"] as const)(
+    "%s uses the owned history and keeps selected prediction arrays available",
+    async (name) => {
+        const predictions = new Float64Array([0.8])
+        const samples = {
+            revlogIds: new Float64Array([1791659375463]),
+            cardIds: new Float64Array([1]),
+            actual: new Uint8Array([1]),
+        }
+        const args =
+            name === "dailyActualRecall"
+                ? [history]
+                : [history, samples, [{ model: "rwkv-big", predictions }], 10]
+        const calculation = runStatsTask(name, args as never, new AbortController().signal)
+        await flush()
+        expect(FakeWorker.instances[0].messages[1]).toMatchObject({ task: name, useHistory: true })
+        expect(predictions.byteLength).toBe(8)
+        complete(FakeWorker.instances[0], { ok: true })
+        await expect(calculation).resolves.toEqual({ ok: true })
+    }
+)

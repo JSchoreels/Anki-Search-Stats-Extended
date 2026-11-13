@@ -4,6 +4,8 @@
 
 ### User facing changes
 
+- Compare one or two models in Daily Recall Gap, showing the percentage-point difference between their predicted recall and actual recall across all reviews that day.
+
 - Compare any two FSRS or RWKV models in Model Current Disagreement, and browse the cards in each difference bucket.
 
 - Compare any two FSRS or RWKV models in Model ROC Comparison, with paired-review AUC and confidence intervals.
@@ -28,9 +30,7 @@
 
 - View Stability Over Time and Review Speed Trend as line charts with compact moving-average controls, date zoom, and trend selection. Stability retains its mean/median choice and young/mature shares in the tooltip; Review Speed can average over calendar or study days.
 
-- Use compact moving-average controls on Daily Recall Gap, Daily Log Loss, and Review Recall and Gain. Choose calendar days, the latest study days with eligible results, or the latest N eligible reviews. Optional dotted connectors bridge missing days without inventing daily values.
-
-- Switch Daily Recall Gap between the standardized score and the raw difference in percentage points. The moving average follows the selected view, and the raw-gap axis focuses on typical daily values or the visible moving averages while keeping outliers in the tooltips.
+- Use compact moving-average controls on Daily Recall Gap, Daily Log Loss, and Review Recall and Gain. Choose calendar days, the latest study days with eligible results, or the latest N reviews, with eligibility specific to each graph. Optional dotted connectors bridge missing days without inventing daily values.
 
 - Compare predicted recall with and without each review immediately, after 10 minutes, after 1 hour, or after 24 hours. The review graph can show both recall lines or their gain per 100 answers for FSRS, RWKV, or both; the projections retain RWKV's non-monotonic short-term behavior.
 
@@ -46,7 +46,7 @@
 
 - Star favorite add-on graphs to keep them above Anki's built-in charts, below the search controls. Favorites remember their order, retain their current controls when moved, and remain accessible when their original category is collapsed or hidden.
 
-- Add FSRS to Daily Recall Gap and Daily Log Loss, with independent FSRS / RWKV / Both controls. Show a configurable 7-day moving average by default and fade the daily lines and dots to grey; disable smoothing to restore the colored daily values.
+- Add FSRS to Daily Log Loss with FSRS / RWKV / Both controls. Both daily charts show a configurable 7-day moving average by default and fade daily lines and dots to grey; disable smoothing to restore the colored daily values.
 
 - Restore FSRS preset loading and the stability/retrievability heatmap on older fork builds, including portable build 88, without the missing `card_memory_metrics` error. Newer builds retain batch loading; older builds use slower native Card Info reads.
 
@@ -84,6 +84,8 @@
 
 ### Technical details
 
+- Reuse aligned model predictions and compact per-day counts from the review-history worker for Daily Recall Gap. Review-count windows use all graded reviews for actual recall and the available selected-model predictions in the same window.
+
 - Prepare current RWKV model scores in cancellable isolated background replays, pairing selected scores by card without changing the neighboring FSRS/current-RWKV retrievability graph.
 
 - Reuse the shared model prediction store for ROC; run model-neutral paired ROC and card-clustered DeLong calculations for the selected models.
@@ -94,9 +96,9 @@
 
 - Remove the vendored FSRS-7 preview and use the published `ts-fsrs` package for supported FSRS-4/5/6 and FSRS-7 models.
 
-- Compute review-count windows from individual eligible answers, including partial days. The standardized recall gap uses one Z-score for the window; Review Recall and Gain retains answer-weighted totals. Compute FSRS review windows on demand in the statistics worker and return RWKV rolling results from its in-memory replay without transferring per-answer data to the page.
+- Compute review-count windows from individual answers, including partial days. Daily Log Loss and Review Recall and Gain use their eligible answers; the latter retains answer-weighted totals. Compute FSRS review windows on demand in the statistics worker and return RWKV rolling results from its in-memory replay without transferring per-answer data to the page.
 
-- Derive daily raw recall differences from the existing actual and predicted rates, including when standardized variance is zero; average the selected values across available days. Scale the raw-gap axis symmetrically to the absolute P95 of visible daily values, or 105% of the largest visible moving average, and clip outlying daily values to the plot.
+- Derive daily recall differences from the all-review actual rate and each model's available predicted rate; average the selected values across available days. Scale the gap axis symmetrically to the absolute P95 of visible daily values, or 105% of the largest visible moving average, and clip outlying daily values to the plot.
 
 - Compute immediate recall gain as 100 times the sum of per-answer post-minus-pre recall probabilities divided by the number of answers the model can score. Replay FSRS in the existing history pass and RWKV in a separate cancellable in-memory pass. Exclude unknown prior states, preserve no-answer gaps, and retain signed axes, raw underlay tooltips, zoom and the independent source selector.
 

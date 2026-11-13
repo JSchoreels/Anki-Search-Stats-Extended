@@ -45,6 +45,51 @@ test("rounding near-zero gaps does not display negative zero", () => {
     )
 })
 
+test("arbitrary selected models use their labels, colors and all-review recall counts", () => {
+    const svg = svgElement()
+    const data = [{ ...point(20000), actualCount: 50 }]
+    render(
+        svg,
+        [
+            { model: "rwkv-big", label: "RWKV Big", color: "steelblue", dashed: false, data },
+            {
+                model: "rwkv-tiny-instant",
+                label: "RWKV Tiny Instant",
+                color: "seagreen",
+                dashed: true,
+                data,
+            },
+        ],
+        "rawGap",
+        7
+    )
+    expect(svg.textContent).toContain("RWKV Big")
+    expect(svg.textContent).toContain("RWKV Tiny Instant")
+    const first = svg.querySelector('[data-model="rwkv-big"]')!
+    const second = svg.querySelector('[data-model="rwkv-tiny-instant"]')!
+    expect(first.querySelector(".daily-prediction-average")?.getAttribute("stroke")).toBe(
+        "steelblue"
+    )
+    expect(second.querySelector(".daily-prediction-average")?.getAttribute("stroke")).toBe(
+        "seagreen"
+    )
+    expect(
+        first.querySelector(".daily-prediction-series")?.getAttribute("stroke-dasharray")
+    ).toBeNull()
+    expect(second.querySelector(".daily-prediction-series")?.getAttribute("stroke-dasharray")).toBe(
+        "3 3"
+    )
+    expect(svg.querySelector(".daily-prediction-hover")?.getAttribute("aria-label")).toContain(
+        "daily-prediction-actual-all: 80.0, 50"
+    )
+    expect(svg.querySelector(".daily-prediction-hover")?.getAttribute("aria-label")).toContain(
+        "daily-prediction-prediction-count: 20"
+    )
+    expect(svg.querySelector(".daily-prediction-hover")?.getAttribute("aria-label")).toContain(
+        "daily-prediction-average-predicted: 90.0"
+    )
+})
+
 test("raw differences show signed percentage points and smooth the selected view", () => {
     const svg = svgElement()
     const data = [
