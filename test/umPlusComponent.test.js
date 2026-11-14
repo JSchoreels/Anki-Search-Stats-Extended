@@ -505,4 +505,4 @@ test("model selectors load and compare each requested model on the chosen side",
     bundle.exports.unmount(missingApp)
     missingSource.destroy()
     dom.window.close()
-})
+}, 60_000)

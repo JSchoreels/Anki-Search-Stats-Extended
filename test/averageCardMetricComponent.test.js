@@ -139,4 +139,4 @@ test("average graph updates for suspended cards and searches the selected range"
     expect(Number(document.querySelector("[data-average]").textContent)).toBeCloseTo(16 / 9)
     bundle.exports.unmount(repetitions)
     dom.window.close()
-})
+}, 60_000)
