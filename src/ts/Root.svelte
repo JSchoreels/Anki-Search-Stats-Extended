@@ -66,4 +66,8 @@
             opacity: 0.1;
         }
     }
+
+    :global(.qt5) div :global(input) {
+        color: black;
+    }
 </style>

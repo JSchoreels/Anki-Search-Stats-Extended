@@ -28,6 +28,9 @@ This document describes the data used by:
 
 Each bucket stores `[again, hard, good, easy]` counts (ease indices `0..3`).
 
+Click a legend entry to hide or restore its rating. Percentage bars and trend
+overlays use the remaining visible ratings; an empty bucket stays at zero.
+
 For Rating Distribution by Retrievability, UI toggles can filter buckets to:
 
 - exclude same-day reviews (`elapsed < 1`)

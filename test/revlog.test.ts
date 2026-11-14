@@ -38,14 +38,10 @@ const burden_revlogs: Revlog[] = [
     burden_revlog_builder2.review(-5000) as Revlog,
 ].filter((a) => a) as Revlog[]
 
-//Card1: 1, 0.5, 0.5, 0, 0, 1, 0.25, 0.25, 0.25, 0.25 0.25
-//Card2: 0, 0,   0,   0, 0, 0, 0,    1,    1,    1    1(learning)
-//Total: 1, 0.5, 0.5, 0, 0, 1, 0.25, 1.25, 1.25  1.25 1.25
-
 // console.log(burden_revlogs.map(revlog=>({id: revlog.id / day_ms, ...revlog})))
 
 const end = 10
-const { burden, learn_steps_per_card } = calculateRevlogStats(
+const { burden, intervals, learn_steps_per_card } = calculateRevlogStats(
     burden_revlogs,
     [burden_revlog_builder1.card(), burden_revlog_builder2.card()] as any,
     end
@@ -66,13 +62,59 @@ const fsrs7ParamsAlt = fsrs7Params.map((value, index) => {
     return value
 })
 
+test("Intervals retain sparse counts and empty reset days", () => {
+    expect(intervals).toMatchObject([
+        [, 1],
+        [, , 1],
+        [, , 1],
+        [],
+        [],
+        [, 1],
+        [, , , , 1],
+        [, 1, , , 1],
+        [, 1, , , 1],
+        [, 1, , , 1],
+        [1, , , , 1],
+    ])
+})
+
 test("Burden", () => {
     // expect(burden.length).toEqual(end + 1)
-    expect(burden).toMatchObject([1, 0.5, 0.5, 0, 0, 1, 0.25, 1.25, 1.25, 1.25, 1.25])
+    expect(burden).toMatchObject([1, 0, 0, 0, 0, 1, 0.25, 1.25, 1.25, 1.25, 1.25])
 })
 
 test("Burden delta", () => {
-    expect(DeltaIfy(burden)).toMatchObject([1, -0.5, 0, -0.5, 0, 1, -0.75, 1, 0, 0, 0])
+    expect(DeltaIfy(burden)).toMatchObject([1, -1, 0, 0, 0, 1, -0.75, 1, 0, 0, 0])
+})
+
+test("Cram reviews leave the scheduled interval and load unchanged", () => {
+    const builder = new RevlogBuilder()
+    const first = builder.review(4, 3) as Revlog
+    const cram = { ...first, id: first.id + day_ms, type: 3, factor: 0, ivl: 0 }
+    const stats = calculateRevlogStats([first, cram], [builder.card()] as any, 3)
+    expect(stats.burden).toEqual([0.25, 0.25, 0.25, 0.25])
+    expect(stats.intervals.map((day) => day[4])).toEqual([1, 1, 1, 1])
+})
+
+test("Reset cards contribute no scheduled load before the reset", () => {
+    const builder = new RevlogBuilder()
+    const first = builder.review(2, 3) as Revlog
+    const reset = { ...first, id: first.id + 2 * day_ms, ease: 0, type: 4, factor: 0, ivl: 0 }
+    const stats = calculateRevlogStats([first, reset], [builder.card()] as any, 3)
+    expect(stats.burden.slice(0, 2)).toEqual([0, 0])
+    expect(stats.intervals.slice(0, 2).map((day) => day[2])).toEqual([1, 1])
+})
+
+test("Empty history and large card IDs do not initialise days from the card ID", () => {
+    const empty = calculateRevlogStats([], [], 3)
+    expect(empty.burden).toEqual([])
+    expect(empty.intervals).toEqual([])
+
+    const builder = new RevlogBuilder()
+    const first = { ...builder.review(1, 3), cid: 1e16 } as Revlog
+    const stats = calculateRevlogStats([first], [{ ...builder.card(), id: first.cid }] as any, 2)
+    expect(stats.burden).toEqual([1, 1, 1])
+    expect(stats.intervals.map((day) => day[1])).toEqual([1, 1, 1])
 })
 
 test("learn_step_count", () => {

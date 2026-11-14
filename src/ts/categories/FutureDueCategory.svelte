@@ -12,30 +12,27 @@
     import { totalCalc } from "../barHelpers"
     import _ from "lodash"
 
-    let normalize = true
+    let normalise = true
     $: target_R_days = $cardDataStats.target_R_days
-    $: target_R_day_values = target_R_days.map((v, i) => [
-        v,
-        ($cardDataStats.target_R_day_totals[i] ?? 0) - v,
-    ])
+    $: target_R_day_values = _.zip(target_R_days, $cardDataStats.target_R_day_totals).map(
+        ([R, total]) => [R ?? 0, (total ?? 0) - (R ?? 0)]
+    )
     $: target_R_days_bar = {
         row_colours: [EASE_COLOURS[1], EASE_COLOURS[3]], // The EASE_COLOURS are in reverse order
         row_labels: [i18n("pass"), i18n("fail")],
         reverse_legend: true,
-        data: target_R_day_values.map((values, label) => {
-            const sum = _.sum(values)
-            return {
-                values: normalize && sum !== 0 ? values.map((a) => a / sum) : values,
-                label: label.toString(),
-            }
-        }),
-        extraStats: normalize
+        data: target_R_day_values.map((values, label) => ({
+            values,
+            label: label.toString(),
+        })),
+        extraStats: normalise
             ? (bar: BarDatum) => [bar.values[0] ? formatRetention(bar.values[0]) : "No data"]
             : totalCalc,
         columnLabeler: barDateLabeler,
-        column_counts: !normalize,
-        precision: normalize ? 2 : 0,
+        column_counts: !normalise,
+        precision: normalise ? 2 : 0,
         inverseFade: true,
+        normalise,
     }
 </script>
 
@@ -64,7 +61,7 @@
                     const count = $cardDataStats.target_R_day_totals
                         .slice(start, start + width)
                         .reduce((sum, value) => sum + (value ?? 0), 0)
-                    return normalize && count > 0
+                    return normalise && count > 0
                         ? [pass / count, 1 - pass / count]
                         : [pass, count - pass]
                 }}
@@ -76,7 +73,7 @@
             </NoGraph>
         {/if}
         <label>
-            <input type="checkbox" bind:checked={normalize} />
+            <input type="checkbox" bind:checked={normalise} />
             {i18n("as-ratio")}
         </label>
         <p>

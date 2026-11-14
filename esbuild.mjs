@@ -8,6 +8,7 @@ await esbuild.build({
     outfile: "stats.min.js",
     bundle: true,
     minify: false,
+    target: "chrome77", // For Qt5
     plugins: [
         esbuildSvelte({
             preprocess: sveltePreprocess(),
@@ -22,4 +23,5 @@ await esbuild.build({
     outfile: "stats-worker.js",
     bundle: true,
     format: "iife",
+    target: "chrome77",
 })

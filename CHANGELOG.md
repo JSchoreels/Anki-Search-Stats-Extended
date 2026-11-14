@@ -6,6 +6,8 @@
 
 - Select FSRS-6 in model comparison graphs. Current-card predictions use each deck's saved FSRS-6 parameters; historical graphs use held-out predictions trained on earlier reviews. Decks without saved FSRS-6 parameters are reported as unavailable.
 
+- Switch Card Count Time Machine between a pie and a history bar chart, hide series in supported bar charts, and see average daily introductions. Scheduled-load graphs keep cram reviews and reset cards from distorting the result.
+
 - Compare one or two models in Daily Recall Gap, showing the percentage-point difference between their predicted recall and actual recall across all reviews that day.
 
 - Compare any two FSRS or RWKV models in Model Current Disagreement, and browse the cards in each difference bucket.

@@ -168,6 +168,10 @@ both `stats.min.js` and `stats-worker.js`; packaging and installation must inclu
 both. The worker is served by Anki's add-on media endpoint on the same origin.
 After installing Python changes, fully quit and reopen Anki.
 
+Both JavaScript bundles target Chrome 77 for Anki's Qt5 webview. Review-history
+day initialization starts at the first review timestamp and is skipped when
+history is empty.
+
 Precision/performance measurements and reproducible synthetic inputs are in
 [FSRS_ACCURACY_BENCHMARK.MD](FSRS_ACCURACY_BENCHMARK.MD). Runtime measurements
 separate backend metrics/preset resolution from frontend graph processing.
