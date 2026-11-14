@@ -259,11 +259,7 @@ export function renderBarChart(chart: BarChart, svg: SVGElement) {
 
             tooltipShown.set(true)
             tooltip.set({
-                text: [
-                    columnString,
-                    ...columnCounts,
-                    ...extraStats(d),
-                ],
+                text: [columnString, ...columnCounts, ...extraStats(d)],
                 x: tooltipX(e),
                 y: e.pageY,
             })
