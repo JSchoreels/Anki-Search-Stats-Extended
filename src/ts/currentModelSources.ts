@@ -1,26 +1,28 @@
 import { writable } from "svelte/store"
 import type { CurrentScore } from "./currentDisagreementData"
+import type { ExplicitModel } from "./modelPredictionSources"
 import {
+    getCurrentFsrs6ModelPredictions,
     getCurrentRwkvModelPredictions,
-    type RwkvUmPlusModel,
     type RwkvUmPlusProgress,
 } from "./search"
 
 export type CurrentModelState = {
-    phase: "loading" | "ready" | "failed"
+    phase: "loading" | "ready" | "failed" | "unavailable"
     progress?: RwkvUmPlusProgress
     scores?: CurrentScore[]
     error?: string
+    missingParameters?: number
 }
-export type CurrentModelStates = Partial<Record<RwkvUmPlusModel, CurrentModelState>>
+export type CurrentModelStates = Partial<Record<ExplicitModel, CurrentModelState>>
 
 export function createCurrentModelSources() {
     let cards: number[] | null = null
     let states: CurrentModelStates = {}
-    const controllers = new Map<RwkvUmPlusModel, AbortController>()
+    const controllers = new Map<ExplicitModel, AbortController>()
     const store = writable<CurrentModelStates>(states)
 
-    function update(model: RwkvUmPlusModel, state: CurrentModelState) {
+    function update(model: ExplicitModel, state: CurrentModelState) {
         states = { ...states, [model]: state }
         store.set(states)
     }
@@ -34,17 +36,34 @@ export function createCurrentModelSources() {
         store.set(states)
     }
 
-    function ensure(model: RwkvUmPlusModel) {
+    function ensure(model: ExplicitModel) {
         if (!cards || states[model]) return
         const selectedCards = cards
         const controller = new AbortController()
         controllers.set(model, controller)
         update(model, { phase: "loading" })
-        void getCurrentRwkvModelPredictions(model, selectedCards, controller.signal, (progress) => {
-            if (!controller.signal.aborted) update(model, { phase: "loading", progress })
-        })
-            .then((scores) => {
-                if (!controller.signal.aborted) update(model, { phase: "ready", scores })
+        const request =
+            model === "fsrs6"
+                ? getCurrentFsrs6ModelPredictions(selectedCards, controller.signal).then(
+                      (result) => ({
+                          phase: result.status,
+                          scores: result.data,
+                          missingParameters: result.missingParameters,
+                          error: result.error,
+                      })
+                  )
+                : getCurrentRwkvModelPredictions(
+                      model,
+                      selectedCards,
+                      controller.signal,
+                      (progress) => {
+                          if (!controller.signal.aborted)
+                              update(model, { phase: "loading", progress })
+                      }
+                  ).then((scores) => ({ phase: "ready" as const, scores }))
+        void request
+            .then((state) => {
+                if (!controller.signal.aborted) update(model, state)
             })
             .catch((error) => {
                 if (!controller.signal.aborted)
@@ -58,7 +77,7 @@ export function createCurrentModelSources() {
             })
     }
 
-    function select(models: RwkvUmPlusModel[]) {
+    function select(models: ExplicitModel[]) {
         const selected = new Set(models)
         for (const [model, controller] of controllers) {
             if (!selected.has(model) && states[model]?.phase === "loading") {
@@ -72,8 +91,8 @@ export function createCurrentModelSources() {
         models.forEach(ensure)
     }
 
-    function retry(model: RwkvUmPlusModel) {
-        if (states[model]?.phase !== "failed") return
+    function retry(model: ExplicitModel) {
+        if (states[model]?.phase !== "failed" && states[model]?.phase !== "unavailable") return
         states = { ...states }
         delete states[model]
         store.set(states)

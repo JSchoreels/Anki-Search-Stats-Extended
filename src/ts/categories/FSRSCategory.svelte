@@ -24,6 +24,7 @@
     import {
         calibrationComparison,
         calibration_samples,
+        card_data,
         cancelRwkvStabilityComputation,
         fsrsCalibrationGeneration,
         fsrsCalibrationStats,
@@ -48,7 +49,7 @@
     const dailyMetrics: DailyPredictionMetric[] = ["standardizedGap", "logLoss"]
     const modelPredictions = createModelPredictionSources()
     const dailyModels = createDailyModelSources()
-    $: modelPredictions.setSamples($calibration_samples)
+    $: modelPredictions.setSamples($calibration_samples, $card_data)
     $: dailyModels.setSamples($calibration_samples)
     onDestroy(() => {
         modelPredictions.destroy()

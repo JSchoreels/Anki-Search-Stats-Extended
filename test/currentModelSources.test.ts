@@ -1,11 +1,17 @@
 import { get } from "svelte/store"
 import { createCurrentModelSources } from "../src/ts/currentModelSources"
-import { getCurrentRwkvModelPredictions } from "../src/ts/search"
+import { getCurrentFsrs6ModelPredictions, getCurrentRwkvModelPredictions } from "../src/ts/search"
 
-jest.mock("../src/ts/search", () => ({ getCurrentRwkvModelPredictions: jest.fn() }))
+jest.mock("../src/ts/search", () => ({
+    getCurrentRwkvModelPredictions: jest.fn(),
+    getCurrentFsrs6ModelPredictions: jest.fn(),
+}))
 
 const request = getCurrentRwkvModelPredictions as jest.MockedFunction<
     typeof getCurrentRwkvModelPredictions
+>
+const fsrs6Request = getCurrentFsrs6ModelPredictions as jest.MockedFunction<
+    typeof getCurrentFsrs6ModelPredictions
 >
 const flush = async () => {
     for (let index = 0; index < 20; index++) await Promise.resolve()
@@ -13,7 +19,32 @@ const flush = async () => {
 
 beforeEach(() => {
     request.mockReset()
+    fsrs6Request.mockReset()
     request.mockResolvedValue([[1, 0.8]])
+})
+
+test("FSRS-6 reports missing parameters without discarding available cards", async () => {
+    fsrs6Request.mockResolvedValue({ status: "ready", data: [[1, 0.75]], missingParameters: 1 })
+    const sources = createCurrentModelSources()
+    sources.setCards([1, 2])
+    sources.select(["fsrs6"])
+    await flush()
+    expect(get(sources).fsrs6).toMatchObject({
+        phase: "ready",
+        scores: [[1, 0.75]],
+        missingParameters: 1,
+    })
+    sources.destroy()
+})
+
+test("FSRS-6 with no saved parameters remains unavailable", async () => {
+    fsrs6Request.mockResolvedValue({ status: "unavailable", data: [], missingParameters: 1 })
+    const sources = createCurrentModelSources()
+    sources.setCards([1])
+    sources.select(["fsrs6"])
+    await flush()
+    expect(get(sources).fsrs6).toMatchObject({ phase: "unavailable", missingParameters: 1 })
+    sources.destroy()
 })
 
 test("only selected current models are prepared and completed scores are reused", async () => {

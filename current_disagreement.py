@@ -144,6 +144,43 @@ def current_fsrs_predictions(mw, cids):
         return {"status": "failed", "data": []}
 
 
+def current_fsrs6_predictions(mw, cids):
+    """Reconstruct FSRS-6 scores without changing a card's scheduler state."""
+    cids = list(dict.fromkeys(int(cid) for cid in cids))
+    if not cids:
+        return {"status": "ready", "data": [], "missingParameters": 0}
+    backend = getattr(mw.col, "_backend", None)
+    compute = getattr(backend, "fsrs_six_current_scores", None)
+    if not callable(compute):
+        return {
+            "status": "unavailable",
+            "data": [],
+            "missingParameters": 0,
+            "error": "This Anki build does not provide FSRS-6 comparison scores. Rebuild and restart Anki.",
+        }
+    try:
+        result = compute(cids)
+        rows = [
+            [score.card_id, score.retrievability]
+            for score in result.scores
+            if valid_probability(score.retrievability)
+        ]
+        missing = result.missing_parameters
+        return {
+            "status": "unavailable" if missing == len(cids) else "ready",
+            "data": rows,
+            "missingParameters": missing,
+        }
+    except Exception:
+        logger.exception("Current FSRS-6 model predictions failed")
+        return {
+            "status": "failed",
+            "data": [],
+            "missingParameters": 0,
+            "error": "FSRS-6 current predictions could not be calculated. Retry or check Anki's logs.",
+        }
+
+
 def valid_probability(value):
     return isinstance(value, (int, float)) and math.isfinite(value) and 0 <= value <= 1
 

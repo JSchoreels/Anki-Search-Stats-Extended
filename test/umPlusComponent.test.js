@@ -38,7 +38,7 @@ const plugin = {
                     import { createModelPredictionSources } from "${project}/src/ts/modelPredictionSources";
                     export const sources = samples => {
                         const modelPredictions = createModelPredictionSources();
-                        modelPredictions.setSamples(samples);
+                        modelPredictions.setSamples(samples, Array.from(new Set(samples?.cardIds ?? [])).map(id => ({id, did:1, odid:0})));
                         return modelPredictions;
                     };
                     export const start = (target, props, modelPredictions = sources(props.samples)) =>
@@ -80,7 +80,12 @@ const plugin = {
                     return key + (args?.error ? ": " + args.error : "");
                 }`
             } else if (args.path === "./search") {
-                contents = `export async function getRwkvUmPlusModelPages(model, ids, signal, progress) {
+                contents = `export async function getFsrsSixComparisonPages(deckIds, ids, role, signal, progress) {
+                    globalThis.modelLoads.push("fsrs6");
+                    progress({phase:"preparing",current:1,total:1,done:false});
+                    return "fsrs6";
+                }
+                export async function getRwkvUmPlusModelPages(model, ids, signal, progress) {
                     globalThis.modelLoads.push(model);
                     progress({phase:"replaying", current:1, total:2, done:false});
                     if (globalThis.failNextModel === model) { globalThis.failNextModel = null; throw new Error("model unavailable"); }
@@ -136,6 +141,7 @@ test("model selectors load and compare each requested model on the chosen side",
         failNextModel: null,
         holdModel: null,
         modelValues: {
+            fsrs6: 0.65,
             "rwkv-big": 0.3,
             "rwkv-small-curve": 0.4,
             "rwkv-small-instant": 0.5,
@@ -181,6 +187,7 @@ test("model selectors load and compare each requested model on the chosen side",
     const [first, second] = document.querySelectorAll("select")
     expect([...first.options].map((option) => option.value)).toEqual([
         "fsrs",
+        "fsrs6",
         "rwkv",
         "rwkv-big",
         "rwkv-small-curve",
@@ -352,7 +359,7 @@ test("model selectors load and compare each requested model on the chosen side",
         }
     }
     expect(global.modelLoads.sort()).toEqual(Object.keys(global.modelValues).sort())
-    expect(global.bandCalls).toBe(4)
+    expect(global.bandCalls).toBe(5)
     umFirst.value = "rwkv-tiny-instant"
     umFirst.dispatchEvent(new window.Event("change", { bubbles: true }))
     flush()
@@ -401,7 +408,7 @@ test("model selectors load and compare each requested model on the chosen side",
         }
     }
     expect(global.modelLoads.sort()).toEqual(Object.keys(global.modelValues).sort())
-    expect(global.bandCalls).toBe(4)
+    expect(global.bandCalls).toBe(5)
     global.rocPositiveCount = 0
     rocFirst.value = "rwkv-big"
     rocFirst.dispatchEvent(new window.Event("change", { bubbles: true }))

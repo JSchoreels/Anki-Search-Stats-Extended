@@ -8,7 +8,7 @@
     import { i18n } from "./i18n"
     import { latestResult } from "./latestResult"
     import {
-        isRwkvModel,
+        isExplicitModel,
         modelOptions,
         type ModelPredictionSources,
         type ModelPredictionStates,
@@ -39,7 +39,7 @@
     $: secondLabel = models.find((model) => model.id === second)?.label ?? second
     $: usesFsrs = first === "fsrs" || second === "fsrs"
     $: usesRwkv = first === "rwkv" || second === "rwkv"
-    $: selectedVariants = [...new Set([first, second].filter(isRwkvModel))]
+    $: selectedVariants = [...new Set([first, second].filter(isExplicitModel))]
     $: if (samples) selectedVariants.forEach((model) => modelPredictions.ensure(model))
     $: variantPending = selectedVariants.some((model) => variants[model]?.phase !== "ready")
     $: variantError = selectedVariants.find((model) => variants[model]?.phase === "failed")
@@ -75,8 +75,8 @@
             rwkv?.predictions,
             comparison,
             generating,
-            isRwkvModel(first) ? variants[first]?.predictions : null,
-            isRwkvModel(second) ? variants[second]?.predictions : null,
+            isExplicitModel(first) ? variants[first]?.predictions : null,
+            isExplicitModel(second) ? variants[second]?.predictions : null,
         ]
         if (inputs && next.every((value, index) => value === inputs![index])) return
         inputs = next
@@ -103,7 +103,7 @@
                 ? fsrsPredictions
                 : model === "rwkv"
                   ? rwkv?.predictions
-                  : isRwkvModel(model)
+                  : isExplicitModel(model)
                     ? variants[model]?.predictions
                     : undefined
         const firstPredictions = source(first)
@@ -149,7 +149,7 @@
             <div class="calibration-message">
                 {progress?.phase === "waiting"
                     ? i18n("model-waiting", { model: label })
-                    : i18n("model-preparing", {
+                    : i18n(model === "fsrs6" ? "model-fsrs6-preparing" : "model-preparing", {
                           model: label,
                           current: progress?.current ?? 0,
                           total: progress?.total ?? 0,

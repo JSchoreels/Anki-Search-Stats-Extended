@@ -170,6 +170,18 @@ def current_fsrs_model_predictions():
     )
 
 
+def current_fsrs6_model_predictions():
+    from .current_disagreement import current_fsrs6_predictions
+
+    return Response(
+        orjson.dumps(
+            current_fsrs6_predictions(
+                mw, _positive_ints(orjson.loads(request.data).get("cids", []))
+            )
+        )
+    )
+
+
 def start_current_rwkv_model():
     from . import current_model_comparison
 
@@ -225,6 +237,7 @@ def cancel_current_rwkv_model():
 
 
 post_handlers["currentFsrsModelPredictions"] = current_fsrs_model_predictions
+post_handlers["currentFsrs6ModelPredictions"] = current_fsrs6_model_predictions
 post_handlers["startCurrentRwkvModel"] = start_current_rwkv_model
 post_handlers["currentRwkvModelProgress"] = current_rwkv_model_progress
 post_handlers["currentRwkvModelPredictions"] = current_rwkv_model_predictions
@@ -1777,6 +1790,48 @@ def rwkv_um_plus_model_predictions() -> bytes:
 post_handlers["startRwkvUmPlusModel"] = start_rwkv_um_plus_model
 post_handlers["rwkvUmPlusModelProgress"] = rwkv_um_plus_model_progress
 post_handlers["rwkvUmPlusModelPredictions"] = rwkv_um_plus_model_predictions
+
+
+def start_fsrs6_comparison():
+    from . import fsrs6_comparison
+
+    req = orjson.loads(request.data)
+    return Response(orjson.dumps(fsrs6_comparison.start(
+        mw,
+        addon_dir / "user_files",
+        _positive_ints(req.get("deck_ids", [])),
+        _positive_ints(req.get("revlog_ids", [])),
+        req.get("role"),
+    )))
+
+
+def fsrs6_comparison_progress():
+    from . import fsrs6_comparison
+
+    req = orjson.loads(request.data)
+    return Response(orjson.dumps(fsrs6_comparison.progress(mw, req.get("job_id"))))
+
+
+def fsrs6_comparison_predictions():
+    from . import fsrs6_comparison
+
+    req = orjson.loads(request.data)
+    result = fsrs6_comparison.predictions(mw, req.get("job_id"))
+    return prediction_response(result, req.get("stream_pages") is True)
+
+
+def cancel_fsrs6_comparison():
+    from . import fsrs6_comparison
+
+    req = orjson.loads(request.data)
+    fsrs6_comparison.cancel(mw, req.get("job_id"))
+    return Response(orjson.dumps({}))
+
+
+post_handlers["startFsrs6Comparison"] = start_fsrs6_comparison
+post_handlers["fsrs6ComparisonProgress"] = fsrs6_comparison_progress
+post_handlers["fsrs6ComparisonPredictions"] = fsrs6_comparison_predictions
+post_handlers["cancelFsrs6Comparison"] = cancel_fsrs6_comparison
 
 
 def _workload_forecast_json(value):

@@ -1,8 +1,14 @@
 import { writable } from "svelte/store"
 import type { CalibrationSamples } from "./calibrationSamples"
+import type { CardData } from "./cardData"
 import { i18n } from "./i18n"
 import { withConfidenceIntervals, type LossBin } from "./MemorisedBar"
-import { getRwkvUmPlusModelPages, type RwkvUmPlusModel, type RwkvUmPlusProgress } from "./search"
+import {
+    getFsrsSixComparisonPages,
+    getRwkvUmPlusModelPages,
+    type RwkvUmPlusModel,
+    type RwkvUmPlusProgress,
+} from "./search"
 import { runStatsTask } from "./statsWorkerClient"
 
 export type ModelPredictionState = {
@@ -15,7 +21,8 @@ export type ModelPredictionState = {
     bandsPending?: boolean
     bandsReady?: boolean
 }
-export type ModelPredictionStates = Partial<Record<RwkvUmPlusModel, ModelPredictionState>>
+export type ExplicitModel = RwkvUmPlusModel | "fsrs6"
+export type ModelPredictionStates = Partial<Record<ExplicitModel, ModelPredictionState>>
 
 export function isRwkvModel(model: string): model is RwkvUmPlusModel {
     return (
@@ -26,9 +33,14 @@ export function isRwkvModel(model: string): model is RwkvUmPlusModel {
     )
 }
 
+export function isExplicitModel(model: string): model is ExplicitModel {
+    return model === "fsrs6" || isRwkvModel(model)
+}
+
 export function modelOptions() {
     return [
         { id: "fsrs", label: i18n("calibration-source-fsrs") },
+        { id: "fsrs6", label: i18n("model-fsrs6") },
         { id: "rwkv", label: i18n("model-rwkv-current") },
         { id: "rwkv-big", label: i18n("model-rwkv-big") },
         { id: "rwkv-small-curve", label: i18n("model-rwkv-small-curve") },
@@ -41,28 +53,33 @@ export function modelOptions() {
 // Loading a model for a comparison alone does not start the expensive confidence bootstrap.
 export function createModelPredictionSources() {
     let samples: CalibrationSamples | null = null
+    let cards: Pick<CardData, "id" | "did" | "odid">[] | null = null
     let controller = new AbortController()
     let states: ModelPredictionStates = {}
-    let needsBands = new Set<RwkvUmPlusModel>()
+    let needsBands = new Set<ExplicitModel>()
     const store = writable<ModelPredictionStates>(states)
 
-    function update(model: RwkvUmPlusModel, state: ModelPredictionState) {
+    function update(model: ExplicitModel, state: ModelPredictionState) {
         states = { ...states, [model]: state }
         store.set(states)
     }
 
-    function setSamples(next: CalibrationSamples | null) {
-        if (samples === next) return
+    function setSamples(
+        next: CalibrationSamples | null,
+        nextCards: Pick<CardData, "id" | "did" | "odid">[] | null = null
+    ) {
+        if (samples === next && cards === nextCards) return
         controller.abort()
         controller = new AbortController()
         samples = next
+        cards = nextCards
         states = {}
         needsBands = new Set()
         store.set(states)
     }
 
     async function addBands(
-        model: RwkvUmPlusModel,
+        model: ExplicitModel,
         selected: CalibrationSamples,
         predictions: Float64Array,
         signal: AbortSignal
@@ -101,16 +118,32 @@ export function createModelPredictionSources() {
         }
     }
 
-    async function load(model: RwkvUmPlusModel, selected: CalibrationSamples, signal: AbortSignal) {
+    async function load(model: ExplicitModel, selected: CalibrationSamples, signal: AbortSignal) {
         try {
-            const pages = await getRwkvUmPlusModelPages(
-                model,
-                selected.revlogIds,
-                signal,
-                (progress) => {
-                    if (!signal.aborted) update(model, { phase: "loading", progress })
-                }
-            )
+            const onProgress = (progress: RwkvUmPlusProgress) => {
+                if (!signal.aborted) update(model, { phase: "loading", progress })
+            }
+            let pages: string | ReadableStream<Uint8Array>
+            if (model === "fsrs6") {
+                const sampleCards = new Set(selected.cardIds)
+                const deckIds = [
+                    ...new Set(
+                        cards!
+                            .filter((card) => sampleCards.has(card.id))
+                            .map((card) => card.odid || card.did)
+                    ),
+                ]
+                if (!deckIds.length) throw new Error("FSRS-6 deck information is unavailable")
+                pages = await getFsrsSixComparisonPages(
+                    deckIds,
+                    selected.revlogIds,
+                    "validation_fold",
+                    signal,
+                    onProgress
+                )
+            } else {
+                pages = await getRwkvUmPlusModelPages(model, selected.revlogIds, signal, onProgress)
+            }
             signal.throwIfAborted()
             const parsed = await runStatsTask("calibrationPredictions", [selected, pages], signal)
             if (signal.aborted) return
@@ -130,9 +163,9 @@ export function createModelPredictionSources() {
         }
     }
 
-    function ensure(model: RwkvUmPlusModel, confidence = false) {
+    function ensure(model: ExplicitModel, confidence = false) {
         if (confidence) needsBands.add(model)
-        if (!samples) return
+        if (!samples || (model === "fsrs6" && !cards)) return
         const state = states[model]
         if (!state) {
             if (samples.revlogIds.length === 0) {
@@ -151,7 +184,7 @@ export function createModelPredictionSources() {
         }
     }
 
-    function retry(model: RwkvUmPlusModel) {
+    function retry(model: ExplicitModel) {
         if (states[model]?.phase !== "failed") return
         states = { ...states }
         delete states[model]

@@ -36,6 +36,45 @@ test("uniqueRevlogCids returns reviewed card ids once in first-seen order", () =
     ).toStrictEqual([3, 1, 2])
 })
 
+test("FSRS-6 requests the selected home decks and releases the completed job", async () => {
+    const originalFetch = global.fetch
+    const calls: Array<{ url: string; body: string }> = []
+    global.fetch = jest.fn(async (url: string, init: RequestInit) => {
+        calls.push({ url, body: String(init.body) })
+        if (url.endsWith("startFsrs6Comparison"))
+            return { ok: true, json: async () => ({ jobId: 42, phase: "complete", done: true }) }
+        if (url.endsWith("fsrs6ComparisonPredictions"))
+            return { ok: true, headers: new Headers(), text: async () => '{"data":[]}' }
+        return { ok: true, text: async () => "{}" }
+    }) as typeof fetch
+    jest.resetModules()
+    try {
+        const { getFsrsSixComparisonPages } = await import("../src/ts/search")
+        const signal = new AbortController().signal
+        const result = await getFsrsSixComparisonPages(
+            [5, 6],
+            new Float64Array([10, 11, 10]),
+            "validation_fold",
+            signal,
+            () => {}
+        )
+        expect(result).toBe('{"data":[]}')
+        expect(JSON.parse(calls[0].body)).toEqual({
+            deck_ids: [5, 6],
+            revlog_ids: [10, 11],
+            role: "validation_fold",
+        })
+        expect(calls.map((call) => call.url)).toEqual([
+            "/_anki/startFsrs6Comparison",
+            "/_anki/fsrs6ComparisonPredictions",
+            "/_anki/cancelFsrs6Comparison",
+        ])
+    } finally {
+        global.fetch = originalFetch
+        jest.resetModules()
+    }
+})
+
 test("getRwkvReviewRetrievability sends calibration revlog ids", async () => {
     const originalFetch = global.fetch
     const fetchMock = jest.fn().mockResolvedValue({

@@ -8,7 +8,7 @@
     import { i18n } from "./i18n"
     import type { LossBin } from "./MemorisedBar"
     import {
-        isRwkvModel,
+        isExplicitModel,
         modelOptions,
         type ModelPredictionSources,
         type ModelPredictionStates,
@@ -26,7 +26,7 @@
     $: models = modelOptions()
     $: variants = $modelPredictions
     $: selected = second === "none" ? [first] : [first, second]
-    $: selectedVariants = [...new Set(selected.filter(isRwkvModel))]
+    $: selectedVariants = [...new Set(selected.filter(isExplicitModel))]
     $: if (samples) selectedVariants.forEach((model) => modelPredictions.ensure(model, true))
     $: sources = selected.map((model, index) =>
         source(model, index, fsrs, rwkv, fallbackFsrsBins, variants, models)
@@ -69,7 +69,7 @@
                 warnings: rwkv?.warnings ?? [],
             }
         }
-        const state = isRwkvModel(model) ? variants[model] : undefined
+        const state = isExplicitModel(model) ? variants[model] : undefined
         return {
             id: model,
             label,
@@ -83,7 +83,7 @@
     }
 
     function retry(model: string) {
-        if (isRwkvModel(model)) modelPredictions.retry(model)
+        if (isExplicitModel(model)) modelPredictions.retry(model)
     }
 </script>
 
@@ -92,16 +92,16 @@
     <Warning always>{warnings.join(" ")}</Warning>
 {/if}
 {#each sources as item}
-    {#if item.phase === "failed" && isRwkvModel(item.id)}
+    {#if item.phase === "failed" && isExplicitModel(item.id)}
         <div class="calibration-message">
             {i18n("model-failed", { model: item.label, error: item.error ?? "" })}
         </div>
         <button type="button" on:click={() => retry(item.id)}>{i18n("model-retry")}</button>
-    {:else if item.phase === "loading" && isRwkvModel(item.id)}
+    {:else if item.phase === "loading" && isExplicitModel(item.id)}
         <div class="calibration-message">
             {item.progress?.phase === "waiting"
                 ? i18n("model-waiting", { model: item.label })
-                : i18n("model-preparing", {
+                : i18n(item.id === "fsrs6" ? "model-fsrs6-preparing" : "model-preparing", {
                       model: item.label,
                       current: item.progress?.current ?? 0,
                       total: item.progress?.total ?? 0,
@@ -113,7 +113,7 @@
 {/each}
 {#if hasData}
     <FsrsCalibration data={[]} series={available} />
-{:else if pending && !sources.some((item) => item.phase === "loading" && isRwkvModel(item.id))}
+{:else if pending && !sources.some((item) => item.phase === "loading" && isExplicitModel(item.id))}
     <div class="calibration-message">{i18n("loading")}</div>
 {:else if !pending && !failed}
     <div class="calibration-message">{i18n("calibration-no-data")}</div>

@@ -11,7 +11,7 @@ from zipfile import ZipFile
 with ZipFile("searchStatsExtended.ankiaddon") as archive:
     archive.extractall(sys.argv[1])
 PY
-rsync -a --delete --exclude=meta.json --exclude=user_files/ --exclude=config.json "$stage_dir/" "$target/"
+rsync -a --delete --exclude=meta.json --exclude=user_files/ --exclude=config.json --exclude=.DS_Store "$stage_dir/" "$target/"
 if [ ! -f "$target/config.json" ]; then
     cp "$stage_dir/config.json" "$target/config.json"
 fi

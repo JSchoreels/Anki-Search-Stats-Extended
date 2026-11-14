@@ -44,7 +44,8 @@ const plugin = {
                     import {calibration_samples, fsrsCalibrationStats, rwkvCalibrationStats} from "./stores";
                     export function start(target, props) {
                         calibration_samples.set(props.samples); fsrsCalibrationStats.set(props.fsrs); rwkvCalibrationStats.set(props.rwkv);
-                        const modelPredictions = createModelPredictionSources(); modelPredictions.setSamples(props.samples);
+                        const modelPredictions = createModelPredictionSources();
+                        modelPredictions.setSamples(props.samples, Array.from(new Set(props.samples?.cardIds ?? [])).map(id => ({id,did:1,odid:0})));
                         const dailyModels = createDailyModelSources(); dailyModels.setSamples(props.samples);
                         return {app:mount(Gap,{target,props:{metric:"standardizedGap",...props,modelPredictions,dailyModels}}),modelPredictions,dailyModels};
                     }
@@ -57,7 +58,11 @@ const plugin = {
             } else if (args.path === "./i18n") {
                 contents = `export const i18n = (key,args) => key + (args ? " " + JSON.stringify(args) : "");`
             } else if (args.path === "./search") {
-                contents = `export async function getRwkvUmPlusModelPages(model,ids,signal,progress) {
+                contents = `export async function getFsrsSixComparisonPages(decks,ids,role,signal,progress) {
+                    globalThis.modelLoads.push("fsrs6"); progress({phase:"preparing",current:1,total:1,done:false});
+                    return "fsrs6";
+                }
+                export async function getRwkvUmPlusModelPages(model,ids,signal,progress) {
                     globalThis.modelLoads.push(model); progress({phase:"replaying",current:1,total:2,done:false});
                     if (globalThis.failedModel === model) {globalThis.failedModel = null; throw new Error("model missing");}
                     return model;
@@ -129,6 +134,7 @@ test("daily gap compares any selected models against all-day recall", async () =
         lastGraph: null,
         failedModel: null,
         modelValues: {
+            fsrs6: 0.65,
             "rwkv-big": 0.3,
             "rwkv-small-curve": 0.4,
             "rwkv-small-instant": 0.5,

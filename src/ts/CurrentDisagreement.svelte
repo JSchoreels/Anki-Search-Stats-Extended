@@ -8,7 +8,7 @@
     import { i18n } from "./i18n"
     import { graphVisibility } from "./graphVisibility"
     import { getCurrentCardDisagreement, getCurrentFsrsModelPredictions } from "./search"
-    import { isRwkvModel, modelOptions } from "./modelPredictionSources"
+    import { isExplicitModel, modelOptions } from "./modelPredictionSources"
     import { createCurrentModelSources, type CurrentModelStates } from "./currentModelSources"
     import {
         buildCurrentDisagreementBins,
@@ -93,7 +93,7 @@
             return current
                 ? { phase: current.rwkvStatus, scores: current.rwkvScores }
                 : { phase: "loading", scores: [] }
-        if (isRwkvModel(model)) {
+        if (isExplicitModel(model)) {
             const state = variants[model]
             return state
                 ? { phase: state.phase, scores: state.scores ?? [], error: state.error }
@@ -103,7 +103,7 @@
     }
 
     function retryFailure(model: string) {
-        if (isRwkvModel(model)) currentModels.retry(model)
+        if (isExplicitModel(model)) currentModels.retry(model)
         else if (model === "fsrs") fsrsScores = null
         else restart($cids)
     }
@@ -116,7 +116,7 @@
     $: variants = $currentModels
     $: firstLabel = models.find((model) => model.id === first)?.label ?? first
     $: secondLabel = models.find((model) => model.id === second)?.label ?? second
-    $: selectedVariants = [...new Set([first, second].filter(isRwkvModel))]
+    $: selectedVariants = [...new Set([first, second].filter(isExplicitModel))]
     $: currentModels.select($comparisonVisible && $cids ? selectedVariants : [])
     $: defaultPair =
         (first === "fsrs" && second === "rwkv") || (first === "rwkv" && second === "fsrs")
@@ -145,6 +145,9 @@
         : pairCurrentModelScores(firstSource.scores, secondSource.scores)
     $: bins = buildCurrentDisagreementBins(pairs)
     $: paired = bins.reduce((sum, bin) => sum + bin.cids.length, 0)
+    $: missingFsrs6Parameters = selectedVariants.includes("fsrs6")
+        ? (variants.fsrs6?.missingParameters ?? 0)
+        : 0
     $: render = (svg: SVGElement) =>
         renderCurrentDisagreementGraph(svg, bins, firstLabel, secondLabel)
     onDestroy(() => {
@@ -158,17 +161,23 @@
 <GraphContainer graphId="fsrs:current-disagreement">
     <h1>{i18n("current-disagreement")}</h1>
     <ModelSelector {models} bind:first bind:second />
+    {#if missingFsrs6Parameters && variants.fsrs6?.phase === "ready"}
+        <p>{i18n("model-fsrs6-missing-parameters", { count: missingFsrs6Parameters })}</p>
+    {/if}
     {#if failure}
         <p>
-            {isRwkvModel(failure.model)
-                ? i18n("model-failed", {
-                      model:
-                          models.find((item) => item.id === failure.model)?.label ?? failure.model,
-                      error: variants[failure.model]?.error ?? "",
-                  })
-                : failure.model === "fsrs"
-                  ? i18n(`model-current-fsrs-${failure.phase}`)
-                  : i18n(`current-disagreement-${failure.phase}`)}
+            {failure.model === "fsrs6" && failure.phase === "unavailable" && !failure.error
+                ? i18n("model-fsrs6-unavailable")
+                : isExplicitModel(failure.model)
+                  ? i18n("model-failed", {
+                        model:
+                            models.find((item) => item.id === failure.model)?.label ??
+                            failure.model,
+                        error: variants[failure.model]?.error ?? "",
+                    })
+                  : failure.model === "fsrs"
+                    ? i18n(`model-current-fsrs-${failure.phase}`)
+                    : i18n(`current-disagreement-${failure.phase}`)}
         </p>
         <button on:click={() => retryFailure(failure.model)}>{i18n("model-retry")}</button>
     {:else if !ready}
@@ -189,7 +198,9 @@
                                 current: progress.current ?? 0,
                                 total: progress.total ?? 0,
                             })
-                          : i18n("model-waiting", { model: label })}
+                          : i18n(model === "fsrs6" ? "model-loading" : "model-waiting", {
+                                model: label,
+                            })}
                 </p>
             {/if}
         {/each}

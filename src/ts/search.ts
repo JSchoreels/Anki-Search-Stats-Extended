@@ -28,6 +28,20 @@ export async function getCurrentFsrsModelPredictions(cids: number[], signal: Abo
     return (await response.json()) as CurrentModelScores
 }
 
+export async function getCurrentFsrs6ModelPredictions(cids: number[], signal: AbortSignal) {
+    const response = await fetchEndpoint(
+        "currentFsrs6ModelPredictions",
+        JSON.stringify({ cids }),
+        false,
+        signal
+    )
+    return (await response.json()) as Omit<CurrentModelScores, "status"> & {
+        status: "ready" | "unavailable" | "failed"
+        missingParameters: number
+        error?: string
+    }
+}
+
 export async function getCurrentRwkvModelPredictions(
     model: RwkvUmPlusModel,
     cids: number[],
@@ -453,6 +467,62 @@ export type RwkvUmPlusProgress = {
     done: boolean
     error?: string | null
     warnings?: string[]
+}
+
+export type FsrsSixComparisonRole = "final_fit" | "validation_fold"
+
+export async function getFsrsSixComparisonPages(
+    deckIds: number[],
+    reviewIds: Float64Array,
+    role: FsrsSixComparisonRole,
+    signal: AbortSignal,
+    onProgress: (progress: RwkvUmPlusProgress) => void
+): Promise<string | ReadableStream<Uint8Array>> {
+    let jobId: number | undefined
+    try {
+        const initial = await fetchEndpoint(
+            "startFsrs6Comparison",
+            JSON.stringify({
+                deck_ids: deckIds,
+                revlog_ids: [...new Set(reviewIds)].filter((id) => Number.isInteger(id) && id > 0),
+                role,
+            }),
+            false
+        )
+        let state = (await initial.json()) as RwkvUmPlusProgress
+        jobId = state.jobId
+        signal.throwIfAborted()
+        onProgress(state)
+        while (!state.done) {
+            if (jobId === undefined) throw new Error("FSRS-6 comparison has no job ID")
+            await calibrationPollDelay(signal)
+            const response = await fetchEndpoint(
+                "fsrs6ComparisonProgress",
+                JSON.stringify({ job_id: jobId }),
+                false,
+                signal
+            )
+            state = (await response.json()) as RwkvUmPlusProgress
+            onProgress(state)
+        }
+        if (state.phase !== "complete" || jobId === undefined)
+            throw new Error(state.error || "FSRS-6 comparison could not be prepared")
+        const response = await fetchEndpoint(
+            "fsrs6ComparisonPredictions",
+            JSON.stringify({ job_id: jobId, stream_pages: true }),
+            false,
+            signal
+        )
+        if (!response.headers?.get("Content-Type")?.startsWith("application/x-ndjson"))
+            return response.text()
+        if (!response.body) throw new Error("Missing FSRS-6 prediction stream")
+        return response.body
+    } finally {
+        if (jobId !== undefined)
+            void endpoint("cancelFsrs6Comparison", JSON.stringify({ job_id: jobId }), false).catch(
+                () => {}
+            )
+    }
 }
 
 export async function getRwkvUmPlusModelPages(

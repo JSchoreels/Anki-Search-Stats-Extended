@@ -8,7 +8,7 @@ Two graphs follow **FSRS vs RWKV Card Retrievability**, in this order:
 
 Both respect the Statistics search and review date range, and offer independent
 moving-average and [drag-to-zoom](TIME_AXIS_ZOOM.MD) controls. Both graphs
-offer FSRS, RWKV (current), RWKV Big, RWKV Small Curve, RWKV Small Instant and
+offer FSRS, FSRS-6, RWKV (current), RWKV Big, RWKV Small Curve, RWKV Small Instant and
 RWKV Tiny Instant in either position; the second model can be set to None. Each
 defaults to FSRS and RWKV (current). The first model uses blue and the second
 uses green.

@@ -67,6 +67,10 @@ const plugin = {
                 export async function getCurrentFsrsModelPredictions(ids, signal) {
                     globalThis.fsrsLoads.push([...ids]); return {status:"ready",data:globalThis.currentScores.fsrs};
                 }
+                export async function getCurrentFsrs6ModelPredictions(ids, signal) {
+                    globalThis.currentLoads.push("fsrs6");
+                    return {status:"ready",data:globalThis.currentScores.fsrs6,missingParameters:1};
+                }
                 export async function getCurrentRwkvModelPredictions(model, ids, signal, progress) {
                     globalThis.currentLoads.push(model);
                     progress({phase:"replaying",current:1,total:2,done:false});
@@ -74,8 +78,8 @@ const plugin = {
                     return globalThis.currentScores[model];
                 }`
             } else if (args.path === "./modelPredictionSources") {
-                contents = `export const isRwkvModel = id => id.startsWith("rwkv-");
-                    export const modelOptions = () => ["fsrs","rwkv","rwkv-big","rwkv-small-curve","rwkv-small-instant","rwkv-tiny-instant"].map(id => ({id,label:id}));`
+                contents = `export const isExplicitModel = id => id === "fsrs6" || id.startsWith("rwkv-");
+                    export const modelOptions = () => ["fsrs","fsrs6","rwkv","rwkv-big","rwkv-small-curve","rwkv-small-instant","rwkv-tiny-instant"].map(id => ({id,label:id}));`
             } else {
                 contents = `export function renderCurrentDisagreementGraph(svg, bins, first, second) {
                     svg.dataset.first = first; svg.dataset.second = second;
@@ -116,6 +120,11 @@ test("current disagreement selectors compare every ordered model pair", async ()
                 [1, 0.8],
                 [2, 0.7],
                 [4, 0.3],
+            ],
+            fsrs6: [
+                [1, 0.75],
+                [3, 0.45],
+                [4, 0.55],
             ],
             rwkv: [
                 [1, 0.4],
@@ -212,7 +221,7 @@ test("current disagreement selectors compare every ordered model pair", async ()
         }
     }
     expect(global.currentLoads.slice().sort()).toEqual(
-        models.filter((model) => model.startsWith("rwkv-")).sort()
+        models.filter((model) => model === "fsrs6" || model.startsWith("rwkv-")).sort()
     )
     expect(global.fsrsLoads).toHaveLength(1)
 

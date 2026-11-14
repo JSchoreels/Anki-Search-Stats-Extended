@@ -363,13 +363,21 @@ fold-trained validation predictions. There is no user-facing source override.
 
 Model Calibration has independent first and second model selectors. The first
 defaults to FSRS, and the second defaults to None so one model is shown. Either
-selector can choose FSRS, RWKV (current), RWKV Big, RWKV Small Curve, RWKV Small
+selector can choose FSRS, FSRS-6, RWKV (current), RWKV Big, RWKV Small Curve, RWKV Small
 Instant, or RWKV Tiny Instant; selecting a second model overlays its curve.
 The first series is blue, the second green, and the perfect-calibration reference
 line is orange. Review-count volume bars use the series colors and overlap.
 Each model uses its own eligible reviews rather than a paired intersection, so
 counts can differ between series. This preserves the original calibration
 behavior; UM+ instead compares only reviews with predictions from both models.
+
+The explicit FSRS-6 source uses chronological validation folds: each fold is
+scored with FSRS-6 parameters trained only on earlier reviews. Historical
+comparisons therefore do not replay the saved parameters on their training
+reviews. A deck must have saved FSRS-6 parameters to enable this source; decks
+without them are reported as unavailable. Preparation runs on demand and keeps
+its predictions in an add-on-owned cache, separate from Anki's active FSRS
+prediction cache. Current-card comparisons use the saved parameters instead.
 
 FSRS first uses role-aware cached
 FSRS retrievability for each eligible review, preferring historical validation
@@ -393,7 +401,7 @@ bins and confidence intervals use the existing calibration computations.
 
 The **Model Current Disagreement** histogram compares current card
 retrievability rather than review-time predictions. Its independent selectors
-offer FSRS, RWKV (current), RWKV Big, RWKV Small Curve, RWKV Small Instant and
+offer FSRS, FSRS-6, RWKV (current), RWKV Big, RWKV Small Curve, RWKV Small Instant and
 RWKV Tiny Instant, initially FSRS and RWKV (current). It uses the cards in
 the current statistics search, independently of the review date range and
 historical Memorised calculation. Each card with both valid current probabilities
@@ -414,6 +422,14 @@ RWKV-only pair does not require an FSRS prediction, and FSRS-only comparisons do
 not require a current-RWKV prediction. The add-on obtains independent FSRS values
 through `currentFsrsModelPredictions`; `currentCardDisagreement` also returns
 the configured RWKV model's independently eligible scores and status.
+
+The explicit FSRS-6 source reconstructs a separate memory state from review
+history using the saved FSRS-6 parameters of each card's home-deck preset.
+Cards whose home-deck preset has no valid saved 21-parameter FSRS-6 model are
+excluded with an availability message; the implementation never substitutes
+default weights. It uses the native current-statistics elapsed-time convention
+and leaves cards and scheduler state unchanged. Its scores are transient and are
+recomputed when the comparison or search is reopened.
 
 The four explicit RWKV models use the same model weights and output heads as
 UM+, but their review-time prediction cache cannot supply current card state.
@@ -533,7 +549,7 @@ fallback. Their calculations and grouping are documented in
 ## Model UM+ Comparison
 
 The UM+ graph follows the calibration graph. Its two independent model
-selectors default to FSRS and RWKV (current), and also offer RWKV Big, RWKV
+selectors default to FSRS and RWKV (current), and also offer FSRS-6, RWKV Big, RWKV
 Small Curve, RWKV Small Instant and RWKV Tiny Instant in either order. The
 current choice uses the existing RWKV calibration stream, which represents the
 configured runtime and may coincide with one of the explicit models. The selector

@@ -1,13 +1,19 @@
 import { get } from "svelte/store"
 import { calibrationSamplesFrom } from "../src/ts/calibrationSamples"
 import { createModelPredictionSources } from "../src/ts/modelPredictionSources"
-import { getRwkvUmPlusModelPages } from "../src/ts/search"
+import { getFsrsSixComparisonPages, getRwkvUmPlusModelPages } from "../src/ts/search"
 import { runStatsTask } from "../src/ts/statsWorkerClient"
 
-jest.mock("../src/ts/search", () => ({ getRwkvUmPlusModelPages: jest.fn() }))
+jest.mock("../src/ts/search", () => ({
+    getRwkvUmPlusModelPages: jest.fn(),
+    getFsrsSixComparisonPages: jest.fn(),
+}))
 jest.mock("../src/ts/statsWorkerClient", () => ({ runStatsTask: jest.fn() }))
 
 const pages = getRwkvUmPlusModelPages as jest.MockedFunction<typeof getRwkvUmPlusModelPages>
+const fsrs6Pages = getFsrsSixComparisonPages as jest.MockedFunction<
+    typeof getFsrsSixComparisonPages
+>
 const worker = runStatsTask as jest.MockedFunction<typeof runStatsTask>
 const samples = calibrationSamplesFrom([{ revlogId: 100, cardId: 10, actual: 1 }])
 const flush = async () => {
@@ -16,8 +22,10 @@ const flush = async () => {
 
 beforeEach(() => {
     pages.mockReset()
+    fsrs6Pages.mockReset()
     worker.mockReset()
     pages.mockResolvedValue("model-predictions")
+    fsrs6Pages.mockResolvedValue("model-predictions")
     worker.mockImplementation(async (task) => {
         if (task === "calibrationPredictions")
             return {
@@ -28,6 +36,26 @@ beforeEach(() => {
         if (task === "calibrationBands") return [[0.2, 0.9]] as never
         throw new Error(`Unexpected task ${task}`)
     })
+})
+
+test("FSRS-6 uses held-out predictions for the selected cards' home decks", async () => {
+    const source = createModelPredictionSources()
+    source.setSamples(samples, [
+        { id: 10, did: 900, odid: 12 },
+        { id: 20, did: 13, odid: 0 },
+    ])
+    source.ensure("fsrs6")
+    source.ensure("fsrs6", true)
+    await flush()
+    expect(fsrs6Pages).toHaveBeenCalledTimes(1)
+    expect(fsrs6Pages.mock.calls[0].slice(0, 3)).toEqual([
+        [12],
+        samples.revlogIds,
+        "validation_fold",
+    ])
+    expect(get(source).fsrs6?.phase).toBe("ready")
+    expect(get(source).fsrs6?.bandsReady).toBe(true)
+    source.destroy()
 })
 
 test("UM+ and Calibration share one model request; bands are computed only when needed", async () => {
