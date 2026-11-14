@@ -14,6 +14,7 @@ import { prepareFsrsReplay } from "./fsrsHistory"
 import { elapsedFsrsDays, type FsrsMemoryState } from "./fsrsModel"
 import { selectResolvedFsrsPresetParams, selectTsFsrsParams } from "./fsrsParams"
 import { i18n } from "./i18n"
+import { lapseRatesByIntroduction } from "./lapseRate"
 import { asRevlogHistory, type RevlogHistory, type RevlogInput } from "./packedRevlogs"
 import { TimeBucketBuilder, bucketTimeStats, type TimeBuckets } from "./timeBucketStats"
 type ReplayCard = FsrsMemoryState & { last_review?: Date }
@@ -631,6 +632,7 @@ export function calculateRevlogStats(
     }
 
     const remaining_forgotten = forgotten.size
+    const lapse_rates = lapseRatesByIntroduction(cardData, card_introduction_day, introduced, end)
     const longTermForgettingCurveCardIds = new Set<number>(
         forgetting_samples.map((sample) => sample.cid)
     )
@@ -683,6 +685,7 @@ export function calculateRevlogStats(
         burden,
         day_forgotten,
         remaining_forgotten,
+        lapse_rates,
         intervals,
         day_review_hours,
         day_filtered_review_hours,

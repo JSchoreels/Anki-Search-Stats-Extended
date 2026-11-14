@@ -221,6 +221,17 @@ lapse-load = Lapse Load
 lapse-load-help =
     This graph shows the sum of "1 / interval" for cards which have the given number of lapses. If you plan to suspend cards based on their number of lapses, this can help you find a good threshold if you compare it with the count graph to the left to see how many cards are giving you how much Load
 
+average-load-per-card = Average load per card
+average-load-by-lapses = Average Load by Lapses
+average-load-by-lapses-help =
+    The average current load per reviewed card, grouped by lapse count. Each card contributes 1 / interval; learning cards with a non-positive interval contribute 1. Wider bars average all cards in the range.
+average-repetitions-per-card = Average repetitions per card
+average-repetitions-per-lapse-plus-one = Average repetitions / (lapses + 1)
+average-repetitions-by-lapses = Average Repetitions by Lapses
+average-repetitions-by-lapses-help =
+    The average current repetition count for reviewed cards grouped by lapse count. The optional ratio divides each card's repetitions by its lapses plus one before averaging; wider bars average all cards in the range.
+divide-repetitions-by-lapses = Divide repetitions by lapses plus one
+
 lapse-distribution = Lapse Distribution
 lapse-distribution-help =
     A card increases its lapse count whenever it is reviewed "again" while not in the learning state. Lapses are used to monitor which cards become "leeches". By default, whenever the card reaches 7 lapses it becomes tagged as a leech. This value can be modified under leech threshold in the deck settings.
@@ -229,6 +240,12 @@ lapse-total = Lapse Total
 lapse-total-help =
     This graph shows the number of lapses, total, for each card. E.g if exactly 2 cards have 3 lapses per card, the lapse total for 3 would be 6.
 
+lapse-rate-by-introduction = Lapses per 100 Days Since Introduction
+lapse-rate-by-introduction-help =
+    Cards are grouped by their current lapse count divided by the number of days since their latest introduction or reintroduction, multiplied by 100. Cards introduced today, awaiting reintroduction after Forget, or missing an introduction in the loaded history are excluded.
+lapses-per-100-days = Lapses per 100 days
+lapse-rate-highest = Highest lapse rate
+
 highest-repetition-count = Most Repetitions
 repetition-count = Repetitions
 total-repetitions = Total Repetitions
@@ -236,6 +253,10 @@ total-repetitions = Total Repetitions
 repetition-load = Repetition Load
 repetition-load-help =
     This graph shows the sum of "1 / interval" for all cards which have the given number of repetitions.
+
+average-load-by-repetitions = Average Load by Repetitions
+average-load-by-repetitions-help =
+    The average current load per reviewed card, grouped by repetition count. Each card contributes 1 / interval; learning cards with a non-positive interval contribute 1. Wider bars average all cards in the range.
 
 repetition-distribution = Repetition Distribution
 repetition-distribution-help =
@@ -688,6 +709,14 @@ x-days-ago = {$days} days ago:
 
 difficulty-time-machine = Difficulty Time Machine
 difficulty-time-machine-help = Shows your card difficulties for a given date
+difficulty = Difficulty
+average-difficulty-over-time = Difficulty Over Time
+average-difficulty-over-time-help =
+    The mean or median FSRS difficulty across cards with a reconstructed memory state at the end of each day. The graph uses current resolved presets; resets remove a card until it is introduced again.
+difficulty-per-day = {$value} difficulty per {$n ->
+        [one] day
+        *[many] {$n} days
+    }
 
 # As in "zoom in" or "zoom out"
 zoom = Zoom

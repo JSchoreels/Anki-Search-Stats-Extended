@@ -94,10 +94,11 @@
     export let updateTrendRange: (id: number, range: import("./trend").TrendRange) => void =
         handleUpdateTrendRange
     export let trendPersistenceKey: string
+    export let preserveTrendsOnKeyChange = false
     let lastTrendPersistenceKey = ""
     $: if (trendPersistenceKey !== lastTrendPersistenceKey) {
         lastTrendPersistenceKey = trendPersistenceKey
-        trendSession = createGraphTrendSessionState()
+        if (!preserveTrendsOnKeyChange) trendSession = createGraphTrendSessionState()
     }
 
     $: realOffset = -Math.abs(viewOffset)

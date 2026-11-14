@@ -1,5 +1,6 @@
 <script lang="ts">
     import GraphContainer from "../GraphContainer.svelte"
+    import CardAverageByMetric from "../CardAverageByMetric.svelte"
     import IntervalGraph from "../IntervalGraph.svelte"
     import GraphCategory from "../GraphCategory.svelte"
     import { i18n } from "../i18n"
@@ -41,6 +42,14 @@
             {i18n("repetition-load-help")}
         </p>
     </GraphContainer>
+    <CardAverageByMetric
+        graphId="repetition:average-load"
+        metric="reps"
+        titleKey="average-load-by-repetitions"
+        helpKey="average-load-by-repetitions-help"
+        labelKey="repetition-count"
+        colour="#5ca7f7"
+    />
     <GraphContainer graphId="repetition:repetition-distribution">
         <h1>{i18n("repetition-distribution")}</h1>
         <IntervalGraph

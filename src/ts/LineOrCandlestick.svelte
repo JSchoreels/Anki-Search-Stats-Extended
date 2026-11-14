@@ -67,6 +67,7 @@
     let updateTrendRange: (id: number, range: import("./trend").TrendRange) => void = () => {}
     export let trendSelection: TrendSelectionState = emptyTrendSelectionState()
     export let trendPersistenceKey: string
+    export let preserveTrendsOnKeyChange = false
 
     $: trendSelection = {
         visibleTrends,
@@ -97,6 +98,7 @@
         {series}
         {label}
         trendPersistenceKey={`${trendPersistenceKey}:total`}
+        {preserveTrendsOnKeyChange}
         bind:trend_data={visibleTrends}
         bind:current_trend={previewTrend}
         bind:removeTrend
@@ -117,6 +119,7 @@
         bind:toggleTrendMode
         bind:updateTrendRange
         trendPersistenceKey={`${trendPersistenceKey}:candlestick`}
+        {preserveTrendsOnKeyChange}
         bind:offset={$scroll}
     />
 {/if}

@@ -52,6 +52,7 @@
         range: import("./trend").TrendRange
     ) => void = () => {}
     export let trendPersistenceKey: string
+    export let preserveTrendsOnKeyChange = false
     let migrated_temporal_store_keys = new Set<string>()
 
     // Trend edits update the retained session without redrawing the SVG under a dragged handle.
@@ -84,10 +85,13 @@
     }
 
     $: if (trendPersistenceKey !== lastKey) {
+        const firstKey = lastKey === undefined
         lastKey = trendPersistenceKey
         zoomRange = undefined
-        allTrends = []
-        defaultTrendEnabled = drawDefaultTrend
+        if (firstKey || !preserveTrendsOnKeyChange) {
+            allTrends = []
+            defaultTrendEnabled = drawDefaultTrend
+        }
     }
 
     $: if (svg) {

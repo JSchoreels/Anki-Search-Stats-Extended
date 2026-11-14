@@ -1,6 +1,7 @@
 export const TREND_PERSISTENCE_KEYS = {
     fsrs: {
         averageStabilityOverTime: "fsrs:average-stability-over-time",
+        averageDifficultyOverTime: "fsrs:average-difficulty-over-time",
     },
     memorised: {
         stableRetrievability: "memorised:stable-retrievability",

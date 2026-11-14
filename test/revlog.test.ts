@@ -47,6 +47,29 @@ const { burden, intervals, learn_steps_per_card } = calculateRevlogStats(
     end
 )
 
+test("lapse rate uses the latest introduction after a reset", () => {
+    const builder = new RevlogBuilder()
+    const first = builder.review(1, 3) as Revlog
+    const reset = { ...(builder.review(0, 0) as Revlog), type: 4, factor: 0 }
+    builder.wait(2 * day_ms)
+    const reintroduced = builder.review(1, 3) as Revlog
+    const card = { ...builder.card(), lapses: 2, reps: 1, queue: 2 }
+    const introDay = dayFromMs(reintroduced.id)
+
+    const stats = calculateRevlogStats([first, reset, reintroduced], [card] as any, introDay + 100)
+    expect(stats.lapse_rates.active).toEqual({ 2: 1 })
+})
+
+test("lapse rate excludes cards waiting for reintroduction after a reset", () => {
+    const builder = new RevlogBuilder()
+    const first = builder.review(1, 3) as Revlog
+    const reset = { ...(builder.review(0, 0) as Revlog), type: 4, factor: 0 }
+    const card = { ...builder.card(), lapses: 2, reps: 1, queue: 2 }
+
+    const stats = calculateRevlogStats([first, reset], [card] as any, 10)
+    expect(stats.lapse_rates.active).toEqual({})
+})
+
 const fsrs7Params = [
     0.041, 2.4175, 4.1283, 11.9709, 5.6385, 0.4468, 3.262, 2.3054, 0.1688, 1.3325, 0.3524, 0.0049,
     0.7503, 0.0896, 0.6625, 1.3, 0.882, 0.3072, 3.5875, 0.303, 0.0107, 0.2279, 2.6413, 0.5594, 1.3,

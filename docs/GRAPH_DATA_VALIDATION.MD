@@ -35,7 +35,7 @@ Its total can be lower than a native single-model histogram.
 | ROC and UM+ | Paired predictions, tied ROC thresholds, AUC, shared error buckets, sample counts and exact review-level absolute-disagreement percentiles including hidden buckets |
 | Daily recall gap and log loss | All graded reviews in daily actual recall, selected-model prediction eligibility and counts, percentage-point gaps, independent log-loss samples, missing days, calendar/study-day and exact review-count windows, display-only gap connectors |
 | Future Due and Future Due Retention | Eligible card type/queue, original due field, timestamp units, full model state, matched pass/fail totals |
-| Interval, lapse, repetition, load | Current-card eligibility, suspended/zero settings, histogram/load totals, numeric interval boundaries |
+| Interval, lapse, repetition, load | Current-card eligibility, suspended/zero settings, histogram/load totals, numeric interval boundaries, lapse rates since introduction, and card-weighted averages across grouped ranges |
 | Ratings and fatigue | Rated-answer counts, zero-time answers, manual entries, subgroup totals, normalized empty buckets, fixed retrievability axis |
 | Time distributions | Time units, review filters, source buckets, weighted means, true medians, redraw after width/statistic changes |
 | Review speed | Native daily counts and times, empty-day denominators and gaps, calendar/study-day averages, visible date range and gap connectors |

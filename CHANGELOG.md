@@ -4,6 +4,8 @@
 
 ### User facing changes
 
+- See lapse rates per 100 days since the latest introduction, average load by lapses or repetitions, average repetitions by lapses, and mean or median FSRS difficulty over time. Custom trends stay visible while switching Memorised modes.
+
 - Select FSRS-6 in model comparison graphs. Current-card predictions use each deck's saved FSRS-6 parameters; historical graphs use held-out predictions trained on earlier reviews. Decks without saved FSRS-6 parameters are reported as unavailable.
 
 - Switch Card Count Time Machine between a pie and a history bar chart, hide series in supported bar charts, and see average daily introductions. Scheduled-load graphs keep cram reviews and reset cards from distorting the result.
@@ -87,6 +89,8 @@
 - Identify unloaded data in troubleshooting exports instead of reporting misleading zero counts. Cancelling export writes no file.
 
 ### Technical details
+
+- Restore the unfinished historical graph branches using the current graph and replay infrastructure. Grouped averages weight individual cards, same-day and unavailable lapse-rate histories are excluded, and difficulty medians use exact replayed values. Memorised trend pins keep their existing mode-specific storage keys.
 
 - Reuse aligned model predictions and compact per-day counts from the review-history worker for Daily Recall Gap. Review-count windows use all graded reviews for actual recall and the available selected-model predictions in the same window.
 

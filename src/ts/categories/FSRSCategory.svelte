@@ -65,6 +65,7 @@
     }
 
     let average_type = Average.MEDIAN
+    let difficulty_average_type = Average.MEDIAN
     let granularity = 20
 
     const shareFormat = new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 })
@@ -104,6 +105,10 @@
         (average_type == Average.MEAN
             ? $memorised_stats?.day_means
             : $memorised_stats?.day_medians) ?? []
+    $: fsrsDifficulty =
+        (difficulty_average_type == Average.MEAN
+            ? $memorised_stats?.day_difficulty_means
+            : $memorised_stats?.day_difficulty_medians) ?? []
     $: rwkvStability =
         (average_type == Average.MEAN
             ? $rwkvStabilityStats?.meanDays
@@ -374,6 +379,30 @@
                 {i18n("mean")}
             </label>
         </div>
+    </MemorisedGraphContainer>
+    <MemorisedGraphContainer graphId="fsrs:average-difficulty-over-time">
+        <h1 slot="title">{i18n("average-difficulty-over-time")}</h1>
+        <DailyLineGraph
+            slot="graph"
+            data={fsrsDifficulty}
+            label={i18n("difficulty")}
+            trendPersistenceKey={TREND_PERSISTENCE_KEYS.fsrs.averageDifficultyOverTime}
+            trendInfo={{ pattern: i18n_pattern("difficulty-per-day") }}
+        />
+        <p>{i18n("average-difficulty-over-time-help")}</p>
+        <div>
+            <label>
+                <input type="radio" value={Average.MEDIAN} bind:group={difficulty_average_type} />
+                {i18n("median")}
+            </label>
+            <label>
+                <input type="radio" value={Average.MEAN} bind:group={difficulty_average_type} />
+                {i18n("mean")}
+            </label>
+        </div>
+        {#if truncated}
+            <Warning>{i18n("generic-truncated-warning")}</Warning>
+        {/if}
     </MemorisedGraphContainer>
 </GraphCategory>
 

@@ -705,6 +705,8 @@ test("Average stability over time uses replayed S90 for FSRS7", async () => {
 
     expect(stats.day_means[firstDay]).toBeCloseTo(expectedS90, 5)
     expect(stats.day_means[firstDay]).not.toBeCloseTo(firstReviewState.stability, 2)
+    expect(stats.day_difficulty_means[firstDay]).toBeCloseTo(firstReviewState.difficulty, 6)
+    expect(stats.day_difficulty_medians[firstDay]).toBeCloseTo(firstReviewState.difficulty, 6)
     expect(stats.day_young_ratio_s90[firstDay]).toBeGreaterThanOrEqual(0)
     expect(stats.day_young_ratio_s90[firstDay]).toBeLessThanOrEqual(1)
 })

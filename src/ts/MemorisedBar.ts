@@ -14,6 +14,7 @@ import {
 import { type CardData, getFsrsInternalStabilityFromCard, getFsrsS90FromCard } from "./cardData"
 import type { DeckConfig, ResolvedFsrsPreset } from "./config"
 import { DailyTransitions } from "./dailyTransitions"
+import { dailyValueStats } from "./dailyValueStats"
 import { prepareFsrsReplay } from "./fsrsHistory"
 import {
     elapsedFsrsDays,
@@ -433,6 +434,7 @@ export async function getMemorisedDays(
     const local_s90_by_key = new Map<string, number>()
     let current_card_s90_by_cid = new Map<number, number>()
     const s90_events_by_day = new DailyTransitions()
+    const difficulty_events_by_day = new DailyTransitions()
     let s90_request_items: S90BatchItem[] = []
     let s90_request_index_by_key = new Map<string, number>()
     let s90_dedup_total = 0
@@ -607,6 +609,7 @@ export async function getMemorisedDays(
         }
         if (grade === 0) {
             s90_events_by_day.set(revlogDay, revlog.cid, null)
+            difficulty_events_by_day.set(revlogDay, revlog.cid, null)
             continue
         }
         const new_card = !fsrsCards[revlog.cid]
@@ -745,6 +748,11 @@ export async function getMemorisedDays(
         last_stability[revlog.cid] = card.stability // To prevent "forget" affecting the forgetting curve
         const s90_key = queueS90Request(revlog.cid, newState, fsrs)
         s90_events_by_day.set(revlogDay, revlog.cid, s90_key)
+        difficulty_events_by_day.set(
+            revlogDay,
+            revlog.cid,
+            Number.isFinite(newState.difficulty) ? newState.difficulty : null
+        )
 
         fsrsCards[revlog.cid] = card
     }
@@ -793,6 +801,8 @@ export async function getMemorisedDays(
     }
 
     s90_events_by_day.release()
+    const difficultyStats = dailyValueStats(difficulty_events_by_day, review_days, snapshotToday)
+    difficulty_events_by_day.release()
 
     // console.log(log)
 
@@ -913,6 +923,8 @@ export async function getMemorisedDays(
         day_medians,
         day_means,
         day_young_ratio_s90,
+        day_difficulty_means: difficultyStats.means,
+        day_difficulty_medians: difficultyStats.medians,
         leech_probabilities,
         difficulty_days: difficulty_day_bins,
         calibration,

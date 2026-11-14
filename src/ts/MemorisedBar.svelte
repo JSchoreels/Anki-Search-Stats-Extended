@@ -231,6 +231,7 @@
         label={displayLabel}
         bind:trendSelection
         trendPersistenceKey={displayTrendKey}
+        preserveTrendsOnKeyChange
     />
     <TrendValue
         info={trend_info}

@@ -80,6 +80,8 @@ than individual reviews.
 
 ### Notes
 
+The Difficulty Over Time graph uses the exact mean or median replayed FSRS difficulty for each day. It follows the same resolved presets, history cutoff, and reset handling as the stability replay. Days without reconstructed card states have no value.
+
 - Raw internal stability values are still used in places that need original
   FSRS state. Current card data reads those values from `card.data.s_int`, with
   fallback to `card.data.s` for older collections.
