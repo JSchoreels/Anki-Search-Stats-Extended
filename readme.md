@@ -37,6 +37,12 @@ Like the new anki stats screen? Want more? This is the addon for you.
 
 ### Here are some examples:
 
+<img width="680" alt="Model Calibration comparing FSRS and RWKV" src="docs/screenshots/model-calibration.png" />
+
+<img width="680" alt="Model UM+ Comparison of FSRS and RWKV" src="docs/screenshots/model-um-plus.png" />
+
+<img width="680" alt="RWKV workload forecast showing seven simulated paths for reviews due" src="docs/screenshots/rwkv-workload.jpg" />
+
 <img width="1244" height="555" alt="image" src="https://github.com/user-attachments/assets/7d678ff2-31e0-4d0c-917c-58a4668bd768" />
 <img width="500" height="451" alt="image" src="https://github.com/user-attachments/assets/0576aacd-12d2-446c-9355-d0e76f7f2eb8" />
 <img width="500" height="451" alt="image" src="https://github.com/user-attachments/assets/1781747b-8f69-42c8-8545-d93e99c9197d" />
